@@ -16,7 +16,7 @@ class RecurrentNetwork(BaseNetwork):
                 'bias': np.random.normal(0, 0.1),
                 'input_weights': {
                     neighbor: np.random.normal(0, 0.1)
-                    for neighbor in self.topology.predecessors(node)
+                    for neighbor in self.topology.neighbors(node)
                 },
                 'recurrent_weights': {
                     neighbor: np.random.normal(0, 0.1)
@@ -56,8 +56,8 @@ class RecurrentNetwork(BaseNetwork):
                     # Sum weighted inputs
                     weighted_sum = self.node_states[node]['bias']
                     
-                    # Input connections
-                    for neighbor in self.topology.predecessors(node):
+                    # Input connections (using neighbors for undirected graph)
+                    for neighbor in self.topology.neighbors(node):
                         weighted_sum += (
                             activations[neighbor] * 
                             self.node_states[node]['input_weights'][neighbor]
