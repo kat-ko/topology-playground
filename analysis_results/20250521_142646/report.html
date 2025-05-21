@@ -1,0 +1,325 @@
+
+        <html>
+        <head>
+            <title>Experiment Analysis Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                h1, h2 { color: #333; }
+                .section { margin: 20px 0; }
+                .metric { margin: 10px 0; }
+                img { max-width: 100%; }
+            </style>
+        </head>
+        <body>
+            <h1>Experiment Analysis Report</h1>
+            <p>Generated on: 2025-05-21 14:27:02</p>
+            
+            <div class="section">
+                <h2>Overview</h2>
+                <p>Total experiments: 648</p>
+                <p>Unique configurations: 216</p>
+            </div>
+            
+            <div class="section">
+                <h2>Distribution Analysis</h2>
+                <h3>network_size</h3>
+                <div class="metric">
+                    <h4>By topology</h4>
+                    <img src="dist_network_size_by_topology.png" alt="network_size by topology">
+                </div>
+                
+                <div class="metric">
+                    <h4>By network_size</h4>
+                    <img src="dist_network_size_by_network_size.png" alt="network_size by network_size">
+                </div>
+                
+                <div class="metric">
+                    <h4>By strategy</h4>
+                    <img src="dist_network_size_by_strategy.png" alt="network_size by strategy">
+                </div>
+                
+                <div class="metric">
+                    <h4>By algorithm</h4>
+                    <img src="dist_network_size_by_algorithm.png" alt="network_size by algorithm">
+                </div>
+                <h3>seed</h3>
+                <div class="metric">
+                    <h4>By topology</h4>
+                    <img src="dist_seed_by_topology.png" alt="seed by topology">
+                </div>
+                
+                <div class="metric">
+                    <h4>By network_size</h4>
+                    <img src="dist_seed_by_network_size.png" alt="seed by network_size">
+                </div>
+                
+                <div class="metric">
+                    <h4>By strategy</h4>
+                    <img src="dist_seed_by_strategy.png" alt="seed by strategy">
+                </div>
+                
+                <div class="metric">
+                    <h4>By algorithm</h4>
+                    <img src="dist_seed_by_algorithm.png" alt="seed by algorithm">
+                </div>
+                
+            </div>
+            
+            <div class="section">
+                <h2>Correlation Analysis</h2>
+                <img src="correlation_matrix.png" alt="Correlation Matrix">
+            </div>
+            
+            <div class="section">
+                <h2>Interactive Analysis</h2>
+                <p>See <a href="interactive_3d.html">Interactive 3D Plot</a> for detailed exploration.</p>
+            </div>
+            
+            <div class="section">
+                <h2>Statistical Analysis</h2>
+                <div class='statistical-analysis'><h3>network_size</h3><h4>by_topology</h4><ul><li>mean: {
+  "modular": 116.66666666666667,
+  "small_world": 116.66666666666667
+}</li><li>std: {
+  "modular": 62.45741583326719,
+  "small_world": 62.45741583326719
+}</li><li>min: {
+  "modular": 50,
+  "small_world": 50
+}</li><li>max: {
+  "modular": 200,
+  "small_world": 200
+}</li><li>median: {
+  "modular": 100.0,
+  "small_world": 100.0
+}</li><li>q1: {
+  "modular": 50.0,
+  "small_world": 50.0
+}</li><li>q3: {
+  "modular": 200.0,
+  "small_world": 200.0
+}</li></ul><h4>by_algorithm</h4><ul><li>mean: {
+  "A2C": 116.66666666666667,
+  "PPO": 116.66666666666667,
+  "SAC": 116.66666666666667
+}</li><li>std: {
+  "A2C": 62.50581368309708,
+  "PPO": 62.50581368309708,
+  "SAC": 62.50581368309708
+}</li><li>min: {
+  "A2C": 50,
+  "PPO": 50,
+  "SAC": 50
+}</li><li>max: {
+  "A2C": 200,
+  "PPO": 200,
+  "SAC": 200
+}</li><li>median: {
+  "A2C": 100.0,
+  "PPO": 100.0,
+  "SAC": 100.0
+}</li><li>q1: {
+  "A2C": 50.0,
+  "PPO": 50.0,
+  "SAC": 50.0
+}</li><li>q3: {
+  "A2C": 200.0,
+  "PPO": 200.0,
+  "SAC": 200.0
+}</li><li>anova: {
+  "f_statistic": -4.410809317929091e-30,
+  "p_value": NaN
+}</li></ul><h4>by_strategy</h4><ul><li>mean: {
+  "centrality_based": 116.66666666666667,
+  "distance_based": 116.66666666666667,
+  "module_based": 116.66666666666667,
+  "random": 116.66666666666667
+}</li><li>std: {
+  "centrality_based": 62.55432421712243,
+  "distance_based": 62.55432421712243,
+  "module_based": 62.55432421712243,
+  "random": 62.55432421712243
+}</li><li>min: {
+  "centrality_based": 50,
+  "distance_based": 50,
+  "module_based": 50,
+  "random": 50
+}</li><li>max: {
+  "centrality_based": 200,
+  "distance_based": 200,
+  "module_based": 200,
+  "random": 200
+}</li><li>median: {
+  "centrality_based": 100.0,
+  "distance_based": 100.0,
+  "module_based": 100.0,
+  "random": 100.0
+}</li><li>q1: {
+  "centrality_based": 50.0,
+  "distance_based": 50.0,
+  "module_based": 50.0,
+  "random": 50.0
+}</li><li>q3: {
+  "centrality_based": 200.0,
+  "distance_based": 200.0,
+  "module_based": 200.0,
+  "random": 200.0
+}</li><li>anova: {
+  "f_statistic": -9.786601897489524e-31,
+  "p_value": NaN
+}</li></ul><h4>by_network_size</h4><ul><li>mean: {
+  "50": 50.0,
+  "100": 100.0,
+  "200": 200.0
+}</li><li>std: {
+  "50": 0.0,
+  "100": 0.0,
+  "200": 0.0
+}</li><li>min: {
+  "50": 50,
+  "100": 100,
+  "200": 200
+}</li><li>max: {
+  "50": 50,
+  "100": 100,
+  "200": 200
+}</li><li>median: {
+  "50": 50.0,
+  "100": 100.0,
+  "200": 200.0
+}</li><li>q1: {
+  "50": 50.0,
+  "100": 100.0,
+  "200": 200.0
+}</li><li>q3: {
+  "50": 50.0,
+  "100": 100.0,
+  "200": 200.0
+}</li><li>anova: {
+  "note": "All groups have constant values, ANOVA not performed"
+}</li></ul><h3>seed</h3><h4>by_topology</h4><ul><li>mean: {
+  "modular": 207.0,
+  "small_world": 207.0
+}</li><li>std: {
+  "modular": 179.42508807048748,
+  "small_world": 179.42508807048748
+}</li><li>min: {
+  "modular": 42,
+  "small_world": 42
+}</li><li>max: {
+  "modular": 456,
+  "small_world": 456
+}</li><li>median: {
+  "modular": 123.0,
+  "small_world": 123.0
+}</li><li>q1: {
+  "modular": 42.0,
+  "small_world": 42.0
+}</li><li>q3: {
+  "modular": 456.0,
+  "small_world": 456.0
+}</li></ul><h4>by_algorithm</h4><ul><li>mean: {
+  "A2C": 207.0,
+  "PPO": 207.0,
+  "SAC": 207.0
+}</li><li>std: {
+  "A2C": 179.56412341724806,
+  "PPO": 179.56412341724806,
+  "SAC": 179.56412341724806
+}</li><li>min: {
+  "A2C": 42,
+  "PPO": 42,
+  "SAC": 42
+}</li><li>max: {
+  "A2C": 456,
+  "PPO": 456,
+  "SAC": 456
+}</li><li>median: {
+  "A2C": 123.0,
+  "PPO": 123.0,
+  "SAC": 123.0
+}</li><li>q1: {
+  "A2C": 42.0,
+  "PPO": 42.0,
+  "SAC": 42.0
+}</li><li>q3: {
+  "A2C": 456.0,
+  "PPO": 456.0,
+  "SAC": 456.0
+}</li><li>anova: {
+  "f_statistic": 0.0,
+  "p_value": 1.0
+}</li></ul><h4>by_strategy</h4><ul><li>mean: {
+  "centrality_based": 207.0,
+  "distance_based": 207.0,
+  "module_based": 207.0,
+  "random": 207.0
+}</li><li>std: {
+  "centrality_based": 179.70348247851751,
+  "distance_based": 179.70348247851751,
+  "module_based": 179.70348247851751,
+  "random": 179.70348247851751
+}</li><li>min: {
+  "centrality_based": 42,
+  "distance_based": 42,
+  "module_based": 42,
+  "random": 42
+}</li><li>max: {
+  "centrality_based": 456,
+  "distance_based": 456,
+  "module_based": 456,
+  "random": 456
+}</li><li>median: {
+  "centrality_based": 123.0,
+  "distance_based": 123.0,
+  "module_based": 123.0,
+  "random": 123.0
+}</li><li>q1: {
+  "centrality_based": 42.0,
+  "distance_based": 42.0,
+  "module_based": 42.0,
+  "random": 42.0
+}</li><li>q3: {
+  "centrality_based": 456.0,
+  "distance_based": 456.0,
+  "module_based": 456.0,
+  "random": 456.0
+}</li><li>anova: {
+  "f_statistic": 0.0,
+  "p_value": 1.0
+}</li></ul><h4>by_network_size</h4><ul><li>mean: {
+  "50": 207.0,
+  "100": 207.0,
+  "200": 207.0
+}</li><li>std: {
+  "50": 179.56412341724797,
+  "100": 179.56412341724797,
+  "200": 179.56412341724797
+}</li><li>min: {
+  "50": 42,
+  "100": 42,
+  "200": 42
+}</li><li>max: {
+  "50": 456,
+  "100": 456,
+  "200": 456
+}</li><li>median: {
+  "50": 123.0,
+  "100": 123.0,
+  "200": 123.0
+}</li><li>q1: {
+  "50": 42.0,
+  "100": 42.0,
+  "200": 42.0
+}</li><li>q3: {
+  "50": 456.0,
+  "100": 456.0,
+  "200": 456.0
+}</li><li>anova: {
+  "f_statistic": 0.0,
+  "p_value": 1.0
+}</li></ul></div>
+            </div>
+        </body>
+        </html>
+        

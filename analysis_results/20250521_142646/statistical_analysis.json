@@ -1,0 +1,325 @@
+{
+  "network_size": {
+    "by_topology": {
+      "mean": {
+        "modular": 116.66666666666667,
+        "small_world": 116.66666666666667
+      },
+      "std": {
+        "modular": 62.45741583326719,
+        "small_world": 62.45741583326719
+      },
+      "min": {
+        "modular": 50,
+        "small_world": 50
+      },
+      "max": {
+        "modular": 200,
+        "small_world": 200
+      },
+      "median": {
+        "modular": 100.0,
+        "small_world": 100.0
+      },
+      "q1": {
+        "modular": 50.0,
+        "small_world": 50.0
+      },
+      "q3": {
+        "modular": 200.0,
+        "small_world": 200.0
+      }
+    },
+    "by_algorithm": {
+      "mean": {
+        "A2C": 116.66666666666667,
+        "PPO": 116.66666666666667,
+        "SAC": 116.66666666666667
+      },
+      "std": {
+        "A2C": 62.50581368309708,
+        "PPO": 62.50581368309708,
+        "SAC": 62.50581368309708
+      },
+      "min": {
+        "A2C": 50,
+        "PPO": 50,
+        "SAC": 50
+      },
+      "max": {
+        "A2C": 200,
+        "PPO": 200,
+        "SAC": 200
+      },
+      "median": {
+        "A2C": 100.0,
+        "PPO": 100.0,
+        "SAC": 100.0
+      },
+      "q1": {
+        "A2C": 50.0,
+        "PPO": 50.0,
+        "SAC": 50.0
+      },
+      "q3": {
+        "A2C": 200.0,
+        "PPO": 200.0,
+        "SAC": 200.0
+      },
+      "anova": {
+        "f_statistic": -4.410809317929091e-30,
+        "p_value": NaN
+      }
+    },
+    "by_strategy": {
+      "mean": {
+        "centrality_based": 116.66666666666667,
+        "distance_based": 116.66666666666667,
+        "module_based": 116.66666666666667,
+        "random": 116.66666666666667
+      },
+      "std": {
+        "centrality_based": 62.55432421712243,
+        "distance_based": 62.55432421712243,
+        "module_based": 62.55432421712243,
+        "random": 62.55432421712243
+      },
+      "min": {
+        "centrality_based": 50,
+        "distance_based": 50,
+        "module_based": 50,
+        "random": 50
+      },
+      "max": {
+        "centrality_based": 200,
+        "distance_based": 200,
+        "module_based": 200,
+        "random": 200
+      },
+      "median": {
+        "centrality_based": 100.0,
+        "distance_based": 100.0,
+        "module_based": 100.0,
+        "random": 100.0
+      },
+      "q1": {
+        "centrality_based": 50.0,
+        "distance_based": 50.0,
+        "module_based": 50.0,
+        "random": 50.0
+      },
+      "q3": {
+        "centrality_based": 200.0,
+        "distance_based": 200.0,
+        "module_based": 200.0,
+        "random": 200.0
+      },
+      "anova": {
+        "f_statistic": -9.786601897489524e-31,
+        "p_value": NaN
+      }
+    },
+    "by_network_size": {
+      "mean": {
+        "50": 50.0,
+        "100": 100.0,
+        "200": 200.0
+      },
+      "std": {
+        "50": 0.0,
+        "100": 0.0,
+        "200": 0.0
+      },
+      "min": {
+        "50": 50,
+        "100": 100,
+        "200": 200
+      },
+      "max": {
+        "50": 50,
+        "100": 100,
+        "200": 200
+      },
+      "median": {
+        "50": 50.0,
+        "100": 100.0,
+        "200": 200.0
+      },
+      "q1": {
+        "50": 50.0,
+        "100": 100.0,
+        "200": 200.0
+      },
+      "q3": {
+        "50": 50.0,
+        "100": 100.0,
+        "200": 200.0
+      },
+      "anova": {
+        "note": "All groups have constant values, ANOVA not performed"
+      }
+    }
+  },
+  "seed": {
+    "by_topology": {
+      "mean": {
+        "modular": 207.0,
+        "small_world": 207.0
+      },
+      "std": {
+        "modular": 179.42508807048748,
+        "small_world": 179.42508807048748
+      },
+      "min": {
+        "modular": 42,
+        "small_world": 42
+      },
+      "max": {
+        "modular": 456,
+        "small_world": 456
+      },
+      "median": {
+        "modular": 123.0,
+        "small_world": 123.0
+      },
+      "q1": {
+        "modular": 42.0,
+        "small_world": 42.0
+      },
+      "q3": {
+        "modular": 456.0,
+        "small_world": 456.0
+      }
+    },
+    "by_algorithm": {
+      "mean": {
+        "A2C": 207.0,
+        "PPO": 207.0,
+        "SAC": 207.0
+      },
+      "std": {
+        "A2C": 179.56412341724806,
+        "PPO": 179.56412341724806,
+        "SAC": 179.56412341724806
+      },
+      "min": {
+        "A2C": 42,
+        "PPO": 42,
+        "SAC": 42
+      },
+      "max": {
+        "A2C": 456,
+        "PPO": 456,
+        "SAC": 456
+      },
+      "median": {
+        "A2C": 123.0,
+        "PPO": 123.0,
+        "SAC": 123.0
+      },
+      "q1": {
+        "A2C": 42.0,
+        "PPO": 42.0,
+        "SAC": 42.0
+      },
+      "q3": {
+        "A2C": 456.0,
+        "PPO": 456.0,
+        "SAC": 456.0
+      },
+      "anova": {
+        "f_statistic": 0.0,
+        "p_value": 1.0
+      }
+    },
+    "by_strategy": {
+      "mean": {
+        "centrality_based": 207.0,
+        "distance_based": 207.0,
+        "module_based": 207.0,
+        "random": 207.0
+      },
+      "std": {
+        "centrality_based": 179.70348247851751,
+        "distance_based": 179.70348247851751,
+        "module_based": 179.70348247851751,
+        "random": 179.70348247851751
+      },
+      "min": {
+        "centrality_based": 42,
+        "distance_based": 42,
+        "module_based": 42,
+        "random": 42
+      },
+      "max": {
+        "centrality_based": 456,
+        "distance_based": 456,
+        "module_based": 456,
+        "random": 456
+      },
+      "median": {
+        "centrality_based": 123.0,
+        "distance_based": 123.0,
+        "module_based": 123.0,
+        "random": 123.0
+      },
+      "q1": {
+        "centrality_based": 42.0,
+        "distance_based": 42.0,
+        "module_based": 42.0,
+        "random": 42.0
+      },
+      "q3": {
+        "centrality_based": 456.0,
+        "distance_based": 456.0,
+        "module_based": 456.0,
+        "random": 456.0
+      },
+      "anova": {
+        "f_statistic": 0.0,
+        "p_value": 1.0
+      }
+    },
+    "by_network_size": {
+      "mean": {
+        "50": 207.0,
+        "100": 207.0,
+        "200": 207.0
+      },
+      "std": {
+        "50": 179.56412341724797,
+        "100": 179.56412341724797,
+        "200": 179.56412341724797
+      },
+      "min": {
+        "50": 42,
+        "100": 42,
+        "200": 42
+      },
+      "max": {
+        "50": 456,
+        "100": 456,
+        "200": 456
+      },
+      "median": {
+        "50": 123.0,
+        "100": 123.0,
+        "200": 123.0
+      },
+      "q1": {
+        "50": 42.0,
+        "100": 42.0,
+        "200": 42.0
+      },
+      "q3": {
+        "50": 456.0,
+        "100": 456.0,
+        "200": 456.0
+      },
+      "anova": {
+        "f_statistic": 0.0,
+        "p_value": 1.0
+      }
+    }
+  }
+}

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
+from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, r2_score, silhouette_score, precision_score, recall_score, mean_absolute_error, davies_bouldin_score, calinski_harabasz_score
+import time
 
 from ..topologies.small_world import SmallWorldTopology
 from ..topologies.modular import ModularTopology
@@ -58,74 +60,164 @@ class ExperimentRunner:
                 
                 # Test each node selection strategy
                 for strategy in tqdm(self.config['node_selection_strategies'], desc="Strategies", leave=False):
-                    print(f"\nProcessing strategy: {strategy}")
                     # Small-world network
                     sw_selector = NodeSelector(sw_graph, self.config['num_io_nodes'], seed)
                     if strategy == 'module_based':
-                        print("Using random_selection for small-world network (module_based not applicable)")
                         sw_input_nodes, sw_output_nodes = sw_selector.random_selection()
                     else:
-                        print(f"Using {strategy}_selection for small-world network")
                         sw_input_nodes, sw_output_nodes = getattr(sw_selector, f"{strategy}_selection")()
                     
                     # Modular network
                     mod_selector = NodeSelector(mod_graph, self.config['num_io_nodes'], seed)
                     if strategy == 'module_based':
-                        print("Using module_based_selection for modular network")
                         mod_input_nodes, mod_output_nodes = mod_selector.module_based_selection(
                             modular.get_module_assignments()
                         )
                     else:
-                        print(f"Using {strategy}_selection for modular network")
                         mod_input_nodes, mod_output_nodes = getattr(mod_selector, f"{strategy}_selection")()
                     
                     # Run tasks
                     for task in tqdm(self.config['tasks'], desc="Tasks", leave=False):
                         # Generate task data
                         X, y = getattr(self.task_generator, f"generate_{task}_task")()
-                        
                         # Evaluate performance for both networks
-                        sw_performance = self._evaluate_network_performance(
-                            sw_graph, sw_input_nodes, sw_output_nodes, X, y, task
-                        )
-                        mod_performance = self._evaluate_network_performance(
-                            mod_graph, mod_input_nodes, mod_output_nodes, X, y, task
-                        )
-                        
-                        # Store results
-                        results.append({
-                            'network_size': size,
-                            'seed': seed,
-                            'strategy': strategy,
-                            'task': task,
-                            'topology': 'small_world',
-                            'performance': sw_performance
-                        })
-                        results.append({
-                            'network_size': size,
-                            'seed': seed,
-                            'strategy': strategy,
-                            'task': task,
-                            'topology': 'modular',
-                            'performance': mod_performance
-                        })
-        
+                        for topology, graph, input_nodes, output_nodes in [
+                            ('small_world', sw_graph, sw_input_nodes, sw_output_nodes),
+                            ('modular', mod_graph, mod_input_nodes, mod_output_nodes)
+                        ]:
+                            performance = self._evaluate_network_performance(
+                                graph, input_nodes, output_nodes, X, y, task, size, seed, strategy, topology
+                            )
+                            results.append({
+                                'network_size': size,
+                                'seed': seed,
+                                'strategy': strategy,
+                                'task': task,
+                                'topology': topology,
+                                'performance': performance
+                            })
         # Save results
         self._save_results(results)
-        
-    def _evaluate_network_performance(self, graph, input_nodes, output_nodes, X, y, task):
+
+    def _evaluate_network_performance(self, graph, input_nodes, output_nodes, X, y, task, size, seed, strategy, topology):
         """Evaluate the performance of a network configuration on a specific task."""
-        # Here you would implement the actual task execution using the network
-        # For now, we'll return a dummy performance metric
-        return {
-            'input_nodes': input_nodes,
-            'output_nodes': output_nodes,
+        algorithms = ['SAC', 'A2C', 'PPO']
+        results = {}
+        
+        # Calculate network metrics
+        network_metrics = {
             'avg_path_length': np.mean([
                 nx.shortest_path_length(graph, source=i, target=o)
                 for i in input_nodes
                 for o in output_nodes
-            ])
+            ]),
+            'clustering_coefficient': nx.average_clustering(graph),
+            'density': nx.density(graph),
+            'avg_degree': np.mean([d for n, d in graph.degree()]),
+            'diameter': nx.diameter(graph),
+            'avg_shortest_path': nx.average_shortest_path_length(graph)
         }
+        
+        # Calculate node-level metrics for input/output nodes
+        node_metrics = {
+            'input_nodes': {
+                'degrees': [graph.degree(node) for node in input_nodes],
+                'betweenness_centrality': list(nx.betweenness_centrality(graph, k=min(100, size)).values()),
+                'closeness_centrality': list(nx.closeness_centrality(graph).values()),
+                'eigenvector_centrality': list(nx.eigenvector_centrality(graph, max_iter=1000).values()),
+                'pagerank': list(nx.pagerank(graph).values())
+            },
+            'output_nodes': {
+                'degrees': [graph.degree(node) for node in output_nodes],
+                'betweenness_centrality': list(nx.betweenness_centrality(graph, k=min(100, size)).values()),
+                'closeness_centrality': list(nx.closeness_centrality(graph).values()),
+                'eigenvector_centrality': list(nx.eigenvector_centrality(graph, max_iter=1000).values()),
+                'pagerank': list(nx.pagerank(graph).values())
+            }
+        }
+        
+        # Add module membership for modular topology
+        if topology == 'modular':
+            from ..topologies.modular import ModularTopology
+            modular = ModularTopology(
+                size=size,
+                num_modules=self.config['modular_params']['num_modules'],
+                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                intra_module_prob=self.config['modular_params']['intra_module_prob'],
+                seed=seed
+            )
+            module_assignments = modular.get_module_assignments()
+            node_metrics['input_nodes']['module_membership'] = [module_assignments[node] for node in input_nodes]
+            node_metrics['output_nodes']['module_membership'] = [module_assignments[node] for node in output_nodes]
+        
+        # Calculate node selection strategy effectiveness
+        strategy_metrics = {
+            'input_output_distance': np.mean([
+                nx.shortest_path_length(graph, source=i, target=o)
+                for i in input_nodes
+                for o in output_nodes
+            ]),
+            'input_node_centrality': np.mean(node_metrics['input_nodes']['betweenness_centrality']),
+            'output_node_centrality': np.mean(node_metrics['output_nodes']['betweenness_centrality']),
+            'input_output_centrality_diff': np.mean(node_metrics['input_nodes']['betweenness_centrality']) - 
+                                          np.mean(node_metrics['output_nodes']['betweenness_centrality'])
+        }
+        
+        for algo in algorithms:
+            print(f"[{topology.upper()}] size={size} seed={seed} strategy={strategy} task={task} algo={algo}")
+            
+            # Simulate training time and convergence
+            start_time = time.time()
+            time.sleep(0.1)  # Simulate training time
+            training_time = time.time() - start_time
+            
+            # Simulate convergence metrics
+            convergence_metrics = {
+                'training_time': training_time,
+                'iterations_to_converge': np.random.randint(100, 1000),
+                'final_loss': np.random.uniform(0.1, 0.5)
+            }
+            
+            # Calculate task-specific metrics
+            task_metrics = {}
+            if task == 'classification':
+                # Simulate predictions (replace with actual model predictions)
+                y_pred = np.random.randint(0, 2, size=len(y))
+                task_metrics.update({
+                    'accuracy': accuracy_score(y, y_pred),
+                    'f1_score': f1_score(y, y_pred, average='weighted'),
+                    'precision': precision_score(y, y_pred, average='weighted'),
+                    'recall': recall_score(y, y_pred, average='weighted')
+                })
+            elif task == 'regression':
+                # Simulate predictions (replace with actual model predictions)
+                y_pred = np.random.normal(np.mean(y), np.std(y), size=len(y))
+                task_metrics.update({
+                    'mse': mean_squared_error(y, y_pred),
+                    'mae': mean_absolute_error(y, y_pred),
+                    'r2_score': r2_score(y, y_pred)
+                })
+            elif task == 'clustering':
+                # Simulate cluster assignments (replace with actual clustering)
+                clusters = np.random.randint(0, 3, size=len(X))
+                task_metrics.update({
+                    'silhouette_score': silhouette_score(X, clusters),
+                    'davies_bouldin_score': davies_bouldin_score(X, clusters),
+                    'calinski_harabasz_score': calinski_harabasz_score(X, clusters)
+                })
+            
+            # Store all metrics
+            results[algo] = {
+                'input_nodes': input_nodes,
+                'output_nodes': output_nodes,
+                'network_metrics': network_metrics,
+                'node_metrics': node_metrics,
+                'strategy_metrics': strategy_metrics,
+                'task_metrics': task_metrics,
+                'convergence_metrics': convergence_metrics
+            }
+            
+        return results
     
     def _save_results(self, results: List[Dict[str, Any]]):
         """Save experiment results to files."""
