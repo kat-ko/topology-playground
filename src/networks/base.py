@@ -17,14 +17,23 @@ class BaseNetwork(ABC):
             output_nodes: List of output node indices
             network_params: Dictionary of network-specific parameters
         """
+        # Keep original undirected topology for constraints
         self.topology = topology
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
         self.network_params = network_params
         self.num_nodes = len(topology.nodes())
         
+        # Create network-specific processing graph
+        self.processing_graph = self._create_processing_graph()
+        
         # Initialize node states
         self.node_states = self._initialize_node_states()
+    
+    @abstractmethod
+    def _create_processing_graph(self) -> nx.Graph:
+        """Create a network-specific processing graph that respects topology constraints."""
+        pass
     
     @abstractmethod
     def _initialize_node_states(self) -> Dict[str, Any]:
