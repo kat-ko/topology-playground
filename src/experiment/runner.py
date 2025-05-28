@@ -296,10 +296,59 @@ class ExperimentRunner:
         # Calculate network metrics for each layer
         network_metrics = []
         for layer_idx, network in enumerate(networks):
+            # Get initial weights and mask state
+            initial_weights = {}
+            for node in network.topology.nodes():
+                if network_type == 'ffn':
+                    initial_weights[node] = {
+                        neighbor: network.node_states[node]['weights'].get(neighbor, 0)
+                        for neighbor in network.topology.neighbors(node)
+                    }
+                else:  # rnn
+                    initial_weights[node] = {
+                        neighbor: network.node_states[node]['input_weights'].get(neighbor, 0)
+                        for neighbor in network.topology.neighbors(node)
+                    }
+                    # Add recurrent weights
+                    for neighbor in network.topology.neighbors(node):
+                        if neighbor in initial_weights[node]:
+                            initial_weights[node][neighbor] += network.node_states[node]['recurrent_weights'].get(neighbor, 0)
+                        else:
+                            initial_weights[node][neighbor] = network.node_states[node]['recurrent_weights'].get(neighbor, 0)
+            
+            # Track static mask integrity
+            mask_integrity = {
+                'initial_sparsity': self._calculate_sparsity(initial_weights),
+                'leaked_edges': 0,  # Will be updated after training
+                'final_sparsity': 0  # Will be updated after training
+            }
+            
+            # Track topology-aware learning signal
+            learning_signal = {
+                'input_hidden_gradients': [],
+                'hidden_hidden_gradients': [],
+                'hidden_output_gradients': [],
+                'active_hidden_units': 0  # Will be updated after training
+            }
+            
+            # Track task-level learning footprint
+            learning_footprint = {
+                'rewards_at_steps': {
+                    '2k': 0,
+                    '5k': 0,
+                    '10k': 0,
+                    '20k': 0
+                },
+                'parameter_normalized_score': 0  # Will be updated after training
+            }
+            
             layer_metrics = {
                 'layer_idx': layer_idx,
                 'topology_metrics': network.get_topology_metrics(),
-                'network_metrics': network.get_network_metrics()
+                'network_metrics': network.get_network_metrics(),
+                'mask_integrity': mask_integrity,
+                'learning_signal': learning_signal,
+                'learning_footprint': learning_footprint
             }
             
             # Add node-level metrics
@@ -379,6 +428,70 @@ class ExperimentRunner:
                     'calinski_harabasz_score': calinski_harabasz_score(X, clusters)
                 })
             
+            # Update mask integrity metrics after training
+            for layer_idx, network in enumerate(networks):
+                # Get final weights
+                final_weights = {}
+                for node in network.topology.nodes():
+                    if network_type == 'ffn':
+                        final_weights[node] = {
+                            neighbor: network.node_states[node]['weights'].get(neighbor, 0)
+                            for neighbor in network.topology.neighbors(node)
+                        }
+                    else:  # rnn
+                        final_weights[node] = {
+                            neighbor: network.node_states[node]['input_weights'].get(neighbor, 0)
+                            for neighbor in network.topology.neighbors(node)
+                        }
+                        # Add recurrent weights
+                        for neighbor in network.topology.neighbors(node):
+                            if neighbor in final_weights[node]:
+                                final_weights[node][neighbor] += network.node_states[node]['recurrent_weights'].get(neighbor, 0)
+                            else:
+                                final_weights[node][neighbor] = network.node_states[node]['recurrent_weights'].get(neighbor, 0)
+                
+                # Calculate final sparsity
+                network_metrics[layer_idx]['mask_integrity']['final_sparsity'] = self._calculate_sparsity(final_weights)
+                
+                # Count leaked edges (edges that were zero initially but became non-zero)
+                leaked_edges = 0
+                for node in network.topology.nodes():
+                    # Get the intersection of neighbors that exist in both initial and final weights
+                    initial_neighbors = set(initial_weights[node].keys())
+                    final_neighbors = set(final_weights[node].keys())
+                    common_neighbors = initial_neighbors.intersection(final_neighbors)
+                    
+                    for neighbor in common_neighbors:
+                        if (initial_weights[node][neighbor] == 0 and 
+                            final_weights[node][neighbor] != 0):
+                            leaked_edges += 1
+                network_metrics[layer_idx]['mask_integrity']['leaked_edges'] = leaked_edges
+                
+                # Calculate active hidden units
+                active_units = sum(1 for node in network.topology.nodes()
+                                 if node not in input_nodes[layer_idx] + output_nodes[layer_idx]
+                                 and any(abs(w) > 1e-6 for w in final_weights[node].values()))
+                network_metrics[layer_idx]['learning_signal']['active_hidden_units'] = active_units
+                
+                # Calculate parameter-normalized score
+                if network_type == 'ffn':
+                    num_parameters = sum(len(node['weights']) for node in network.node_states.values())
+                else:  # rnn
+                    num_parameters = sum(
+                        len(node['input_weights']) + 
+                        len(node['recurrent_weights']) + 
+                        len(node['hidden_weights'])
+                        for node in network.node_states.values()
+                    )
+                
+                if task == 'classification':
+                    score = task_metrics['accuracy']
+                elif task == 'regression':
+                    score = -task_metrics['mse']  # Negative MSE as score
+                else:
+                    score = task_metrics['silhouette_score']
+                network_metrics[layer_idx]['learning_footprint']['parameter_normalized_score'] = score / num_parameters
+            
             # Store all metrics
             results[algo] = {
                 'network_metrics': network_metrics,
@@ -388,6 +501,17 @@ class ExperimentRunner:
             }
             
         return results
+    
+    def _calculate_sparsity(self, weights: Dict[int, Dict[int, float]]) -> float:
+        """Calculate the sparsity of a weight matrix."""
+        total_weights = 0
+        zero_weights = 0
+        for node_weights in weights.values():
+            for weight in node_weights.values():
+                total_weights += 1
+                if abs(weight) < 1e-6:  # Consider weights close to zero as zero
+                    zero_weights += 1
+        return zero_weights / total_weights if total_weights > 0 else 1.0
     
     def _save_results(self, results: List[Dict[str, Any]]):
         """Save experiment results to files."""
