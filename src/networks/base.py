@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Tuple, Set
 import networkx as nx
 import numpy as np
-from ..topologies.utils import prune_output_edges
+from ..topologies.utils import prune_forbidden_edges
+from ..topologies.validator import TopologyValidator
 
 class BaseNetwork(ABC):
     """Abstract base class for network types (FFN, RNN)."""
@@ -26,11 +27,25 @@ class BaseNetwork(ABC):
         # Store original topology for metrics
         self.original_topology = topology
         
-        # Prune output-output edges before initializing the network
-        self.topology = prune_output_edges(topology, output_nodes)
+        # First prune all forbidden edges (input-input and output-output)
+        self.topology = prune_forbidden_edges(topology, input_nodes, output_nodes)
+        
+        # Then initialize topology validator with pruned topology
+        self.validator = TopologyValidator(self.topology, input_nodes, output_nodes)
+        
+        # Validate topology constraints
+        is_valid, error_msg = self.validator.validate_forbidden_edges()
+        if not is_valid:
+            raise ValueError(f"Invalid topology: {error_msg}")
         
         # Initialize node states
         self.node_states = self._initialize_node_states()
+        
+        # Track active edges for runtime validation
+        self._active_edges = set()
+        
+        # Store allowed edges from topology for validation
+        self._allowed_edges = set(self.topology.edges())
     
     @abstractmethod
     def _initialize_node_states(self) -> Dict[str, Any]:
@@ -53,6 +68,38 @@ class BaseNetwork(ABC):
     def get_network_metrics(self) -> Dict[str, Any]:
         """Get network-specific metrics."""
         pass
+    
+    def validate_topology(self, test_inputs: Optional[Dict[int, float]] = None) -> Tuple[bool, str]:
+        """
+        Validate the network topology constraints.
+        
+        Args:
+            test_inputs: Optional test inputs for forward influence validation
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Validate forbidden edges
+        is_valid, error_msg = self.validator.validate_forbidden_edges()
+        if not is_valid:
+            return False, error_msg
+        
+        # If test inputs are provided, validate forward influence
+        if test_inputs is not None:
+            is_valid, error_msg = self.validator.validate_forward_influence(test_inputs)
+            if not is_valid:
+                return False, error_msg
+        
+        return True, "Topology validation passed"
+    
+    def get_forward_influence_map(self) -> Dict[int, Set[int]]:
+        """
+        Get the forward influence map showing which nodes influence each output node.
+        
+        Returns:
+            Dictionary mapping output node indices to sets of nodes that influence them
+        """
+        return self.validator.get_forward_influence_map()
     
     def get_topology_metrics(self) -> Dict[str, Any]:
         """Get metrics about the network topology."""
@@ -122,4 +169,48 @@ class BaseNetwork(ABC):
             else:
                 metrics['eigenvector_centrality'] = 0.0
         
-        return metrics 
+        return metrics
+    
+    def _validate_runtime_edges(self) -> Tuple[bool, str]:
+        """
+        Validate that no forbidden edges are active during runtime.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check for input-input edges
+        for i in self.input_nodes:
+            for j in self.input_nodes:
+                if (i, j) in self._active_edges:
+                    return False, f"Forbidden input-input edge detected during runtime: {i} -> {j}"
+        
+        # Check for output-output edges
+        for i in self.output_nodes:
+            for j in self.output_nodes:
+                if (i, j) in self._active_edges:
+                    return False, f"Forbidden output-output edge detected during runtime: {i} -> {j}"
+        
+        # Check for edges not in the topology
+        for edge in self._active_edges:
+            if edge not in self._allowed_edges and edge[::-1] not in self._allowed_edges:
+                return False, f"Edge not in topology detected during runtime: {edge[0]} -> {edge[1]}"
+        
+        return True, ""
+    
+    def _update_active_edges(self, node: int, neighbors: List[int]) -> None:
+        """
+        Update the set of active edges based on current node activations.
+        
+        Args:
+            node: Current node being processed
+            neighbors: List of neighbor nodes that are active
+        """
+        for neighbor in neighbors:
+            # Check if edge exists in topology
+            if (node, neighbor) in self._allowed_edges or (neighbor, node) in self._allowed_edges:
+                if self.node_states[node]['weights'].get(neighbor, 0) != 0:
+                    self._active_edges.add((node, neighbor))
+    
+    def _clear_active_edges(self) -> None:
+        """Clear the set of active edges at the start of each forward pass."""
+        self._active_edges.clear() 

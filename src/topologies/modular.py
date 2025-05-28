@@ -164,7 +164,7 @@ class ModularTopology(BaseTopology, BasePlugin):
         """Calculate degree and betweenness centrality for all nodes."""
         degree_centrality = np.array(list(nx.degree_centrality(graph).values()))
         betweenness_centrality = np.array(list(nx.betweenness_centrality(graph).values()))
-        return degree_centrality, betweenness_centrality
+        return degree_centrality, betweenness_centrality 
     
     def generate_adjacency_mask(self) -> torch.Tensor:
         """

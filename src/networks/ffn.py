@@ -29,6 +29,9 @@ class FeedForwardNetwork(BaseNetwork):
         Returns:
             Dictionary mapping output node indices to their output values
         """
+        # Clear active edges at start of forward pass
+        self._clear_active_edges()
+        
         # Initialize activations
         activations = {node: 0.0 for node in self.topology.nodes()}
         
@@ -40,6 +43,20 @@ class FeedForwardNetwork(BaseNetwork):
         # Process through network layers
         for layer in nx.topological_sort(self.topology):
             if layer not in self.input_nodes:
+                # Get active neighbors
+                active_neighbors = [
+                    neighbor for neighbor in self.topology.predecessors(layer)
+                    if activations[neighbor] != 0
+                ]
+                
+                # Update active edges
+                self._update_active_edges(layer, active_neighbors)
+                
+                # Validate runtime edges
+                is_valid, error_msg = self._validate_runtime_edges()
+                if not is_valid:
+                    raise ValueError(f"Runtime topology violation: {error_msg}")
+                
                 # Sum weighted inputs
                 weighted_sum = self.node_states[layer]['bias']
                 for neighbor in self.topology.predecessors(layer):

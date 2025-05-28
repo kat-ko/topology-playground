@@ -39,6 +39,35 @@ def mask_shape_sanity(mask: torch.Tensor,
     
     return True, None
 
+def prune_forbidden_edges(topology: nx.Graph, input_nodes: List[int], output_nodes: List[int]) -> nx.Graph:
+    """
+    Prune forbidden edges (input-input and output-output) while preserving other connections.
+    
+    Args:
+        topology: NetworkX graph representing the network topology
+        input_nodes: List of input node indices
+        output_nodes: List of output node indices
+        
+    Returns:
+        NetworkX graph with forbidden edges removed
+    """
+    # Create a copy of the topology to avoid modifying the original
+    pruned_topology = topology.copy()
+    
+    # Remove input-input edges
+    for i in input_nodes:
+        for j in input_nodes:
+            if pruned_topology.has_edge(i, j):
+                pruned_topology.remove_edge(i, j)
+    
+    # Remove output-output edges
+    for i in output_nodes:
+        for j in output_nodes:
+            if pruned_topology.has_edge(i, j):
+                pruned_topology.remove_edge(i, j)
+    
+    return pruned_topology
+
 def prune_output_edges(topology: nx.Graph, output_nodes: List[int]) -> nx.Graph:
     """
     Prune edges between output nodes while preserving other connections.

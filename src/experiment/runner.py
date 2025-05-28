@@ -420,7 +420,7 @@ class ExperimentRunner:
         serializable_results = to_serializable(results)
         # Save as JSON
         with open(results_dir / 'experiment_results.json', 'w') as f:
-            json.dump(serializable_results, f, indent=2)
+            json.dump(serializable_results, f, indent=2) 
 
     def _handle_mask_validation(self, is_valid: bool, error_msg: str = None) -> None:
         """

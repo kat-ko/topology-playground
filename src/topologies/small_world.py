@@ -125,7 +125,7 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
             'avg_degree': np.mean([d for n, d in G.degree()]),
             'diameter': nx.diameter(G),
             'avg_shortest_path': nx.average_shortest_path_length(G)
-        }
+        } 
     
     def generate_adjacency_mask(self) -> torch.Tensor:
         """
