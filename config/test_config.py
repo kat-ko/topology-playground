@@ -59,8 +59,7 @@ class TestConfig:
     
     # Tasks to test (one of each type)
     tasks: List[str] = field(default_factory=lambda: [
-        'classification',  # Basic task
-        'regression'  # Complex task
+        'cartpole'  # Basic RL task
     ])
     
     def __post_init__(self):

@@ -61,9 +61,9 @@ class ExperimentConfig:
     
     # Tasks to test
     tasks: List[str] = field(default_factory=lambda: [
-        'classification',
-        'regression',
-        'clustering'
+        'cartpole',
+        'mountain_car',
+        'acrobot'
     ])
     
     def __post_init__(self):
