@@ -406,7 +406,8 @@ class ExperimentRunner:
         def to_serializable(obj):
             import numpy as np
             if isinstance(obj, dict):
-                return {k: to_serializable(v) for k, v in obj.items()}
+                return {str(k) if isinstance(k, (np.integer, np.floating)) else k: to_serializable(v) 
+                       for k, v in obj.items()}
             elif isinstance(obj, list):
                 return [to_serializable(i) for i in obj]
             elif isinstance(obj, np.integer):

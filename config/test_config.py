@@ -28,9 +28,23 @@ class TestConfig:
         'ffn': {
             'activation': 'relu',
             'learning_rate': 0.001,
-            'batch_size': 32,
-            'hidden_layers': [16, 8]  # Reduced for testing
+            'batch_size': 32
         }
+    })
+    
+    # Small-world network parameters
+    small_world_params: Dict[str, Any] = field(default_factory=lambda: {
+        'k': 4,
+        'p': 0.1,
+        'inter_layer_prob': 0.1
+    })
+    
+    # Modular network parameters
+    modular_params: Dict[str, Any] = field(default_factory=lambda: {
+        'num_modules': 2,  # Reduced for testing
+        'inter_module_prob': 0.1,
+        'intra_module_prob': 0.3,
+        'inter_layer_prob': 0.1
     })
     
     # Node selection strategies (one of each type)
@@ -49,50 +63,6 @@ class TestConfig:
         'regression'  # Complex task
     ])
     
-    # Topology-specific parameters
-    small_world_params: Dict[str, Any] = field(default_factory=lambda: {
-        'k': 4,
-        'p': 0.1,
-        'inter_layer_prob': 0.1
-    })
-    
-    modular_params: Dict[str, Any] = field(default_factory=lambda: {
-        'num_modules': 2,  # Reduced for testing
-        'inter_module_prob': 0.1,
-        'intra_module_prob': 0.3,
-        'inter_layer_prob': 0.1
-    })
-    
-    hybrid_params: Dict[str, Any] = field(default_factory=lambda: {
-        'num_modules': 2,  # Reduced for testing
-        'inter_module_prob': 0.1,
-        'intra_module_prob': 0.3,
-        'k': 4,
-        'p': 0.1,
-        'inter_layer_prob': 0.1
-    })
-    
-    # Task-specific parameters
-    task_params: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-        'classification': {
-            'num_classes': 2,  # Reduced for testing
-            'input_dim': 5,  # Reduced for testing
-            'num_samples': 100  # Reduced for testing
-        },
-        'regression': {
-            'input_dim': 5,  # Reduced for testing
-            'num_samples': 100  # Reduced for testing
-        }
-    })
-    
-    # Training parameters
-    training_params: Dict[str, Any] = field(default_factory=lambda: {
-        'max_epochs': 10,  # Reduced for testing
-        'batch_size': 32,
-        'learning_rate': 0.001,
-        'early_stopping_patience': 3  # Reduced for testing
-    })
-    
     def __post_init__(self):
         # Update module size based on network sizes
         self.modular_params['module_size'] = {
@@ -108,12 +78,10 @@ class TestConfig:
             'num_layers': self.num_layers,
             'network_types': self.network_types,
             'network_params': self.network_params,
+            'small_world_params': self.small_world_params,
+            'modular_params': self.modular_params,
             'node_selection_strategies': self.node_selection_strategies,
             'num_io_nodes': self.num_io_nodes,
             'tasks': self.tasks,
-            'small_world_params': self.small_world_params,
-            'modular_params': self.modular_params,
-            'hybrid_params': self.hybrid_params,
-            'task_params': self.task_params,
-            'training_params': self.training_params
+            'is_test_run': True  # Mark this as a test run
         } 
