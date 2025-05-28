@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Union
 import networkx as nx
 import numpy as np
+from ..topologies.utils import prune_output_edges
 
 class BaseNetwork(ABC):
     """Abstract base class for network types (FFN, RNN)."""
@@ -17,23 +18,19 @@ class BaseNetwork(ABC):
             output_nodes: List of output node indices
             network_params: Dictionary of network-specific parameters
         """
-        # Keep original undirected topology for constraints
-        self.topology = topology
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
         self.network_params = network_params
         self.num_nodes = len(topology.nodes())
         
-        # Create network-specific processing graph
-        self.processing_graph = self._create_processing_graph()
+        # Store original topology for metrics
+        self.original_topology = topology
+        
+        # Prune output-output edges before initializing the network
+        self.topology = prune_output_edges(topology, output_nodes)
         
         # Initialize node states
         self.node_states = self._initialize_node_states()
-    
-    @abstractmethod
-    def _create_processing_graph(self) -> nx.Graph:
-        """Create a network-specific processing graph that respects topology constraints."""
-        pass
     
     @abstractmethod
     def _initialize_node_states(self) -> Dict[str, Any]:
@@ -59,14 +56,44 @@ class BaseNetwork(ABC):
     
     def get_topology_metrics(self) -> Dict[str, Any]:
         """Get metrics about the network topology."""
-        return {
+        # Calculate basic metrics that don't require connectivity
+        metrics = {
             'num_nodes': self.num_nodes,
             'num_edges': self.topology.number_of_edges(),
             'density': nx.density(self.topology),
             'avg_degree': sum(dict(self.topology.degree()).values()) / self.num_nodes,
-            'diameter': nx.diameter(self.topology),
-            'avg_shortest_path': nx.average_shortest_path_length(self.topology)
+            'num_output_edges': sum(1 for edge in self.topology.edges() 
+                                  if edge[0] in self.output_nodes or edge[1] in self.output_nodes)
         }
+        
+        # Add pruning metrics
+        original_edges = self.original_topology.number_of_edges()
+        pruned_edges = original_edges - sum(1 for edge in self.original_topology.edges()
+                                          if edge[0] in self.output_nodes and edge[1] in self.output_nodes)
+        metrics.update({
+            'original_edges': original_edges,
+            'pruned_edges': pruned_edges,
+            'edges_removed': original_edges - pruned_edges
+        })
+        
+        # Calculate connectivity-dependent metrics only if graph is connected
+        if nx.is_connected(self.topology):
+            metrics.update({
+                'diameter': nx.diameter(self.topology),
+                'avg_shortest_path': nx.average_shortest_path_length(self.topology)
+            })
+        else:
+            # Calculate metrics for largest connected component
+            largest_cc = max(nx.connected_components(self.topology), key=len)
+            largest_cc_graph = self.topology.subgraph(largest_cc)
+            metrics.update({
+                'diameter': nx.diameter(largest_cc_graph),
+                'avg_shortest_path': nx.average_shortest_path_length(largest_cc_graph),
+                'num_connected_components': nx.number_connected_components(self.topology),
+                'largest_component_size': len(largest_cc)
+            })
+        
+        return metrics
     
     def get_node_metrics(self, node_idx: int) -> Dict[str, Any]:
         """Get metrics for a specific node."""

@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import torch
 from typing import Dict, Any, List, Optional, Union
 from .base import BaseTopology
 from ..core.plugin_registry import PluginRegistry
@@ -20,6 +21,7 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
             inter_layer_prob: Probability of connections between layers (default: 0.1)
             seed: Random seed for reproducibility
         """
+        super().__init__(n_in=0, n_hidden=size, n_out=0)  # Initialize base class
         self.size = size
         self.k = k
         self.p = p
@@ -123,4 +125,39 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
             'avg_degree': np.mean([d for n, d in G.degree()]),
             'diameter': nx.diameter(G),
             'avg_shortest_path': nx.average_shortest_path_length(G)
-        } 
+        }
+    
+    def generate_adjacency_mask(self) -> torch.Tensor:
+        """
+        Generate the adjacency mask for the network.
+        
+        Returns:
+            Binary adjacency mask tensor
+        """
+        # Generate the network if not already generated
+        if not self.layers:
+            self.generate(self.num_layers)
+        
+        # Create adjacency matrix for the first layer
+        adj_matrix = nx.to_numpy_array(self.layers[0])
+        
+        # Add inter-layer connections if multiple layers
+        if self.num_layers > 1:
+            for i in range(self.num_layers):
+                for j in range(i + 1, self.num_layers):
+                    inter_layer_adj = nx.to_numpy_array(self.inter_layer_connections[(i, j)])
+                    # Add inter-layer connections to the adjacency matrix
+                    adj_matrix = np.block([
+                        [adj_matrix, inter_layer_adj],
+                        [inter_layer_adj.T, np.zeros((self.size, self.size))]
+                    ])
+        
+        # Convert to PyTorch tensor
+        mask = torch.from_numpy(adj_matrix).float()
+        
+        # Validate the mask
+        is_valid, error_msg = self.validate_mask(mask)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
+        return mask 

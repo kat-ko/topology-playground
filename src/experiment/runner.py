@@ -8,6 +8,8 @@ from datetime import datetime
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, r2_score, silhouette_score, precision_score, recall_score, mean_absolute_error, davies_bouldin_score, calinski_harabasz_score
 import time
+import logging
+from ..utils.logging_utils import setup_logger, LogLevel
 
 from ..topologies.small_world import SmallWorldTopology
 from ..topologies.modular import ModularTopology
@@ -17,8 +19,19 @@ from ..networks.rnn import RecurrentNetwork
 from ..node_selection.strategies import NodeSelector
 from ..tasks.task_definitions import TaskGenerator, TaskEvaluator
 
+logger = setup_logger(__name__)
+
 class ExperimentRunner:
+    """Runner for network experiments."""
+    
     def __init__(self, config: Dict[str, Any], output_dir: str = "results"):
+        """
+        Initialize the experiment runner.
+        
+        Args:
+            config: Experiment configuration
+            output_dir: Directory to save experiment results
+        """
         self.config = config
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -32,6 +45,16 @@ class ExperimentRunner:
             'ffn': FeedForwardNetwork,
             'rnn': RecurrentNetwork
         }
+        
+        self.is_test_run = isinstance(config.get('is_test_run', False), bool)
+        
+        # Set appropriate log level based on run type
+        if self.is_test_run:
+            logger.setLevel(LogLevel.DEBUG.value)
+            logger.info("Running in TEST mode")
+        else:
+            logger.setLevel(LogLevel.INFO.value)
+            logger.info("Running in EXPERIMENT mode")
     
     def run_experiment(self):
         """Run the complete experiment with all combinations of parameters."""
@@ -292,6 +315,12 @@ class ExperimentRunner:
             }
             layer_metrics['node_metrics'] = node_metrics
             
+            # Log pruning effect
+            metrics = network.get_topology_metrics()
+            logger.info(f"Layer {layer_idx} - Original edges: {metrics['original_edges']}, "
+                       f"After pruning output-output edges: {metrics['pruned_edges']}, "
+                       f"Edges removed: {metrics['edges_removed']}")
+            
             network_metrics.append(layer_metrics)
         
         # Calculate inter-layer metrics if multiple layers
@@ -391,4 +420,19 @@ class ExperimentRunner:
         serializable_results = to_serializable(results)
         # Save as JSON
         with open(results_dir / 'experiment_results.json', 'w') as f:
-            json.dump(serializable_results, f, indent=2) 
+            json.dump(serializable_results, f, indent=2)
+
+    def _handle_mask_validation(self, is_valid: bool, error_msg: str = None) -> None:
+        """
+        Handle mask validation results.
+        
+        Args:
+            is_valid: Whether the mask is valid
+            error_msg: Error message if validation failed
+        """
+        if not is_valid:
+            logger.error(f"Mask validation failed: {error_msg}")
+            if not self.is_test_run:
+                raise ValueError(f"Mask validation failed: {error_msg}")
+        else:
+            logger.info("Mask validation passed") 

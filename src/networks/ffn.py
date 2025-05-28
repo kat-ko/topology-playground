@@ -6,48 +6,6 @@ from .base import BaseNetwork
 class FeedForwardNetwork(BaseNetwork):
     """FeedForward Network implementation."""
     
-    def _violates_feed_forward(self, u: int, v: int) -> bool:
-        """Check if an edge violates feed-forward constraints.
-        
-        Args:
-            u: Source node
-            v: Target node
-            
-        Returns:
-            bool: True if the edge violates feed-forward constraints
-        """
-        # Input nodes can only have outgoing edges
-        if u in self.input_nodes and v in self.input_nodes:
-            return True
-        
-        # Output nodes can only have incoming edges
-        if u in self.output_nodes and v in self.output_nodes:
-            return True
-        
-        # Hidden nodes: ensure acyclic structure
-        if u not in self.input_nodes and v not in self.output_nodes:
-            return u > v  # Only allow edges from lower to higher indices
-        
-        return False
-    
-    def _create_processing_graph(self) -> nx.DiGraph:
-        """Create a directed processing graph for FFN that respects topology constraints."""
-        # Create directed graph
-        G = nx.DiGraph()
-        G.add_nodes_from(self.topology.nodes())
-        
-        # Phase 1: Create all edges from topology (both directions)
-        for u, v in self.topology.edges():
-            G.add_edge(u, v)
-            G.add_edge(v, u)
-        
-        # Phase 2: Remove edges that violate feed-forward constraints
-        for u, v in list(G.edges()):
-            if self._violates_feed_forward(u, v):
-                G.remove_edge(u, v)
-        
-        return G
-    
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for FFN."""
         states = {}
@@ -57,7 +15,7 @@ class FeedForwardNetwork(BaseNetwork):
                 'bias': np.random.normal(0, 0.1),
                 'weights': {
                     neighbor: np.random.normal(0, 0.1)
-                    for neighbor in self.processing_graph.predecessors(node)
+                    for neighbor in self.topology.neighbors(node)
                 }
             }
         return states
@@ -79,12 +37,12 @@ class FeedForwardNetwork(BaseNetwork):
             if node in self.input_nodes:
                 activations[node] = value
         
-        # Process through network layers using topological sort
-        for layer in nx.topological_sort(self.processing_graph):
+        # Process through network layers
+        for layer in nx.topological_sort(self.topology):
             if layer not in self.input_nodes:
                 # Sum weighted inputs
                 weighted_sum = self.node_states[layer]['bias']
-                for neighbor in self.processing_graph.predecessors(layer):
+                for neighbor in self.topology.predecessors(layer):
                     weighted_sum += (
                         activations[neighbor] * 
                         self.node_states[layer]['weights'][neighbor]

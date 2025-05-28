@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+import torch
 from typing import Dict, Any, List, Optional, Union, Tuple
 from .base import BaseTopology
 from ..core.plugin_registry import PluginRegistry
@@ -22,6 +23,7 @@ class ModularTopology(BaseTopology, BasePlugin):
             inter_layer_prob: Probability of connections between layers (default: 0.1)
             seed: Random seed for reproducibility
         """
+        super().__init__(n_in=0, n_hidden=size, n_out=0)  # Initialize base class
         self.size = size
         self.num_modules = num_modules
         self.inter_module_prob = inter_module_prob
@@ -162,4 +164,39 @@ class ModularTopology(BaseTopology, BasePlugin):
         """Calculate degree and betweenness centrality for all nodes."""
         degree_centrality = np.array(list(nx.degree_centrality(graph).values()))
         betweenness_centrality = np.array(list(nx.betweenness_centrality(graph).values()))
-        return degree_centrality, betweenness_centrality 
+        return degree_centrality, betweenness_centrality
+    
+    def generate_adjacency_mask(self) -> torch.Tensor:
+        """
+        Generate the adjacency mask for the network.
+        
+        Returns:
+            Binary adjacency mask tensor
+        """
+        # Generate the network if not already generated
+        if not self.layers:
+            self.generate(self.num_layers)
+        
+        # Create adjacency matrix for the first layer
+        adj_matrix = nx.to_numpy_array(self.layers[0])
+        
+        # Add inter-layer connections if multiple layers
+        if self.num_layers > 1:
+            for i in range(self.num_layers):
+                for j in range(i + 1, self.num_layers):
+                    inter_layer_adj = nx.to_numpy_array(self.inter_layer_connections[(i, j)])
+                    # Add inter-layer connections to the adjacency matrix
+                    adj_matrix = np.block([
+                        [adj_matrix, inter_layer_adj],
+                        [inter_layer_adj.T, np.zeros((self.size, self.size))]
+                    ])
+        
+        # Convert to PyTorch tensor
+        mask = torch.from_numpy(adj_matrix).float()
+        
+        # Validate the mask
+        is_valid, error_msg = self.validate_mask(mask)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
+        return mask 

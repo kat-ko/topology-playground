@@ -6,11 +6,6 @@ from .base import BaseNetwork
 class RecurrentNetwork(BaseNetwork):
     """Recurrent Neural Network implementation."""
     
-    def _create_processing_graph(self) -> nx.Graph:
-        """Create processing graph for RNN (uses undirected topology)."""
-        # RNN uses the original undirected topology
-        return self.topology.copy()
-    
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for RNN."""
         states = {}
