@@ -6,6 +6,24 @@ import numpy as np
 class CurriculumConfig:
     """Configuration for curriculum learning experiments."""
     
+    # Experiment types
+    experiment_types: List[str] = field(default_factory=lambda: [
+        'same_size',  # All topologies with same node size
+        'match_hybrid',  # All topologies matched to hybrid capacity
+        'match_small_world',  # All topologies matched to small world capacity
+        'match_modular',  # All topologies matched to modular capacity
+        'match_fully_connected'  # All topologies matched to fully connected capacity
+    ])
+    
+    # Parameter budget settings
+    parameter_budget: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': True,  # Whether to enforce parameter budget
+        'budget_type': 'edges',  # 'edges' or 'weights'
+        'target_budget': 10000,  # Target number of parameters
+        'padding_strategy': 'zero',  # How to pad: 'zero' or 'random'
+        'normalize_by_size': True,  # Whether to normalize budget by network size
+    })
+    
     # Task sequence
     task_sequence: List[str] = field(default_factory=lambda: [
         'cartpole',
@@ -14,18 +32,41 @@ class CurriculumConfig:
     ])
     
     # Network parameters (reusing from ExperimentConfig)
-    network_sizes: List[int] = field(default_factory=lambda: [100])
-    seeds: List[int] = field(default_factory=lambda: [42])
-    num_layers: List[int] = field(default_factory=lambda: [2])
-    network_types: List[str] = field(default_factory=lambda: ['ffn'])
+    network_sizes: List[int] = field(default_factory=lambda: [100, 200, 500])
+    seeds: List[int] = field(default_factory=lambda: [42, 123, 456])
+    num_layers: List[int] = field(default_factory=lambda: [1, 2, 3])
+    network_types: List[str] = field(default_factory=lambda: ['ffn', 'rnn'])
     
     # Training parameters
     episodes_per_task: int = 1000
     evaluation_episodes: int = 100
+    max_env_steps_per_task: int = 50000  # Maximum environment steps per task
+    
+    # Task memory and difficulty parameters
+    task_memory_size: int = 6  # Number of tasks to remember (2 per task type)
+    task_memory_thresholds: Dict[str, float] = field(default_factory=lambda: {
+        'cartpole': 400.0,  # Reward threshold to store task in memory
+        'mountain_car': -110.0,  # Reward threshold to store task in memory
+        'acrobot': -110.0  # Reward threshold to store task in memory
+    })
+    difficulty_thresholds: Dict[str, float] = field(default_factory=lambda: {
+        'cartpole': 450.0,  # Reward threshold to increase difficulty
+        'mountain_car': -100.0,  # Reward threshold to increase difficulty
+        'acrobot': -100.0  # Reward threshold to increase difficulty
+    })
+    difficulty_increase: float = 0.1
     
     # Transfer learning parameters
     backward_transfer_tasks: List[str] = field(default_factory=lambda: ['cartpole'])
     forward_transfer_tasks: List[str] = field(default_factory=lambda: ['mountain_car', 'acrobot'])
+    
+    # Forgetting and retention testing parameters
+    forgetting_test: Dict[str, Any] = field(default_factory=lambda: {
+        'retention_interval': 10,  # How often to test retention (iterations)
+        'retention_episodes': 20,  # Number of episodes for retention testing (increased from 5 to 20)
+        'forgetting_threshold': 0.8,  # Performance threshold to consider as forgetting
+        'retention_threshold': 0.9  # Performance threshold to consider as retained
+    })
     
     # Reuse existing parameters
     network_params: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
@@ -40,6 +81,12 @@ class CurriculumConfig:
             'learning_rate': 0.001,
             'batch_size': 32
         }
+    })
+    
+    # Fully connected network parameters
+    fully_connected_params: Dict[str, Any] = field(default_factory=lambda: {
+        'inter_layer_prob': 1.0,  # Fully connected between layers
+        'intra_layer_prob': 1.0   # Fully connected within layers
     })
     
     small_world_params: Dict[str, Any] = field(default_factory=lambda: {
@@ -72,10 +119,33 @@ class CurriculumConfig:
             size: size // self.modular_params['num_modules']
             for size in self.network_sizes
         }
+        
+        # Calculate parameter budgets for each network size
+        if self.parameter_budget['enabled']:
+            self.parameter_budget['size_budgets'] = self._calculate_size_budgets()
+    
+    def _calculate_size_budgets(self) -> Dict[int, int]:
+        """Calculate parameter budget for each network size."""
+        budgets = {}
+        base_budget = self.parameter_budget['target_budget']
+        
+        for size in self.network_sizes:
+            if self.parameter_budget['normalize_by_size']:
+                # Normalize budget by network size
+                # This ensures fair comparison across different sizes
+                normalized_budget = int(base_budget * (size / min(self.network_sizes)))
+            else:
+                normalized_budget = base_budget
+            
+            budgets[size] = normalized_budget
+        
+        return budgets
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary."""
         return {
+            'experiment_types': self.experiment_types,
+            'parameter_budget': self.parameter_budget,
             'task_sequence': self.task_sequence,
             'network_sizes': self.network_sizes,
             'seeds': self.seeds,
@@ -85,7 +155,9 @@ class CurriculumConfig:
             'evaluation_episodes': self.evaluation_episodes,
             'backward_transfer_tasks': self.backward_transfer_tasks,
             'forward_transfer_tasks': self.forward_transfer_tasks,
+            'forgetting_test': self.forgetting_test,
             'network_params': self.network_params,
+            'fully_connected_params': self.fully_connected_params,
             'small_world_params': self.small_world_params,
             'modular_params': self.modular_params,
             'node_selection_strategies': self.node_selection_strategies,

@@ -127,7 +127,7 @@ class BaseNetwork(ABC):
         if nx.is_connected(self.topology):
             metrics.update({
                 'diameter': nx.diameter(self.topology),
-                'avg_shortest_path': nx.average_shortest_path_length(self.topology)
+            'avg_shortest_path': nx.average_shortest_path_length(self.topology)
             })
         else:
             # Calculate metrics for largest connected component
@@ -169,7 +169,7 @@ class BaseNetwork(ABC):
             else:
                 metrics['eigenvector_centrality'] = 0.0
         
-        return metrics
+        return metrics 
     
     def _validate_runtime_edges(self) -> Tuple[bool, str]:
         """

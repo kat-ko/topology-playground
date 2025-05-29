@@ -9,10 +9,12 @@ from tqdm import tqdm
 import time
 import logging
 from ..utils.logging_utils import setup_logger, LogLevel
+from collections import defaultdict
 
 from ..topologies.small_world import SmallWorldTopology
 from ..topologies.modular import ModularTopology
 from ..topologies.hybrid import HybridTopology
+from ..topologies.fully_connected import FullyConnectedTopology
 from ..networks.ffn import FeedForwardNetwork
 from ..networks.rnn import RecurrentNetwork
 from ..node_selection.strategies import NodeSelector
@@ -93,16 +95,26 @@ class CurriculumRunner:
                             seed=seed
                         )
                         
+                        fully_connected = FullyConnectedTopology(
+                            size=size,
+                            num_layers=num_layers,
+                            inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
+                            intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
+                            seed=seed
+                        )
+                        
                         # Generate networks
                         sw_graphs = small_world.generate(num_layers)
                         mod_graphs = modular.generate(num_layers)
                         hybrid_graphs = hybrid.generate(num_layers)
+                        fc_graphs = fully_connected.generate(num_layers)
                         
                         # Convert to list if single graph
                         if num_layers == 1:
                             sw_graphs = [sw_graphs]
                             mod_graphs = [mod_graphs]
                             hybrid_graphs = [hybrid_graphs]
+                            fc_graphs = [fc_graphs]
                         
                         # Select input/output nodes for each layer
                         for strategy in tqdm(self.config['node_selection_strategies'], desc="Strategies", leave=False):
@@ -112,6 +124,8 @@ class CurriculumRunner:
                             mod_output_nodes = []
                             hybrid_input_nodes = []
                             hybrid_output_nodes = []
+                            fc_input_nodes = []
+                            fc_output_nodes = []
                             
                             # Select nodes for each layer
                             for layer_idx in range(num_layers):
@@ -124,6 +138,9 @@ class CurriculumRunner:
                                 hybrid_input, hybrid_output = self._select_nodes(
                                     hybrid_graphs[layer_idx], strategy, size, seed
                                 )
+                                fc_input, fc_output = self._select_nodes(
+                                    fc_graphs[layer_idx], strategy, size, seed
+                                )
                                 
                                 sw_input_nodes.append(sw_input)
                                 sw_output_nodes.append(sw_output)
@@ -131,11 +148,14 @@ class CurriculumRunner:
                                 mod_output_nodes.append(mod_output)
                                 hybrid_input_nodes.append(hybrid_input)
                                 hybrid_output_nodes.append(hybrid_output)
+                                fc_input_nodes.append(fc_input)
+                                fc_output_nodes.append(fc_output)
                             
                             # Create networks
                             sw_networks = []
                             mod_networks = []
                             hybrid_networks = []
+                            fc_networks = []
                             
                             for layer_idx in range(num_layers):
                                 # Create network instances
@@ -162,12 +182,20 @@ class CurriculumRunner:
                                     hybrid_output_nodes[layer_idx],
                                     network_params
                                 ))
+                                
+                                fc_networks.append(network_class(
+                                    fc_graphs[layer_idx],
+                                    fc_input_nodes[layer_idx],
+                                    fc_output_nodes[layer_idx],
+                                    network_params
+                                ))
                             
                             # Run curriculum for each topology
                             for topology, networks, input_nodes, output_nodes in [
                                 ('small_world', sw_networks, sw_input_nodes, sw_output_nodes),
                                 ('modular', mod_networks, mod_input_nodes, mod_output_nodes),
-                                ('hybrid', hybrid_networks, hybrid_input_nodes, hybrid_output_nodes)
+                                ('hybrid', hybrid_networks, hybrid_input_nodes, hybrid_output_nodes),
+                                ('fully_connected', fc_networks, fc_input_nodes, fc_output_nodes)
                             ]:
                                 curriculum_results = self._run_task_sequence(
                                     networks, input_nodes, output_nodes,
@@ -421,4 +449,120 @@ class CurriculumRunner:
         serializable_results = to_serializable(results)
         # Save as JSON
         with open(results_dir / 'curriculum_results.json', 'w') as f:
-            json.dump(serializable_results, f, indent=2) 
+            json.dump(serializable_results, f, indent=2)
+
+    def _run_single_experiment(self, algorithm: str, experiment_type: str):
+        """Run a single curriculum experiment."""
+        # Create agent with capacity-matched network
+        agent_config = self.config.copy()
+        agent_config['experiment_type'] = experiment_type
+        
+        # Create network with correct capacity
+        network = self.parameter_budget.calculator.create_network(
+            topology=self.config['network_types'][0],
+            size=self.config['network_sizes'][0],
+            experiment_type=experiment_type
+        )
+        
+        # Initialize agent with the capacity-matched network
+        agent = self.agents[algorithm]
+        agent.network = network
+        
+        task_generator = RLTaskGenerator(self.config)
+        evaluator = RLTaskEvaluator(self.config)
+        
+        # Initialize metrics for this experiment
+        exp_key = f"{algorithm}_{experiment_type}"
+        self.metrics[exp_key] = defaultdict(list)
+        
+        # Run curriculum
+        for task in self.config['task_sequence']:
+            # Generate task
+            task_env = task_generator.generate_task(task)
+            
+            # Initialize environment step counter
+            env_steps = 0
+            env_steps_so_far = 0
+            
+            # Train agent
+            for episode in range(self.config['episodes_per_task']):
+                # Check if we've reached the maximum environment steps
+                if env_steps_so_far >= self.config['max_env_steps_per_task']:
+                    logger.info(f"Reached maximum environment steps ({self.config['max_env_steps_per_task']}) for task {task}")
+                    break
+                
+                # Get action from agent
+                state = task_env.reset()
+                done = False
+                episode_reward = 0
+                episode_steps = 0
+                
+                while not done:
+                    action = agent.select_action(state)
+                    next_state, reward, done, _ = task_env.step(action)
+                    agent.update(state, action, reward, next_state, done)
+                    state = next_state
+                    episode_reward += reward
+                    episode_steps += 1
+                    env_steps += 1
+                    env_steps_so_far += 1
+                    
+                    # Check if we've reached the maximum environment steps
+                    if env_steps_so_far >= self.config['max_env_steps_per_task']:
+                        done = True
+                
+                # Log metrics
+                self.metrics[exp_key]['episode_rewards'].append(episode_reward)
+                self.metrics[exp_key]['episode_steps'].append(episode_steps)
+                self.metrics[exp_key]['env_steps_so_far'].append(env_steps_so_far)
+                
+                # Check if task is learned using task-specific threshold
+                if episode_reward >= self.config['task_memory_thresholds'][task]:
+                    self.metrics[exp_key]['learning_episodes'].append(episode)
+                    # Log physics parameters when task is learned
+                    if hasattr(task_env, 'get_physics_params'):
+                        physics_params = task_env.get_physics_params()
+                        self.metrics[exp_key]['physics_params'].append({
+                            'task': task,
+                            'episode': episode,
+                            'params': physics_params
+                        })
+                    break
+            
+            # Evaluate agent
+            eval_rewards = []
+            eval_steps = []
+            for _ in range(self.config['evaluation_episodes']):
+                state = task_env.reset()
+                done = False
+                episode_reward = 0
+                episode_steps = 0
+                
+                while not done:
+                    action = agent.select_action(state)
+                    next_state, reward, done, _ = task_env.step(action)
+                    state = next_state
+                    episode_reward += reward
+                    episode_steps += 1
+                
+                eval_rewards.append(episode_reward)
+                eval_steps.append(episode_steps)
+            
+            # Log evaluation metrics
+            self.metrics[exp_key]['eval_rewards'].append(np.mean(eval_rewards))
+            self.metrics[exp_key]['eval_steps'].append(np.mean(eval_steps))
+            
+            # Get parameter budget stats
+            budget_stats = self.parameter_budget.get_budget_stats(
+                agent.network,
+                self.config['network_sizes'][0],
+                agent.topology
+            )
+            self.metrics[exp_key]['parameter_stats'].append(budget_stats)
+            
+            # Test transfer learning if applicable
+            if task in self.config['backward_transfer_tasks']:
+                self._test_transfer_learning(agent, task, exp_key)
+            
+            # Test forgetting and retention
+            self._test_forgetting_retention(agent, task, exp_key) 

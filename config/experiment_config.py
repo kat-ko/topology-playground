@@ -66,6 +66,56 @@ class ExperimentConfig:
         'acrobot'
     ])
     
+    # RL-specific parameters
+    rl_params: Dict[str, Any] = field(default_factory=lambda: {
+        'state_dim': 4,  # For CartPole
+        'action_dim': 2,  # For CartPole
+        'ppo': {
+            'learning_rate': 0.0003,
+            'gamma': 0.99,
+            'clip_ratio': 0.2,
+            'value_coef': 0.5,
+            'entropy_coef': 0.01,
+            'batch_size': 64,
+            'max_episode_steps': 500  # Increased from 100
+        },
+        'a2c': {
+            'learning_rate': 0.0007,
+            'gamma': 0.99,
+            'value_coef': 0.5,
+            'entropy_coef': 0.01,
+            'batch_size': 64,
+            'max_episode_steps': 500  # Increased from 100
+        },
+        'sac': {
+            'learning_rate': 0.0003,
+            'gamma': 0.99,
+            'buffer_size': 10000,
+            'batch_size': 64,
+            'target_update_freq': 1000,
+            'tau': 0.005,
+            'entropy_coef': 0.01,
+            'max_episode_steps': 500  # Increased from 100
+        },
+        'curriculum': {
+            'num_iterations': 100,
+            'eval_episodes': 10,
+            'task_difficulty_increase': 0.1,
+            'episodes_per_iteration': 5,  # Number of episodes to run per iteration
+            'task_memory_size': 6,  # Number of tasks to remember (2 per task type)
+            'task_memory_threshold': 400,  # Reward threshold to store task in memory
+            'difficulty_threshold': 450,  # Reward threshold to increase difficulty
+            'replay_episodes': 2,  # Number of episodes to replay from memory
+            'replay_frequency': 5,  # How often to replay from memory (iterations)
+            'forgetting_test': {
+                'retention_interval': 10,  # How often to test retention (iterations)
+                'retention_episodes': 5,  # Number of episodes for retention testing
+                'forgetting_threshold': 0.8,  # Performance threshold to consider as forgetting
+                'retention_threshold': 0.9  # Performance threshold to consider as retained
+            }
+        }
+    })
+    
     def __post_init__(self):
         # Update module size based on network sizes
         self.modular_params['module_size'] = {
@@ -85,7 +135,8 @@ class ExperimentConfig:
             'modular_params': self.modular_params,
             'node_selection_strategies': self.node_selection_strategies,
             'num_io_nodes': self.num_io_nodes,
-            'tasks': self.tasks
+            'tasks': self.tasks,
+            'rl_params': self.rl_params
         }
 
 # Network types to test
