@@ -41,6 +41,11 @@ class BaseNetwork(ABC):
         # Initialize node states
         self.node_states = self._initialize_node_states()
         
+        # Validate weight initialization
+        is_valid, error_msg = self._validate_weight_initialization()
+        if not is_valid:
+            raise ValueError(f"Invalid weight initialization: {error_msg}")
+        
         # Track active edges for runtime validation
         self._active_edges = set()
         
@@ -126,7 +131,7 @@ class BaseNetwork(ABC):
         # Calculate connectivity-dependent metrics only if graph is connected
         if nx.is_connected(self.topology):
             metrics.update({
-                'diameter': nx.diameter(self.topology),
+            'diameter': nx.diameter(self.topology),
             'avg_shortest_path': nx.average_shortest_path_length(self.topology)
             })
         else:
@@ -208,9 +213,40 @@ class BaseNetwork(ABC):
         for neighbor in neighbors:
             # Check if edge exists in topology
             if (node, neighbor) in self._allowed_edges or (neighbor, node) in self._allowed_edges:
-                if self.node_states[node]['weights'].get(neighbor, 0) != 0:
-                    self._active_edges.add((node, neighbor))
+                # Handle both FFN and RNN weight structures
+                if 'weights' in self.node_states[node]:
+                    if self.node_states[node]['weights'].get(neighbor, 0) != 0:
+                        self._active_edges.add((node, neighbor))
+                elif 'input_weights' in self.node_states[node]:
+                    if self.node_states[node]['input_weights'].get(neighbor, 0) != 0:
+                        self._active_edges.add((node, neighbor))
+                    if self.node_states[node]['recurrent_weights'].get(neighbor, 0) != 0:
+                        self._active_edges.add((node, neighbor))
     
     def _clear_active_edges(self) -> None:
         """Clear the set of active edges at the start of each forward pass."""
         self._active_edges.clear() 
+    
+    def _validate_weight_initialization(self) -> Tuple[bool, str]:
+        """
+        Validate that weight initialization matches the topology structure.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        for node in self.topology.nodes():
+            # Skip validation for nodes that don't have weights
+            if 'weights' not in self.node_states[node]:
+                continue
+                
+            # Check that all weights correspond to actual edges in the topology
+            for neighbor in self.node_states[node]['weights'].keys():
+                if not self.topology.has_edge(neighbor, node):
+                    return False, f"Weight exists for non-existent edge {neighbor} -> {node}"
+            
+            # Check that all incoming edges have weights
+            for neighbor in self.topology.predecessors(node):
+                if neighbor not in self.node_states[node]['weights']:
+                    return False, f"Missing weight for edge {neighbor} -> {node}"
+        
+        return True, "Weight initialization validation passed" 

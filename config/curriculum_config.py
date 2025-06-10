@@ -113,6 +113,31 @@ class CurriculumConfig:
     # Number of input/output nodes
     num_io_nodes: int = 5
     
+    # RL-specific parameters
+    rl_params: Dict[str, Any] = field(default_factory=lambda: {
+        'ppo': {
+            'learning_rate': 0.0003,
+            'gamma': 0.99,
+            'clip_ratio': 0.2,
+            'batch_size': 64,
+            'max_episode_steps': 200
+        },
+        'a2c': {
+            'learning_rate': 0.0007,
+            'gamma': 0.99,
+            'batch_size': 64,
+            'max_episode_steps': 200
+        },
+        'sac': {
+            'learning_rate': 0.0003,
+            'gamma': 0.99,
+            'buffer_size': 10000,
+            'batch_size': 64,
+            'tau': 0.005,
+            'max_episode_steps': 200
+        }
+    })
+    
     def __post_init__(self):
         # Update module size based on network sizes
         self.modular_params['module_size'] = {
@@ -161,5 +186,6 @@ class CurriculumConfig:
             'small_world_params': self.small_world_params,
             'modular_params': self.modular_params,
             'node_selection_strategies': self.node_selection_strategies,
-            'num_io_nodes': self.num_io_nodes
+            'num_io_nodes': self.num_io_nodes,
+            'rl_params': self.rl_params
         } 

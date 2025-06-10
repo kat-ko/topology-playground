@@ -4,18 +4,31 @@ import numpy as np
 from .base import BaseNetwork
 
 class FeedForwardNetwork(BaseNetwork):
-    """FeedForward Network implementation."""
+    """Feed-forward neural network implementation."""
+    
+    def __init__(self, topology: nx.Graph, input_nodes: List[int], output_nodes: List[int],
+                 network_params: Dict[str, Any]):
+        """Initialize the FFN."""
+        super().__init__(topology, input_nodes, output_nodes, network_params)
+        
+        # Ensure topology is a DAG
+        if not nx.is_directed_acyclic_graph(self.topology):
+            raise ValueError("FFN requires a Directed Acyclic Graph (DAG) topology")
+        
+        # Store node ordering for forward pass
+        self._node_order = list(nx.topological_sort(self.topology))
     
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for FFN."""
         states = {}
         for node in self.topology.nodes():
+            # Only initialize weights for incoming edges (predecessors)
             states[node] = {
                 'activation': 0.0,
                 'bias': np.random.normal(0, 0.1),
                 'weights': {
                     neighbor: np.random.normal(0, 0.1)
-                    for neighbor in self.topology.neighbors(node)
+                    for neighbor in self.topology.predecessors(node)
                 }
             }
         return states
@@ -40,24 +53,24 @@ class FeedForwardNetwork(BaseNetwork):
             if node in self.input_nodes:
                 activations[node] = value
         
-        # Process through network layers
-        for layer in nx.topological_sort(self.topology):
+        # Process through network in topological order
+        for layer in self._node_order:
             if layer not in self.input_nodes:
-                # Get active neighbors
-                active_neighbors = [
+                # Get active predecessors
+                active_predecessors = [
                     neighbor for neighbor in self.topology.predecessors(layer)
                     if activations[neighbor] != 0
                 ]
                 
                 # Update active edges
-                self._update_active_edges(layer, active_neighbors)
+                self._update_active_edges(layer, active_predecessors)
                 
                 # Validate runtime edges
                 is_valid, error_msg = self._validate_runtime_edges()
                 if not is_valid:
                     raise ValueError(f"Runtime topology violation: {error_msg}")
                 
-                # Sum weighted inputs
+                # Sum weighted inputs from predecessors
                 weighted_sum = self.node_states[layer]['bias']
                 for neighbor in self.topology.predecessors(layer):
                     weighted_sum += (

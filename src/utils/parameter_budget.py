@@ -13,7 +13,7 @@ class ParameterBudgetCalculator:
     def __post_init__(self):
         """Initialize the calculator with base parameters."""
         self.base_size = min(self.config['network_sizes'])
-        self.topologies = ['small_world', 'modular', 'hybrid']
+        self.topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
         self.experiment_types = self.config['experiment_types']
         
         # Pre-compute base capacities for each topology
@@ -31,8 +31,10 @@ class ParameterBudgetCalculator:
                 network = self._create_sample_small_world(self.base_size)
             elif topology == 'modular':
                 network = self._create_sample_modular(self.base_size)
-            else:  # hybrid
+            elif topology == 'hybrid':
                 network = self._create_sample_hybrid(self.base_size)
+            elif topology == 'fully_connected':
+                network = self._create_sample_fully_connected(self.base_size)
             
             capacities[topology] = self._count_parameters(network)
         
@@ -64,119 +66,130 @@ class ParameterBudgetCalculator:
             return int(base_budget * scale_factor)
         
         # For capacity matching experiments
-        if experiment_type == 'match_hybrid':
-            target_capacity = self.base_capacities['hybrid']
-        elif experiment_type == 'match_small_world':
-            target_capacity = self.base_capacities['small_world']
-        elif experiment_type == 'match_modular':
-            target_capacity = self.base_capacities['modular']
+        if experiment_type == 'match_fully_connected':
+            # Calculate fully connected network parameters
+            target_capacity = (size * (size - 1)) // 2  # For single layer
+            if self.config.get('num_layers', [1])[0] > 1:
+                # Add inter-layer connections
+                target_capacity += size * size * (self.config['num_layers'][0] - 1)
         else:
-            raise ValueError(f"Unknown experiment type: {experiment_type}")
+            # Get target topology from experiment type
+            target = '_'.join(experiment_type.split('_')[1:])
+            target_capacity = self.base_capacities[target]
+            # Scale the target capacity by the ratio of current size to base size
+            scale_factor = size / self.base_size
+            target_capacity = int(target_capacity * scale_factor)
         
-        # Scale the target capacity by the ratio of current size to base size
-        scale_factor = size / self.base_size
-        return int(target_capacity * scale_factor)
+        return target_capacity
     
     def create_network(self, topology: str, size: int, experiment_type: str) -> torch.nn.Module:
         """Create a network with the specified topology and size, respecting the experiment type's budget."""
-        # Get target budget for this configuration
-        target_budget = self.get_budget(experiment_type, topology, size)
+        # Get target capacity
+        target_capacity = self.get_budget(experiment_type, topology, size)
         
-        # Create base network
+        # Create base network to measure initial capacity
         if topology == 'small_world':
-            network = self._create_sample_small_world(size)
+            base_network = self._create_sample_small_world(size)
         elif topology == 'modular':
-            network = self._create_sample_modular(size)
+            base_network = self._create_sample_modular(size)
         elif topology == 'hybrid':
-            network = self._create_sample_hybrid(size)
+            base_network = self._create_sample_hybrid(size)
+        elif topology == 'fully_connected':
+            base_network = self._create_sample_fully_connected(size)
         else:
             raise ValueError(f"Unknown topology: {topology}")
         
         # Count initial parameters
-        initial_params = self._count_parameters(network)
-        print(f"\nCreating {topology} network for {experiment_type}:")
-        print(f"Initial parameters: {initial_params}")
-        print(f"Target budget: {target_budget}")
+        initial_capacity = self._count_parameters(base_network)
         
-        # Adjust parameters to match budget
-        if initial_params > target_budget:
-            network = self._reduce_parameters(network, target_budget)
-        elif initial_params < target_budget:
-            network = self._add_parameters(network, target_budget)
+        # Calculate scaling factor based on topology
+        if topology == 'fully_connected':
+            # For fully connected, parameters grow quadratically with size
+            scale_factor = (target_capacity / initial_capacity) ** 0.5
+        elif topology == 'small_world':
+            # For small world, parameters grow linearly with size
+            scale_factor = target_capacity / initial_capacity
+        elif topology == 'modular':
+            # For modular, parameters grow linearly within modules
+            scale_factor = (target_capacity / initial_capacity) ** 0.5
+        elif topology == 'hybrid':
+            # For hybrid, use a combination of linear and quadratic scaling
+            scale_factor = (target_capacity / initial_capacity) ** 0.75
+        
+        # Scale network size while preserving topology
+        scaled_size = max(1, int(size * scale_factor))
+        
+        # Create network with scaled size
+        if topology == 'small_world':
+            network = self._create_sample_small_world(scaled_size)
+        elif topology == 'modular':
+            network = self._create_sample_modular(scaled_size)
+        elif topology == 'hybrid':
+            network = self._create_sample_hybrid(scaled_size)
+        elif topology == 'fully_connected':
+            network = self._create_sample_fully_connected(scaled_size)
         
         # Verify final parameter count
-        final_params = self._count_parameters(network)
-        print(f"Final parameters: {final_params}")
-        print(f"Budget match: {abs(final_params - target_budget) <= 1}\n")
+        final_capacity = self._count_parameters(network)
+        print(f"\nCreating {topology} network for {experiment_type}:")
+        print(f"Initial size: {size}, Scaled size: {scaled_size}")
+        print(f"Initial capacity: {initial_capacity}")
+        print(f"Target capacity: {target_capacity}")
+        print(f"Final capacity: {final_capacity}")
+        print(f"Capacity match: {abs(final_capacity - target_capacity) <= 1}\n")
         
         return network
     
-    def _reduce_parameters(self, network: torch.nn.Module, target_budget: int) -> torch.nn.Module:
-        """Reduce network parameters to match target budget."""
-        # Get all parameters
-        params = []
-        for param in network.parameters():
-            if param.requires_grad:
-                params.append(param.view(-1))
-        
-        # Concatenate all parameters
-        all_params = torch.cat(params)
-        
-        # Get threshold for top k parameters
-        k = target_budget
-        if k >= len(all_params):
-            return network
-        
-        # Get threshold value
-        threshold = torch.kthvalue(torch.abs(all_params), len(all_params) - k).values
-        
-        # Zero out parameters below threshold
-        for param in network.parameters():
-            if param.requires_grad:
-                mask = torch.abs(param) < threshold
-                param.data[mask] = 0
-        
+    def _create_sample_fully_connected(self, size: int) -> torch.nn.Module:
+        """Create a sample fully connected network."""
+        # Fully connected network has all possible connections
+        network = torch.nn.Sequential(
+            torch.nn.Linear(size, size),  # Input to hidden
+            torch.nn.ReLU(),
+            torch.nn.Linear(size, size)   # Hidden to output
+        )
         return network
     
-    def _add_parameters(self, network: torch.nn.Module, target_budget: int) -> torch.nn.Module:
-        """Add parameters to network to match target budget."""
-        current_params = self._count_parameters(network)
-        params_to_add = target_budget - current_params
-        
-        if params_to_add <= 0:
-            return network
-        
-        # Add random edges
-        for param in network.parameters():
-            if param.requires_grad:
-                # Get number of zero elements
-                zero_mask = param == 0
-                num_zeros = zero_mask.sum().item()
-                
-                if num_zeros > 0:
-                    # Calculate how many edges to add to this parameter
-                    edges_for_param = min(params_to_add, num_zeros)
-                    
-                    # Generate random values
-                    if self.config['parameter_budget']['padding_strategy'] == 'random':
-                        new_values = torch.randn(edges_for_param) * 0.01
-                    else:  # zero
-                        new_values = torch.zeros(edges_for_param)
-                    
-                    # Get random indices of zero elements
-                    zero_indices = torch.nonzero(zero_mask.view(-1))[torch.randperm(num_zeros)[:edges_for_param]]
-                    
-                    # Add new edges
-                    param.view(-1)[zero_indices] = new_values
-                    
-                    params_to_add -= edges_for_param
-                    if params_to_add <= 0:
-                        break
-        
+    def _create_sample_small_world(self, size: int) -> torch.nn.Module:
+        """Create a sample small world network."""
+        # Small world has sparse local connections with some long-range connections
+        k = max(2, size // 10)  # Number of local connections
+        network = torch.nn.Sequential(
+            torch.nn.Linear(size, k),     # Sparse input connections
+            torch.nn.ReLU(),
+            torch.nn.Linear(k, size)      # Sparse output connections
+        )
+        return network
+    
+    def _create_sample_modular(self, size: int) -> torch.nn.Module:
+        """Create a sample modular network."""
+        # Modular network has dense connections within modules
+        num_modules = max(2, size // 20)  # Number of modules
+        module_size = size // num_modules
+        network = torch.nn.Sequential(
+            torch.nn.Linear(size, module_size),  # Input to first module
+            torch.nn.ReLU(),
+            torch.nn.Linear(module_size, size)   # Module to output
+        )
+        return network
+    
+    def _create_sample_hybrid(self, size: int) -> torch.nn.Module:
+        """Create a sample hybrid network."""
+        # Hybrid combines small world and modular characteristics
+        k = max(2, size // 10)  # Number of local connections
+        num_modules = max(2, size // 20)  # Number of modules
+        module_size = size // num_modules
+        network = torch.nn.Sequential(
+            torch.nn.Linear(size, k),           # Sparse input connections
+            torch.nn.ReLU(),
+            torch.nn.Linear(k, module_size),    # Local to module
+            torch.nn.ReLU(),
+            torch.nn.Linear(module_size, size)  # Module to output
+        )
         return network
     
     def get_budget(self, experiment_type: str, topology: str, size: int) -> int:
-        """Get the pre-computed budget for a specific configuration."""
+        """Get the budget for a specific configuration."""
         return self.budgets[experiment_type][topology][size]
     
     def get_budget_stats(self, experiment_type: str, topology: str, size: int) -> Dict[str, Any]:
@@ -195,33 +208,6 @@ class ParameterBudgetCalculator:
             'scaled_capacity': scaled_capacity,
             'budget_usage': scaled_capacity / budget if budget > 0 else float('inf')
         }
-    
-    def _create_sample_small_world(self, size: int) -> torch.nn.Module:
-        """Create a sample small world network."""
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(size, size)
-        )
-        return network
-    
-    def _create_sample_modular(self, size: int) -> torch.nn.Module:
-        """Create a sample modular network."""
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(size, size)
-        )
-        return network
-    
-    def _create_sample_hybrid(self, size: int) -> torch.nn.Module:
-        """Create a sample hybrid network."""
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(size, size)
-        )
-        return network
     
     def _count_parameters(self, network: torch.nn.Module) -> int:
         """Count total number of parameters in the network."""

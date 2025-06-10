@@ -34,45 +34,47 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
         self.layers: List[nx.Graph] = []
         self.inter_layer_connections: Dict[tuple, nx.Graph] = {}
     
-    def _create_layer(self, layer_idx: int) -> nx.Graph:
-        """Create a single layer of the network."""
-        # Create a ring lattice
-        G = nx.Graph()
+    def _create_layer(self, layer_idx: int) -> nx.DiGraph:
+        """Create a single layer of the network as a directed acyclic graph."""
+        G = nx.DiGraph()
         G.add_nodes_from(range(self.size))
         
-        # Add edges to create a ring lattice
+        # Create initial ring lattice structure (directed, acyclic)
         for i in range(self.size):
+            # Only add edges to higher-indexed nodes to maintain acyclicity
             for j in range(1, self.k // 2 + 1):
-                # Add edge to the right
-                G.add_edge(i, (i + j) % self.size)
-                # Add edge to the left
-                G.add_edge(i, (i - j) % self.size)
+                target = (i + j) % self.size
+                if target > i:  # Only add forward edges
+                    G.add_edge(i, target)
         
-        # Rewire edges with probability p
+        # Rewire edges with probability p (maintaining acyclicity)
         for edge in list(G.edges()):
             if self.rng.random() < self.p:
                 # Remove the edge
                 G.remove_edge(*edge)
-                # Add a new random edge
-                new_node = self.rng.randint(0, self.size)
-                while new_node == edge[0] or G.has_edge(edge[0], new_node):
-                    new_node = self.rng.randint(0, self.size)
+                # Add a new random edge (only to higher-indexed nodes)
+                new_node = self.rng.randint(edge[0] + 1, self.size)
+                while G.has_edge(edge[0], new_node):
+                    new_node = self.rng.randint(edge[0] + 1, self.size)
                 G.add_edge(edge[0], new_node)
         
         return G
     
-    def _create_inter_layer_connections(self, layer1: int, layer2: int) -> nx.Graph:
-        """Create connections between two layers."""
-        G = nx.Graph()
-        
-        # Add nodes from both layers
+    def _create_inter_layer_connections(self, layer1: int, layer2: int) -> nx.DiGraph:
+        """Create directed acyclic connections between two layers."""
+        G = nx.DiGraph()
         G.add_nodes_from(range(self.size))
         
-        # Add random inter-layer connections
+        # For inter-layer connections, we can allow more flexibility
+        # since they're between different layers
         for node1 in range(self.size):
             for node2 in range(self.size):
                 if self.rng.random() < self.inter_layer_prob:
-                    G.add_edge(node1, node2)
+                    # In a feedforward network, layer1 nodes should only connect to layer2 nodes
+                    if layer1 < layer2:
+                        G.add_edge(node1, node2)
+                    else:
+                        G.add_edge(node2, node1)
         
         return G
     

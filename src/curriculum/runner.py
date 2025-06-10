@@ -20,6 +20,7 @@ from ..networks.rnn import RecurrentNetwork
 from ..node_selection.strategies import NodeSelector
 from ..tasks.task_definitions import TaskGenerator, TaskEvaluator
 from ..tasks.rl_tasks import RLTaskGenerator, RLTaskEvaluator
+from ..agents.network_agent import NetworkAgent
 
 logger = setup_logger(__name__)
 
@@ -51,12 +52,28 @@ class CurriculumRunner:
     def run_curriculum(self):
         """Run the complete curriculum experiment."""
         print("Executing run_curriculum from:", __file__)
-        print("Curriculum parameters:")
+        print("\nCurriculum parameters:")
         print(f"Task sequence: {self.config['task_sequence']}")
         print(f"Network sizes: {self.config['network_sizes']}")
         print(f"Seeds: {self.config['seeds']}")
         print(f"Number of layers: {self.config['num_layers']}")
         print(f"Network types: {self.config['network_types']}")
+        
+        # Print parameter budget information
+        print("\nParameter budget settings:")
+        print(f"Budget type: {self.config['parameter_budget']['budget_type']}")
+        print(f"Target budget: {self.config['parameter_budget']['target_budget']}")
+        print(f"Normalize by size: {self.config['parameter_budget']['normalize_by_size']}")
+        
+        # Print experiment types and their capacity matching
+        print("\nExperiment types and capacity matching:")
+        for exp_type in self.config['experiment_types']:
+            print(f"\n{exp_type}:")
+            if exp_type == 'same_size':
+                print("  All networks will have the same node size")
+            else:
+                target = '_'.join(exp_type.split('_')[1:])
+                print(f"  All networks will match {target} capacity")
         
         results = []
         
@@ -232,7 +249,7 @@ class CurriculumRunner:
         for task in self.config['task_sequence']:
             # Train on current task
             env, task_config = getattr(self.task_generator, f"generate_{task}_task")()
-            self._train_task(networks, input_nodes, output_nodes,
+            task_metrics = self._train_task(networks, input_nodes, output_nodes,
                            env, task_config, task, size, seed,
                            strategy, topology, network_type)
             
@@ -256,7 +273,8 @@ class CurriculumRunner:
         
         return {
             'performance_history': performance_history,
-            'transfer_metrics': transfer_metrics
+            'transfer_metrics': transfer_metrics,
+            'task_metrics': task_metrics
         }
     
     def _train_task(self, networks, input_nodes, output_nodes,
@@ -272,38 +290,47 @@ class CurriculumRunner:
         for layer_idx, network in enumerate(networks):
             metrics = network.get_network_metrics()
             logger.info(f"Layer {layer_idx} - Training metrics: {metrics}")
+        
+        # Save training metrics under task_metrics
+        task_metrics = {
+            'training_metrics': metrics
+        }
+        return task_metrics
     
     def _evaluate_performance(self, networks, input_nodes, output_nodes,
                             env, task_config, task, size, seed,
                             strategy, topology, network_type):
-        """Evaluate network performance on a specific task."""
-        print(f"Evaluating {task} with {topology} topology")
+        """Evaluate network performance on a specific task using real agent and environment."""
+        from ..tasks.rl_tasks import RLTaskEvaluator
         
-        # Simulate evaluation (replace with actual evaluation)
-        if task == 'cartpole':
+        # If networks is a list, evaluate each network and aggregate results
+        if isinstance(networks, list):
+            results = []
+            for network in networks:
+                # Wrap network in agent
+                agent = NetworkAgent(network, task_config)
+                # Evaluate single network
+                result = RLTaskEvaluator.evaluate_episodes(env, agent, task_config, num_episodes=10)
+                results.append(result)
+            
+            # Aggregate results
+            mean_rewards = [r['mean_reward'] for r in results]
+            std_rewards = [r['std_reward'] for r in results]
+            mean_lengths = [r['mean_length'] for r in results]
+            std_lengths = [r['std_length'] for r in results]
+            solved_rates = [r['solved_rate'] for r in results]
+            
             return {
-                'mean_reward': np.random.uniform(400, 500),
-                'std_reward': np.random.uniform(10, 50),
-                'mean_length': np.random.uniform(400, 500),
-                'std_length': np.random.uniform(10, 50),
-                'solved_rate': np.random.uniform(0.8, 1.0)
+                'mean_reward': np.mean(mean_rewards),
+                'std_reward': np.std(mean_rewards),  # Std of means across networks
+                'mean_length': np.mean(mean_lengths),
+                'std_length': np.std(mean_lengths),
+                'solved_rate': np.mean(solved_rates)
             }
-        elif task == 'mountain_car':
-            return {
-                'mean_reward': np.random.uniform(-150, -100),
-                'std_reward': np.random.uniform(10, 30),
-                'mean_length': np.random.uniform(100, 200),
-                'std_length': np.random.uniform(10, 30),
-                'solved_rate': np.random.uniform(0.6, 0.9)
-            }
-        else:  # acrobot
-            return {
-                'mean_reward': np.random.uniform(-150, -100),
-                'std_reward': np.random.uniform(10, 30),
-                'mean_length': np.random.uniform(100, 200),
-                'std_length': np.random.uniform(10, 30),
-                'solved_rate': np.random.uniform(0.6, 0.9)
-            }
+        else:
+            # Single network case - wrap in agent and evaluate
+            agent = NetworkAgent(networks, task_config)
+            return RLTaskEvaluator.evaluate_episodes(env, agent, task_config, num_episodes=10)
     
     def _calculate_transfer_metrics(self, baseline_performance, performance_history):
         """Calculate transfer learning metrics."""
@@ -478,79 +505,56 @@ class CurriculumRunner:
         # Run curriculum
         for task in self.config['task_sequence']:
             # Generate task
-            task_env = task_generator.generate_task(task)
+            env, task_config = task_generator.generate_task(task)
+            
+            # Set environment for agent
+            agent.model.set_env(env)
             
             # Initialize environment step counter
             env_steps = 0
             env_steps_so_far = 0
             
             # Train agent
-            for episode in range(self.config['episodes_per_task']):
-                # Check if we've reached the maximum environment steps
-                if env_steps_so_far >= self.config['max_env_steps_per_task']:
-                    logger.info(f"Reached maximum environment steps ({self.config['max_env_steps_per_task']}) for task {task}")
-                    break
+            while env_steps_so_far < self.config['max_env_steps_per_task']:
+                # Calculate remaining steps
+                remaining_steps = self.config['max_env_steps_per_task'] - env_steps_so_far
+                steps_to_train = min(remaining_steps, 2048)  # SB3's default n_steps
                 
-                # Get action from agent
-                state = task_env.reset()
-                done = False
-                episode_reward = 0
-                episode_steps = 0
+                # Train for steps_to_train steps
+                agent.model.learn(total_timesteps=steps_to_train)
+                env_steps_so_far += steps_to_train
                 
-                while not done:
-                    action = agent.select_action(state)
-                    next_state, reward, done, _ = task_env.step(action)
-                    agent.update(state, action, reward, next_state, done)
-                    state = next_state
-                    episode_reward += reward
-                    episode_steps += 1
-                    env_steps += 1
-                    env_steps_so_far += 1
+                # Evaluate current performance
+                eval_rewards = []
+                for _ in range(self.config['evaluation_episodes']):
+                    obs = env.reset()
+                    done = False
+                    episode_reward = 0
                     
-                    # Check if we've reached the maximum environment steps
-                    if env_steps_so_far >= self.config['max_env_steps_per_task']:
-                        done = True
+                    while not done:
+                        action, _ = agent.model.predict(obs, deterministic=True)
+                        obs, reward, done, _ = env.step(action)
+                        episode_reward += reward
+                    
+                    eval_rewards.append(episode_reward)
                 
-                # Log metrics
-                self.metrics[exp_key]['episode_rewards'].append(episode_reward)
-                self.metrics[exp_key]['episode_steps'].append(episode_steps)
+                # Log evaluation metrics
+                mean_reward = np.mean(eval_rewards)
+                self.metrics[exp_key]['eval_rewards'].append(mean_reward)
                 self.metrics[exp_key]['env_steps_so_far'].append(env_steps_so_far)
                 
                 # Check if task is learned using task-specific threshold
-                if episode_reward >= self.config['task_memory_thresholds'][task]:
-                    self.metrics[exp_key]['learning_episodes'].append(episode)
+                if mean_reward >= self.config['task_memory_thresholds'][task]:
+                    self.metrics[exp_key]['learning_episodes'].append(env_steps_so_far)
                     # Log physics parameters when task is learned
-                    if hasattr(task_env, 'get_physics_params'):
-                        physics_params = task_env.get_physics_params()
+                    if hasattr(env, 'get_physics_params'):
+                        physics_params = env.get_physics_params()
                         self.metrics[exp_key]['physics_params'].append({
                             'task': task,
-                            'episode': episode,
+                            'steps': env_steps_so_far,
                             'params': physics_params
                         })
                     break
-            
-            # Evaluate agent
-            eval_rewards = []
-            eval_steps = []
-            for _ in range(self.config['evaluation_episodes']):
-                state = task_env.reset()
-                done = False
-                episode_reward = 0
-                episode_steps = 0
-                
-                while not done:
-                    action = agent.select_action(state)
-                    next_state, reward, done, _ = task_env.step(action)
-                    state = next_state
-                    episode_reward += reward
-                    episode_steps += 1
-                
-                eval_rewards.append(episode_reward)
-                eval_steps.append(episode_steps)
-            
-            # Log evaluation metrics
-            self.metrics[exp_key]['eval_rewards'].append(np.mean(eval_rewards))
-            self.metrics[exp_key]['eval_steps'].append(np.mean(eval_steps))
             
             # Get parameter budget stats
             budget_stats = self.parameter_budget.get_budget_stats(

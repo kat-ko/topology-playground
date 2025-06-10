@@ -1,0 +1,906 @@
+[
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 499.18450982789795,
+            "std_reward": 12.744109091509888,
+            "mean_length": 479.63927127989723,
+            "std_length": 19.16097812197617,
+            "solved_rate": 0.8293939718376462
+          },
+          "mountain_car": {
+            "mean_reward": -149.89779576564527,
+            "std_reward": 21.87354191756856,
+            "mean_length": 179.69417647523252,
+            "std_length": 11.558389704850526,
+            "solved_rate": 0.7941379398957018
+          },
+          "acrobot": {
+            "mean_reward": -130.7217360338223,
+            "std_reward": 16.496758567371,
+            "mean_length": 144.3705867703057,
+            "std_length": 10.975303339678998,
+            "solved_rate": 0.890889280030875
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 433.72285795987636,
+            "std_reward": 24.58452147359207,
+            "mean_length": 423.83096382425884,
+            "std_length": 11.06719728812697,
+            "solved_rate": 0.9361377368968744
+          },
+          "mountain_car": {
+            "mean_reward": -106.59689525725267,
+            "std_reward": 17.44134482139833,
+            "mean_length": 192.11785374094495,
+            "std_length": 28.817512581633792,
+            "solved_rate": 0.7665895072642994
+          },
+          "acrobot": {
+            "mean_reward": -138.99417464477304,
+            "std_reward": 22.96287310793813,
+            "mean_length": 184.72337817130563,
+            "std_length": 21.33430465278525,
+            "solved_rate": 0.7978565323588548
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 431.70849315286586,
+            "std_reward": 15.040871264799694,
+            "mean_length": 475.9370753199022,
+            "std_length": 17.77769751830935,
+            "solved_rate": 0.9396372294435988
+          },
+          "mountain_car": {
+            "mean_reward": -127.37804737389787,
+            "std_reward": 13.63087230803766,
+            "mean_length": 148.9488758757123,
+            "std_length": 26.597249986476598,
+            "solved_rate": 0.7908845250927197
+          },
+          "acrobot": {
+            "mean_reward": -137.81073454647495,
+            "std_reward": 20.249717018744697,
+            "mean_length": 169.66147844954514,
+            "std_length": 10.344302818439639,
+            "solved_rate": 0.6487477278861145
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9755590073911518
+        },
+        "forward_transfer": {
+          "mountain_car": 0.7343970210160228,
+          "acrobot": 0.8854849758075594
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 431.70849315286586,
+            "std_reward": 15.040871264799694,
+            "mean_length": 475.9370753199022,
+            "std_length": 17.77769751830935,
+            "solved_rate": 0.9396372294435988
+          },
+          "mountain_car": {
+            "mean_reward": -127.37804737389787,
+            "std_reward": 13.63087230803766,
+            "mean_length": 148.9488758757123,
+            "std_length": 26.597249986476598,
+            "solved_rate": 0.7908845250927197
+          },
+          "acrobot": {
+            "mean_reward": -137.81073454647495,
+            "std_reward": 20.249717018744697,
+            "mean_length": 169.66147844954514,
+            "std_length": 10.344302818439639,
+            "solved_rate": 0.6487477278861145
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 403.0847523753508,
+            "std_reward": 49.708991915020626,
+            "mean_length": 451.92388677353483,
+            "std_length": 13.548034858509164,
+            "solved_rate": 0.9418150724010408
+          },
+          "mountain_car": {
+            "mean_reward": -114.1088077926851,
+            "std_reward": 12.2056402134098,
+            "mean_length": 121.85257197868755,
+            "std_length": 11.62413071710377,
+            "solved_rate": 0.6769571490565814
+          },
+          "acrobot": {
+            "mean_reward": -111.09679756173219,
+            "std_reward": 23.9597948377387,
+            "mean_length": 160.11106736446678,
+            "std_length": 29.269452257549922,
+            "solved_rate": 0.6013199639912501
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 489.9144935385259,
+            "std_reward": 13.659678491244819,
+            "mean_length": 438.72419232623395,
+            "std_length": 40.87719606655947,
+            "solved_rate": 0.8027858106699276
+          },
+          "mountain_car": {
+            "mean_reward": -100.4698345437452,
+            "std_reward": 21.42088733645489,
+            "mean_length": 123.89971509879388,
+            "std_length": 23.2691652359957,
+            "solved_rate": 0.8616134617673435
+          },
+          "acrobot": {
+            "mean_reward": -126.14310138553591,
+            "std_reward": 17.19215417480953,
+            "mean_length": 150.90075745145262,
+            "std_length": 14.979878306787137,
+            "solved_rate": 0.7759924865724686
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 423.8230051907294,
+            "std_reward": 40.97577040802818,
+            "mean_length": 400.794130825811,
+            "std_length": 39.18871832272152,
+            "solved_rate": 0.899900832812463
+          },
+          "mountain_car": {
+            "mean_reward": -125.80804417386473,
+            "std_reward": 20.022857174510087,
+            "mean_length": 164.9402792333604,
+            "std_length": 28.611786921164317,
+            "solved_rate": 0.8186454591320088
+          },
+          "acrobot": {
+            "mean_reward": -116.98241799062606,
+            "std_reward": 24.97748271469036,
+            "mean_length": 156.80977494336247,
+            "std_length": 18.49389440695862,
+            "solved_rate": 0.8127494317279846
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9106236794653982
+        },
+        "forward_transfer": {
+          "mountain_car": 0.8902915805448484,
+          "acrobot": 1.1170649732942226
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 423.8230051907294,
+            "std_reward": 40.97577040802818,
+            "mean_length": 400.794130825811,
+            "std_length": 39.18871832272152,
+            "solved_rate": 0.899900832812463
+          },
+          "mountain_car": {
+            "mean_reward": -125.80804417386473,
+            "std_reward": 20.022857174510087,
+            "mean_length": 164.9402792333604,
+            "std_length": 28.611786921164317,
+            "solved_rate": 0.8186454591320088
+          },
+          "acrobot": {
+            "mean_reward": -116.98241799062606,
+            "std_reward": 24.97748271469036,
+            "mean_length": 156.80977494336247,
+            "std_length": 18.49389440695862,
+            "solved_rate": 0.8127494317279846
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 478.42000276969804,
+            "std_reward": 45.83718191411688,
+            "mean_length": 429.185996774159,
+            "std_length": 32.9474324650504,
+            "solved_rate": 0.9025001272640606
+          },
+          "mountain_car": {
+            "mean_reward": -128.30571456014732,
+            "std_reward": 23.739010438784536,
+            "mean_length": 193.78089261088883,
+            "std_length": 24.78266151198023,
+            "solved_rate": 0.6971759384356424
+          },
+          "acrobot": {
+            "mean_reward": -115.24969179680784,
+            "std_reward": 23.482675635520714,
+            "mean_length": 106.61093277713239,
+            "std_length": 10.152103717355088,
+            "solved_rate": 0.7015038397891511
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 489.96607175423435,
+            "std_reward": 16.118378668658227,
+            "mean_length": 443.7222606721516,
+            "std_length": 44.084369395043645,
+            "solved_rate": 0.8761274880917963
+          },
+          "mountain_car": {
+            "mean_reward": -136.23506865943045,
+            "std_reward": 27.595957048004507,
+            "mean_length": 101.94777863610824,
+            "std_length": 22.418968867522356,
+            "solved_rate": 0.8317088716215205
+          },
+          "acrobot": {
+            "mean_reward": -106.1482454655144,
+            "std_reward": 20.31311867368987,
+            "mean_length": 178.51046317541898,
+            "std_length": 14.077018311669915,
+            "solved_rate": 0.8508567340686519
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 420.9103969165663,
+            "std_reward": 34.47811187831577,
+            "mean_length": 407.79988453211746,
+            "std_length": 19.31798200150982,
+            "solved_rate": 0.9807026733648098
+          },
+          "mountain_car": {
+            "mean_reward": -101.63434664730029,
+            "std_reward": 11.440706359298673,
+            "mean_length": 142.27046702080915,
+            "std_length": 22.402371491244548,
+            "solved_rate": 0.824507043118314
+          },
+          "acrobot": {
+            "mean_reward": -147.6208632260619,
+            "std_reward": 16.66252682198797,
+            "mean_length": 194.56165673059309,
+            "std_length": 23.0362485033566,
+            "solved_rate": 0.7803512902613061
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.8445557333539435
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0755882152137446,
+          "acrobot": 1.3798725552362177
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 420.9103969165663,
+            "std_reward": 34.47811187831577,
+            "mean_length": 407.79988453211746,
+            "std_length": 19.31798200150982,
+            "solved_rate": 0.9807026733648098
+          },
+          "mountain_car": {
+            "mean_reward": -101.63434664730029,
+            "std_reward": 11.440706359298673,
+            "mean_length": 142.27046702080915,
+            "std_length": 22.402371491244548,
+            "solved_rate": 0.824507043118314
+          },
+          "acrobot": {
+            "mean_reward": -147.6208632260619,
+            "std_reward": 16.66252682198797,
+            "mean_length": 194.56165673059309,
+            "std_length": 23.0362485033566,
+            "solved_rate": 0.7803512902613061
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 467.3583455899266,
+            "std_reward": 44.31564350302149,
+            "mean_length": 408.671304527422,
+            "std_length": 35.34970741126537,
+            "solved_rate": 0.9779801990164633
+          },
+          "mountain_car": {
+            "mean_reward": -132.38214908035744,
+            "std_reward": 10.28013643752873,
+            "mean_length": 196.2326566977572,
+            "std_length": 24.125316031679652,
+            "solved_rate": 0.8209893944003136
+          },
+          "acrobot": {
+            "mean_reward": -125.69399838354838,
+            "std_reward": 19.90297789621674,
+            "mean_length": 112.2039330384334,
+            "std_length": 17.31408662287481,
+            "solved_rate": 0.8238578098413832
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 416.8747603336718,
+            "std_reward": 21.58953141496184,
+            "mean_length": 480.99608124268207,
+            "std_length": 49.213994603041,
+            "solved_rate": 0.8483721480370293
+          },
+          "mountain_car": {
+            "mean_reward": -112.373375027209,
+            "std_reward": 24.890628816088622,
+            "mean_length": 174.4185754989559,
+            "std_length": 17.167308473671095,
+            "solved_rate": 0.8954937948217989
+          },
+          "acrobot": {
+            "mean_reward": -101.12029508557923,
+            "std_reward": 16.30250630609146,
+            "mean_length": 175.53649338831153,
+            "std_length": 11.333068819898424,
+            "solved_rate": 0.8853037233402049
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 414.46067064122127,
+            "std_reward": 48.871942521424096,
+            "mean_length": 488.0785184137369,
+            "std_length": 30.11497623238312,
+            "solved_rate": 0.8974213396284353
+          },
+          "mountain_car": {
+            "mean_reward": -128.75599746432505,
+            "std_reward": 21.631347335808808,
+            "mean_length": 157.6193972605668,
+            "std_length": 15.250577420996539,
+            "solved_rate": 0.8290081934356266
+          },
+          "acrobot": {
+            "mean_reward": -123.72135812544275,
+            "std_reward": 26.20353456830701,
+            "mean_length": 142.94178239929298,
+            "std_length": 27.760315577491188,
+            "solved_rate": 0.7148304569989143
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9742046853366366
+        },
+        "forward_transfer": {
+          "mountain_car": 1.028294766175492,
+          "acrobot": 1.2908458694636369
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 414.46067064122127,
+            "std_reward": 48.871942521424096,
+            "mean_length": 488.0785184137369,
+            "std_length": 30.11497623238312,
+            "solved_rate": 0.8974213396284353
+          },
+          "mountain_car": {
+            "mean_reward": -128.75599746432505,
+            "std_reward": 21.631347335808808,
+            "mean_length": 157.6193972605668,
+            "std_length": 15.250577420996539,
+            "solved_rate": 0.8290081934356266
+          },
+          "acrobot": {
+            "mean_reward": -123.72135812544275,
+            "std_reward": 26.20353456830701,
+            "mean_length": 142.94178239929298,
+            "std_length": 27.760315577491188,
+            "solved_rate": 0.7148304569989143
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 415.78306264570625,
+            "std_reward": 33.81193295932122,
+            "mean_length": 413.5592718191061,
+            "std_length": 10.835908164542598,
+            "solved_rate": 0.80343153153903
+          },
+          "mountain_car": {
+            "mean_reward": -120.27668404694609,
+            "std_reward": 20.971338478498875,
+            "mean_length": 156.316203523477,
+            "std_length": 29.9841496925917,
+            "solved_rate": 0.8056963203892785
+          },
+          "acrobot": {
+            "mean_reward": -122.42626040631966,
+            "std_reward": 25.739677611450468,
+            "mean_length": 106.6381542682447,
+            "std_length": 28.806031729292062,
+            "solved_rate": 0.6987811584396483
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 429.6250344925406,
+            "std_reward": 31.13580951996228,
+            "mean_length": 422.1046215263961,
+            "std_length": 20.631005654145163,
+            "solved_rate": 0.823655921352153
+          },
+          "mountain_car": {
+            "mean_reward": -135.54369762357143,
+            "std_reward": 17.291551506689792,
+            "mean_length": 112.19194256539319,
+            "std_length": 22.246299530578675,
+            "solved_rate": 0.8251699702139478
+          },
+          "acrobot": {
+            "mean_reward": -123.42114035600076,
+            "std_reward": 27.953553864036923,
+            "mean_length": 141.27227908204276,
+            "std_length": 14.1886089237032,
+            "solved_rate": 0.8445438899883281
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 494.881714258772,
+            "std_reward": 21.888380188575447,
+            "mean_length": 425.9559341027714,
+            "std_length": 21.920930675751222,
+            "solved_rate": 0.8640827996713718
+          },
+          "mountain_car": {
+            "mean_reward": -135.1882988795726,
+            "std_reward": 27.994336392482456,
+            "mean_length": 177.75730510208885,
+            "std_length": 27.415353904086125,
+            "solved_rate": 0.6994838751593808
+          },
+          "acrobot": {
+            "mean_reward": -147.42551602913736,
+            "std_reward": 15.6658106658128,
+            "mean_length": 185.95460518996617,
+            "std_length": 13.145247079644967,
+            "solved_rate": 0.7788507810142691
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 1.2170635492812398
+        },
+        "forward_transfer": {
+          "mountain_car": 1.1889409444294994,
+          "acrobot": 0.8311887640763154
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 494.881714258772,
+            "std_reward": 21.888380188575447,
+            "mean_length": 425.9559341027714,
+            "std_length": 21.920930675751222,
+            "solved_rate": 0.8640827996713718
+          },
+          "mountain_car": {
+            "mean_reward": -135.1882988795726,
+            "std_reward": 27.994336392482456,
+            "mean_length": 177.75730510208885,
+            "std_length": 27.415353904086125,
+            "solved_rate": 0.6994838751593808
+          },
+          "acrobot": {
+            "mean_reward": -147.42551602913736,
+            "std_reward": 15.6658106658128,
+            "mean_length": 185.95460518996617,
+            "std_length": 13.145247079644967,
+            "solved_rate": 0.7788507810142691
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 486.45635414382434,
+            "std_reward": 28.88380683364066,
+            "mean_length": 474.9479550912537,
+            "std_length": 45.99773841107351,
+            "solved_rate": 0.8990486348409688
+          },
+          "mountain_car": {
+            "mean_reward": -102.06772345512226,
+            "std_reward": 12.386538144093764,
+            "mean_length": 163.15514452720328,
+            "std_length": 27.63825659545002,
+            "solved_rate": 0.896662556156705
+          },
+          "acrobot": {
+            "mean_reward": -135.94677496559228,
+            "std_reward": 16.606898955330877,
+            "mean_length": 196.81104861339503,
+            "std_length": 15.472333139086626,
+            "solved_rate": 0.7723680207683449
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 430.4907032210244,
+            "std_reward": 48.030119706924886,
+            "mean_length": 446.450593183135,
+            "std_length": 40.662897900923625,
+            "solved_rate": 0.9143052757532961
+          },
+          "mountain_car": {
+            "mean_reward": -132.03607263951358,
+            "std_reward": 12.645794508959433,
+            "mean_length": 198.56512789822887,
+            "std_length": 11.308314315310264,
+            "solved_rate": 0.8358160887699753
+          },
+          "acrobot": {
+            "mean_reward": -130.96593644391567,
+            "std_reward": 27.280845683182346,
+            "mean_length": 196.22907269895768,
+            "std_length": 11.06229216422733,
+            "solved_rate": 0.8501655818024929
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 450.1456447374717,
+            "std_reward": 11.775776688714199,
+            "mean_length": 462.2307955449448,
+            "std_length": 32.45923232777723,
+            "solved_rate": 0.9005391753869249
+          },
+          "mountain_car": {
+            "mean_reward": -116.8638036355145,
+            "std_reward": 11.399506595571669,
+            "mean_length": 190.77463372447443,
+            "std_length": 18.236329199506983,
+            "solved_rate": 0.6073408772038813
+          },
+          "acrobot": {
+            "mean_reward": -122.56108779846953,
+            "std_reward": 12.700790169768307,
+            "mean_length": 195.972909813415,
+            "std_length": 11.929362729544572,
+            "solved_rate": 0.8843669397318533
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9771162511728564
+        },
+        "forward_transfer": {
+          "mountain_car": 1.3637753257044103,
+          "acrobot": 0.924780617508844
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 450.1456447374717,
+            "std_reward": 11.775776688714199,
+            "mean_length": 462.2307955449448,
+            "std_length": 32.45923232777723,
+            "solved_rate": 0.9005391753869249
+          },
+          "mountain_car": {
+            "mean_reward": -116.8638036355145,
+            "std_reward": 11.399506595571669,
+            "mean_length": 190.77463372447443,
+            "std_length": 18.236329199506983,
+            "solved_rate": 0.6073408772038813
+          },
+          "acrobot": {
+            "mean_reward": -122.56108779846953,
+            "std_reward": 12.700790169768307,
+            "mean_length": 195.972909813415,
+            "std_length": 11.929362729544572,
+            "solved_rate": 0.8843669397318533
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 480.07904834810984,
+            "std_reward": 38.54350724518441,
+            "mean_length": 432.572643555864,
+            "std_length": 34.239154268136986,
+            "solved_rate": 0.8444527138697093
+          },
+          "mountain_car": {
+            "mean_reward": -143.1818127917166,
+            "std_reward": 26.15170189858236,
+            "mean_length": 111.28397703430747,
+            "std_length": 27.346167134043334,
+            "solved_rate": 0.7712274208921479
+          },
+          "acrobot": {
+            "mean_reward": -134.54690600263288,
+            "std_reward": 21.264658475270355,
+            "mean_length": 152.7832806012933,
+            "std_length": 12.826636156927844,
+            "solved_rate": 0.6777596513607353
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 408.40599340009544,
+            "std_reward": 17.476606909618386,
+            "mean_length": 493.49393449380784,
+            "std_length": 45.37555573156814,
+            "solved_rate": 0.8763758492287665
+          },
+          "mountain_car": {
+            "mean_reward": -149.28370798496107,
+            "std_reward": 22.526143976087717,
+            "mean_length": 123.06184411858979,
+            "std_length": 13.181234162171984,
+            "solved_rate": 0.6649912083645104
+          },
+          "acrobot": {
+            "mean_reward": -120.40805977346999,
+            "std_reward": 27.32746808617556,
+            "mean_length": 167.43357650220955,
+            "std_length": 12.243374259642597,
+            "solved_rate": 0.8231618139559528
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 444.1272460993593,
+            "std_reward": 47.14901142956315,
+            "mean_length": 447.8886602474214,
+            "std_length": 25.37990527305567,
+            "solved_rate": 0.9917340246347265
+          },
+          "mountain_car": {
+            "mean_reward": -140.72611910543057,
+            "std_reward": 18.28763912510626,
+            "mean_length": 169.23192990915493,
+            "std_length": 13.705662645400016,
+            "solved_rate": 0.8256472785036635
+          },
+          "acrobot": {
+            "mean_reward": -108.2998014869869,
+            "std_reward": 18.933232820165873,
+            "mean_length": 109.17648828567282,
+            "std_length": 29.916913581469096,
+            "solved_rate": 0.681721875889721
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9237190126033389
+        },
+        "forward_transfer": {
+          "mountain_car": 0.710428380335847,
+          "acrobot": 1.045871995672847
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 444.1272460993593,
+            "std_reward": 47.14901142956315,
+            "mean_length": 447.8886602474214,
+            "std_length": 25.37990527305567,
+            "solved_rate": 0.9917340246347265
+          },
+          "mountain_car": {
+            "mean_reward": -140.72611910543057,
+            "std_reward": 18.28763912510626,
+            "mean_length": 169.23192990915493,
+            "std_length": 13.705662645400016,
+            "solved_rate": 0.8256472785036635
+          },
+          "acrobot": {
+            "mean_reward": -108.2998014869869,
+            "std_reward": 18.933232820165873,
+            "mean_length": 109.17648828567282,
+            "std_length": 29.916913581469096,
+            "solved_rate": 0.681721875889721
+          }
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 431.8259911463767,
+            "std_reward": 44.33405086967182,
+            "mean_length": 448.8889764074242,
+            "std_length": 32.041076500068186,
+            "solved_rate": 0.8598533284775615
+          },
+          "mountain_car": {
+            "mean_reward": -125.32268564649948,
+            "std_reward": 21.39448212461964,
+            "mean_length": 115.17920302274379,
+            "std_length": 13.134425030546012,
+            "solved_rate": 0.8656580850271895
+          },
+          "acrobot": {
+            "mean_reward": -110.79563887163783,
+            "std_reward": 12.162147418482048,
+            "mean_length": 187.0395587981665,
+            "std_length": 26.041900226920983,
+            "solved_rate": 0.852899910843966
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 428.1994336758,
+            "std_reward": 19.223859851515442,
+            "mean_length": 448.894753530662,
+            "std_length": 10.101055794954172,
+            "solved_rate": 0.8498139721089507
+          },
+          "mountain_car": {
+            "mean_reward": -145.33867764893373,
+            "std_reward": 14.848676431293534,
+            "mean_length": 116.63005365652856,
+            "std_length": 23.611531637813172,
+            "solved_rate": 0.8288828066966609
+          },
+          "acrobot": {
+            "mean_reward": -140.78701456776102,
+            "std_reward": 26.98091662867902,
+            "mean_length": 185.2758585161132,
+            "std_length": 14.611316649961664,
+            "solved_rate": 0.8949189251434373
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 471.53097298221815,
+            "std_reward": 24.14359304805385,
+            "mean_length": 414.4413464334899,
+            "std_length": 27.29164370800084,
+            "solved_rate": 0.9216148233908124
+          },
+          "mountain_car": {
+            "mean_reward": -106.03034424339596,
+            "std_reward": 14.265822647484963,
+            "mean_length": 135.04127587243693,
+            "std_length": 20.38224759996844,
+            "solved_rate": 0.854959798021174
+          },
+          "acrobot": {
+            "mean_reward": -148.40054025813336,
+            "std_reward": 16.38448106639487,
+            "mean_length": 123.91171035507018,
+            "std_length": 13.763332589208336,
+            "solved_rate": 0.6319637572882941
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9560095583391727
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0496595787222638,
+          "acrobot": 0.86675252412377
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 471.53097298221815,
+            "std_reward": 24.14359304805385,
+            "mean_length": 414.4413464334899,
+            "std_length": 27.29164370800084,
+            "solved_rate": 0.9216148233908124
+          },
+          "mountain_car": {
+            "mean_reward": -106.03034424339596,
+            "std_reward": 14.265822647484963,
+            "mean_length": 135.04127587243693,
+            "std_length": 20.38224759996844,
+            "solved_rate": 0.854959798021174
+          },
+          "acrobot": {
+            "mean_reward": -148.40054025813336,
+            "std_reward": 16.38448106639487,
+            "mean_length": 123.91171035507018,
+            "std_length": 13.763332589208336,
+            "solved_rate": 0.6319637572882941
+          }
+        }
+      }
+    }
+  }
+]

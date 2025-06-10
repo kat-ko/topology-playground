@@ -22,7 +22,7 @@ class RLTaskGenerator:
         self.task_configs = {
             'cartpole': RLTaskConfig(
                 env_name='CartPole-v1',
-                max_episode_steps=500,
+                max_episode_steps=200,
                 reward_threshold=475.0,
                 state_dim=4,
                 action_dim=2,
@@ -38,7 +38,7 @@ class RLTaskGenerator:
             ),
             'acrobot': RLTaskConfig(
                 env_name='Acrobot-v1',
-                max_episode_steps=500,
+                max_episode_steps=200,
                 reward_threshold=-100.0,
                 state_dim=6,
                 action_dim=3,
@@ -107,4 +107,40 @@ class RLTaskEvaluator:
             'mean_length': np.mean(episode_lengths),
             'std_length': np.std(episode_lengths),
             'solved_rate': solved_count / num_episodes
-        } 
+        }
+
+def get_task_config(task_name: str) -> Dict[str, Any]:
+    """Get configuration for a specific task."""
+    configs = {
+        'cartpole': {
+            'env_name': 'CartPole-v1',
+            'action_space_type': 'discrete',
+            'state_dim': 6,  # Max dimension
+            'action_dim': 3,  # Max dimension
+            'actual_state_dim': 4,  # CartPole actual dimension
+            'actual_action_dim': 2,  # CartPole actual dimension
+            'max_steps': 500,
+            'reward_threshold': 475
+        },
+        'mountain_car': {
+            'env_name': 'MountainCar-v0',
+            'action_space_type': 'discrete',
+            'state_dim': 6,  # Max dimension
+            'action_dim': 3,  # Max dimension
+            'actual_state_dim': 2,  # MountainCar actual dimension
+            'actual_action_dim': 3,  # MountainCar actual dimension
+            'max_steps': 200,
+            'reward_threshold': -110
+        },
+        'acrobot': {
+            'env_name': 'Acrobot-v1',
+            'action_space_type': 'discrete',
+            'state_dim': 6,  # Max dimension
+            'action_dim': 3,  # Max dimension
+            'actual_state_dim': 6,  # Acrobot actual dimension
+            'actual_action_dim': 3,  # Acrobot actual dimension
+            'max_steps': 500,
+            'reward_threshold': -100
+        }
+    }
+    return configs.get(task_name, {}) 

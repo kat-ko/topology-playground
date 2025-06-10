@@ -43,8 +43,8 @@ class HybridTopology(BaseTopology, BasePlugin):
         self.module_assignments = self._assign_modules()
         
         # Store layer graphs and inter-layer connections
-        self.layers: List[nx.Graph] = []
-        self.inter_layer_connections: Dict[tuple, nx.Graph] = {}
+        self.layers: List[nx.DiGraph] = []
+        self.inter_layer_connections: Dict[tuple, nx.DiGraph] = {}
     
     def _assign_modules(self) -> Dict[int, int]:
         """Assign nodes to modules."""
@@ -61,75 +61,82 @@ class HybridTopology(BaseTopology, BasePlugin):
         
         return assignments
     
-    def _create_module_graph(self, module_nodes: List[int]) -> nx.Graph:
+    def _create_module_graph(self, module_nodes: List[int]) -> nx.DiGraph:
         """Create a small-world graph for a single module."""
-        # Create a ring lattice
-        G = nx.Graph()
+        G = nx.DiGraph()
         G.add_nodes_from(module_nodes)
         
-        # Add edges to create a ring lattice
+        # Sort nodes to ensure acyclicity
+        module_nodes.sort()
+        
+        # Add edges to create a ring lattice (directed, acyclic)
         for i in range(len(module_nodes)):
             for j in range(1, self.k // 2 + 1):
-                # Add edge to the right
-                G.add_edge(module_nodes[i], module_nodes[(i + j) % len(module_nodes)])
-                # Add edge to the left
-                G.add_edge(module_nodes[i], module_nodes[(i - j) % len(module_nodes)])
+                target_idx = (i + j) % len(module_nodes)
+                if target_idx > i:  # Only add forward edges
+                    G.add_edge(module_nodes[i], module_nodes[target_idx])
         
-        # Rewire edges with probability p
+        # Rewire edges with probability p (maintaining acyclicity)
         for edge in list(G.edges()):
             if self.rng.random() < self.p:
                 # Remove the edge
                 G.remove_edge(*edge)
-                # Add a new random edge within the module
-                new_node = self.rng.choice(module_nodes)
-                while new_node == edge[0] or G.has_edge(edge[0], new_node):
-                    new_node = self.rng.choice(module_nodes)
+                # Add a new random edge (only to higher-indexed nodes)
+                new_node = self.rng.choice([n for n in module_nodes if n > edge[0]])
+                while G.has_edge(edge[0], new_node):
+                    new_node = self.rng.choice([n for n in module_nodes if n > edge[0]])
                 G.add_edge(edge[0], new_node)
         
         return G
     
-    def _create_layer(self, layer_idx: int) -> nx.Graph:
-        """Create a single layer of the network."""
-        # Create the base graph
-        G = nx.Graph()
+    def _create_layer(self, layer_idx: int) -> nx.DiGraph:
+        """Create a single layer of the network as a directed acyclic graph."""
+        G = nx.DiGraph()
         G.add_nodes_from(range(self.size))
         
-        # Create small-world graphs for each module
+        # Create small-world graphs for each module (directed, acyclic)
         for module in range(self.num_modules):
             module_nodes = [node for node, mod in self.module_assignments.items() if mod == module]
             module_graph = self._create_module_graph(module_nodes)
             G.add_edges_from(module_graph.edges())
         
-        # Add inter-module connections
+        # Add inter-module connections (directed, acyclic)
         for module1 in range(self.num_modules):
-            for module2 in range(module1 + 1, self.num_modules):
-                module1_nodes = [node for node, mod in self.module_assignments.items() if mod == module1]
-                module2_nodes = [node for node, mod in self.module_assignments.items() if mod == module2]
-                
-                # Add random edges between modules
-                for node1 in module1_nodes:
-                    for node2 in module2_nodes:
-                        if self.rng.random() < self.inter_module_prob:
-                            G.add_edge(node1, node2)
+            for module2 in range(self.num_modules):
+                if module1 != module2:
+                    module1_nodes = [node for node, mod in self.module_assignments.items() if mod == module1]
+                    module2_nodes = [node for node, mod in self.module_assignments.items() if mod == module2]
+                    # Sort nodes to ensure acyclicity
+                    module1_nodes.sort()
+                    module2_nodes.sort()
+                    for node1 in module1_nodes:
+                        for node2 in module2_nodes:
+                            if node1 < node2 and self.rng.random() < self.inter_module_prob:
+                                G.add_edge(node1, node2)
         
         return G
     
-    def _create_inter_layer_connections(self, layer1: int, layer2: int) -> nx.Graph:
-        """Create connections between two layers."""
-        G = nx.Graph()
-        
-        # Add nodes from both layers
+    def _create_inter_layer_connections(self, layer1: int, layer2: int) -> nx.DiGraph:
+        """Create directed acyclic connections between two layers."""
+        G = nx.DiGraph()
         G.add_nodes_from(range(self.size))
         
-        # Add random inter-layer connections
-        for node1 in range(self.size):
+        # For inter-layer connections in a feedforward network,
+        # layer1 nodes should only connect to layer2 nodes
+        if layer1 < layer2:
+            for node1 in range(self.size):
+                for node2 in range(self.size):
+                    if self.rng.random() < self.inter_layer_prob:
+                        G.add_edge(node1, node2)
+        else:
             for node2 in range(self.size):
-                if self.rng.random() < self.inter_layer_prob:
-                    G.add_edge(node1, node2)
+                for node1 in range(self.size):
+                    if self.rng.random() < self.inter_layer_prob:
+                        G.add_edge(node2, node1)
         
         return G
     
-    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
+    def generate(self, num_layers: int = 1) -> Union[nx.DiGraph, List[nx.DiGraph]]:
         """Generate the hybrid network topology."""
         self.num_layers = num_layers
         self.layers = []
@@ -166,7 +173,7 @@ class HybridTopology(BaseTopology, BasePlugin):
         """Get the module assignments for each node."""
         return self.module_assignments
     
-    def get_layer_connections(self, layer1: int, layer2: int) -> Optional[nx.Graph]:
+    def get_layer_connections(self, layer1: int, layer2: int) -> Optional[nx.DiGraph]:
         """Get the inter-layer connections between two layers."""
         if layer1 > layer2:
             layer1, layer2 = layer2, layer1

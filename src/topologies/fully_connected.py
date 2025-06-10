@@ -44,19 +44,19 @@ class FullyConnectedTopology:
         else:
             return [self._generate_single_layer() for _ in range(num_layers)]
     
-    def _generate_single_layer(self) -> nx.Graph:
+    def _generate_single_layer(self) -> nx.DiGraph:
         """Generate a single fully connected layer."""
-        # Create empty graph
-        G = nx.Graph()
+        # Create empty directed graph
+        G = nx.DiGraph()
         
         # Add nodes
         G.add_nodes_from(range(self.size))
         
-        # Add edges (fully connected)
+        # Add edges (fully connected, directed, acyclic)
         for i in range(self.size):
-            for j in range(i + 1, self.size):
+            for j in range(i + 1, self.size):  # Only connect to higher indices
                 if self.rng.random() < self.intra_layer_prob:
-                    G.add_edge(i, j)
+                    G.add_edge(i, j)  # Forward edge only
         
         return G
     
