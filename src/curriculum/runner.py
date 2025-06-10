@@ -77,162 +77,168 @@ class CurriculumRunner:
         
         results = []
         
-        for size in tqdm(self.config['network_sizes'], desc="Network sizes"):
-            for seed in tqdm(self.config['seeds'], desc="Seeds", leave=False):
-                for num_layers in tqdm(self.config['num_layers'], desc="Number of layers", leave=False):
-                    for network_type in tqdm(self.config['network_types'], desc="Network types", leave=False):
-                        # Generate networks
-                        small_world = SmallWorldTopology(
-                            size=size,
-                            k=self.config['small_world_params']['k'],
-                            p=self.config['small_world_params']['p'],
-                            num_layers=num_layers,
-                            inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
-                            seed=seed
-                        )
-                        
-                        modular = ModularTopology(
-                            size=size,
-                            num_modules=self.config['modular_params']['num_modules'],
-                            inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                            intra_module_prob=self.config['modular_params']['intra_module_prob'],
-                            num_layers=num_layers,
-                            inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
-                            seed=seed
-                        )
-                        
-                        hybrid = HybridTopology(
-                            size=size,
-                            num_modules=self.config['modular_params']['num_modules'],
-                            k=self.config['small_world_params']['k'],
-                            p=self.config['small_world_params']['p'],
-                            inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                            num_layers=num_layers,
-                            inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
-                            seed=seed
-                        )
-                        
-                        fully_connected = FullyConnectedTopology(
-                            size=size,
-                            num_layers=num_layers,
-                            inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
-                            intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
-                            seed=seed
-                        )
-                        
-                        # Generate networks
-                        sw_graphs = small_world.generate(num_layers)
-                        mod_graphs = modular.generate(num_layers)
-                        hybrid_graphs = hybrid.generate(num_layers)
-                        fc_graphs = fully_connected.generate(num_layers)
-                        
-                        # Convert to list if single graph
-                        if num_layers == 1:
-                            sw_graphs = [sw_graphs]
-                            mod_graphs = [mod_graphs]
-                            hybrid_graphs = [hybrid_graphs]
-                            fc_graphs = [fc_graphs]
-                        
-                        # Select input/output nodes for each layer
-                        for strategy in tqdm(self.config['node_selection_strategies'], desc="Strategies", leave=False):
-                            sw_input_nodes = []
-                            sw_output_nodes = []
-                            mod_input_nodes = []
-                            mod_output_nodes = []
-                            hybrid_input_nodes = []
-                            hybrid_output_nodes = []
-                            fc_input_nodes = []
-                            fc_output_nodes = []
+        for experiment_type in self.config['experiment_types']:
+            print(f"\nRunning experiment type: {experiment_type}")
+            
+            for size in tqdm(self.config['network_sizes'], desc="Network sizes"):
+                for seed in tqdm(self.config['seeds'], desc="Seeds", leave=False):
+                    for num_layers in tqdm(self.config['num_layers'], desc="Number of layers", leave=False):
+                        for network_type in tqdm(self.config['network_types'], desc="Network types", leave=False):
+                            # Generate networks
+                            small_world = SmallWorldTopology(
+                                size=size,
+                                k=self.config['small_world_params']['k'],
+                                p=self.config['small_world_params']['p'],
+                                num_layers=num_layers,
+                                inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
+                                seed=seed
+                            )
                             
-                            # Select nodes for each layer
-                            for layer_idx in range(num_layers):
-                                sw_input, sw_output = self._select_nodes(
-                                    sw_graphs[layer_idx], strategy, size, seed
-                                )
-                                mod_input, mod_output = self._select_nodes(
-                                    mod_graphs[layer_idx], strategy, size, seed
-                                )
-                                hybrid_input, hybrid_output = self._select_nodes(
-                                    hybrid_graphs[layer_idx], strategy, size, seed
-                                )
-                                fc_input, fc_output = self._select_nodes(
-                                    fc_graphs[layer_idx], strategy, size, seed
-                                )
-                                
-                                sw_input_nodes.append(sw_input)
-                                sw_output_nodes.append(sw_output)
-                                mod_input_nodes.append(mod_input)
-                                mod_output_nodes.append(mod_output)
-                                hybrid_input_nodes.append(hybrid_input)
-                                hybrid_output_nodes.append(hybrid_output)
-                                fc_input_nodes.append(fc_input)
-                                fc_output_nodes.append(fc_output)
+                            modular = ModularTopology(
+                                size=size,
+                                num_modules=self.config['modular_params']['num_modules'],
+                                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                                intra_module_prob=self.config['modular_params']['intra_module_prob'],
+                                num_layers=num_layers,
+                                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                                seed=seed
+                            )
                             
-                            # Create networks
-                            sw_networks = []
-                            mod_networks = []
-                            hybrid_networks = []
-                            fc_networks = []
+                            hybrid = HybridTopology(
+                                size=size,
+                                num_modules=self.config['modular_params']['num_modules'],
+                                k=self.config['small_world_params']['k'],
+                                p=self.config['small_world_params']['p'],
+                                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                                num_layers=num_layers,
+                                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                                seed=seed
+                            )
                             
-                            for layer_idx in range(num_layers):
-                                # Create network instances
-                                network_class = self.network_types[network_type]
-                                network_params = self.config['network_params'][network_type]
-                                
-                                sw_networks.append(network_class(
-                                    sw_graphs[layer_idx],
-                                    sw_input_nodes[layer_idx],
-                                    sw_output_nodes[layer_idx],
-                                    network_params
-                                ))
-                                
-                                mod_networks.append(network_class(
-                                    mod_graphs[layer_idx],
-                                    mod_input_nodes[layer_idx],
-                                    mod_output_nodes[layer_idx],
-                                    network_params
-                                ))
-                                
-                                hybrid_networks.append(network_class(
-                                    hybrid_graphs[layer_idx],
-                                    hybrid_input_nodes[layer_idx],
-                                    hybrid_output_nodes[layer_idx],
-                                    network_params
-                                ))
-                                
-                                fc_networks.append(network_class(
-                                    fc_graphs[layer_idx],
-                                    fc_input_nodes[layer_idx],
-                                    fc_output_nodes[layer_idx],
-                                    network_params
-                                ))
+                            fully_connected = FullyConnectedTopology(
+                                size=size,
+                                num_layers=num_layers,
+                                inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
+                                intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
+                                seed=seed
+                            )
                             
-                            # Run curriculum for each topology
-                            for topology, networks, input_nodes, output_nodes in [
-                                ('small_world', sw_networks, sw_input_nodes, sw_output_nodes),
-                                ('modular', mod_networks, mod_input_nodes, mod_output_nodes),
-                                ('hybrid', hybrid_networks, hybrid_input_nodes, hybrid_output_nodes),
-                                ('fully_connected', fc_networks, fc_input_nodes, fc_output_nodes)
-                            ]:
-                                curriculum_results = self._run_task_sequence(
-                                    networks, input_nodes, output_nodes,
-                                    size, seed, strategy, topology, network_type
+                            # Generate networks
+                            sw_graphs = small_world.generate(num_layers)
+                            mod_graphs = modular.generate(num_layers)
+                            hybrid_graphs = hybrid.generate(num_layers)
+                            fc_graphs = fully_connected.generate(num_layers)
+                            
+                            # Convert to list if single graph
+                            if num_layers == 1:
+                                sw_graphs = [sw_graphs]
+                                mod_graphs = [mod_graphs]
+                                hybrid_graphs = [hybrid_graphs]
+                                fc_graphs = [fc_graphs]
+                            
+                            # Select input/output nodes for each layer
+                            for strategy in tqdm(self.config['node_selection_strategies'], desc="Strategies", leave=False):
+                                sw_input_nodes = []
+                                sw_output_nodes = []
+                                mod_input_nodes = []
+                                mod_output_nodes = []
+                                hybrid_input_nodes = []
+                                hybrid_output_nodes = []
+                                fc_input_nodes = []
+                                fc_output_nodes = []
+                                
+                                # Select nodes for each layer
+                                for layer_idx in range(num_layers):
+                                    sw_input, sw_output = self._select_nodes(
+                                        sw_graphs[layer_idx], strategy, size, seed
+                                    )
+                                    mod_input, mod_output = self._select_nodes(
+                                        mod_graphs[layer_idx], strategy, size, seed
+                                    )
+                                    hybrid_input, hybrid_output = self._select_nodes(
+                                        hybrid_graphs[layer_idx], strategy, size, seed
+                                    )
+                                    fc_input, fc_output = self._select_nodes(
+                                        fc_graphs[layer_idx], strategy, size, seed
+                                    )
+                                    
+                                    sw_input_nodes.append(sw_input)
+                                    sw_output_nodes.append(sw_output)
+                                    mod_input_nodes.append(mod_input)
+                                    mod_output_nodes.append(mod_output)
+                                    hybrid_input_nodes.append(hybrid_input)
+                                    hybrid_output_nodes.append(hybrid_output)
+                                    fc_input_nodes.append(fc_input)
+                                    fc_output_nodes.append(fc_output)
+                                
+                                # Create networks
+                                sw_networks = []
+                                mod_networks = []
+                                hybrid_networks = []
+                                fc_networks = []
+                                
+                                for layer_idx in range(num_layers):
+                                    # Create network instances
+                                    network_class = self.network_types[network_type]
+                                    network_params = self.config['network_params'][network_type]
+                                    
+                                    sw_networks.append(network_class(
+                                        sw_graphs[layer_idx],
+                                        sw_input_nodes[layer_idx],
+                                        sw_output_nodes[layer_idx],
+                                        network_params
+                                    ))
+                                    
+                                    mod_networks.append(network_class(
+                                        mod_graphs[layer_idx],
+                                        mod_input_nodes[layer_idx],
+                                        mod_output_nodes[layer_idx],
+                                        network_params
+                                    ))
+                                    
+                                    hybrid_networks.append(network_class(
+                                        hybrid_graphs[layer_idx],
+                                        hybrid_input_nodes[layer_idx],
+                                        hybrid_output_nodes[layer_idx],
+                                        network_params
+                                    ))
+                                    
+                                    fc_networks.append(network_class(
+                                        fc_graphs[layer_idx],
+                                        fc_input_nodes[layer_idx],
+                                        fc_output_nodes[layer_idx],
+                                        network_params
+                                    ))
+                                
+                                # Run task sequence
+                                task_results = self._run_task_sequence(
+                                    sw_networks, sw_input_nodes, sw_output_nodes,
+                                    size, seed, strategy, 'small_world', network_type, num_layers
                                 )
-                                results.append({
-                                    'network_size': size,
-                                    'seed': seed,
-                                    'num_layers': num_layers,
-                                    'network_type': network_type,
-                                    'strategy': strategy,
-                                    'topology': topology,
-                                    'curriculum_results': curriculum_results
-                                })
+                                results.append(task_results)
+                                
+                                task_results = self._run_task_sequence(
+                                    mod_networks, mod_input_nodes, mod_output_nodes,
+                                    size, seed, strategy, 'modular', network_type, num_layers
+                                )
+                                results.append(task_results)
+                                
+                                task_results = self._run_task_sequence(
+                                    hybrid_networks, hybrid_input_nodes, hybrid_output_nodes,
+                                    size, seed, strategy, 'hybrid', network_type, num_layers
+                                )
+                                results.append(task_results)
+                                
+                                task_results = self._run_task_sequence(
+                                    fc_networks, fc_input_nodes, fc_output_nodes,
+                                    size, seed, strategy, 'fully_connected', network_type, num_layers
+                                )
+                                results.append(task_results)
         
-        # Save results
         self._save_results(results)
     
     def _run_task_sequence(self, networks, input_nodes, output_nodes,
-                          size, seed, strategy, topology, network_type):
+                          size, seed, strategy, topology, network_type, num_layers):
         """Run the sequence of tasks."""
         performance_history = {}
         baseline_performance = {}
@@ -272,9 +278,17 @@ class CurriculumRunner:
         )
         
         return {
-            'performance_history': performance_history,
-            'transfer_metrics': transfer_metrics,
-            'task_metrics': task_metrics
+            'network_size': size,
+            'seed': seed,
+            'num_layers': num_layers,
+            'network_type': network_type,
+            'strategy': strategy,
+            'topology': topology,
+            'curriculum_results': {
+                'performance_history': performance_history,
+                'transfer_metrics': transfer_metrics,
+                'task_metrics': task_metrics
+            }
         }
     
     def _train_task(self, networks, input_nodes, output_nodes,

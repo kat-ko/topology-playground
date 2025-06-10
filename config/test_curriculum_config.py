@@ -16,7 +16,7 @@ class TestCurriculumConfig(CurriculumConfig):
     num_layers: List[int] = field(default_factory=lambda: [1])
     
     # Test with one network type
-    network_types: List[str] = field(default_factory=lambda: ['ffn', 'rnn'])
+    network_types: List[str] = field(default_factory=lambda: ['rnn', 'ffn'])
     
     # Include all tasks for curriculum testing
     task_sequence: List[str] = field(default_factory=lambda: [
@@ -35,8 +35,8 @@ class TestCurriculumConfig(CurriculumConfig):
     
     # Reduced experiment types
     experiment_types: List[str] = field(default_factory=lambda: [
+        'match_fully_connected',  # Test both basic and capacity matching
         'same_size',
-        'match_fully_connected'  # Test both basic and capacity matching
     ])
     
     # Include transfer learning tasks for testing
