@@ -60,7 +60,7 @@ class NetworkAgent:
         masked_outputs = masked_outputs + 1e-10
         
         # Normalize probabilities
-        action_probs = masked_outputs / np.sum(masked_outputs)
+        action_probs = np.exp(masked_outputs) / np.sum(np.exp(masked_outputs))
         
         # Sample action
         action = np.random.choice(self.action_dim, p=action_probs)

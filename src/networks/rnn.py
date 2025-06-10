@@ -59,7 +59,7 @@ class RecurrentNetwork(BaseNetwork):
                     # Get active neighbors
                     active_neighbors = [
                         neighbor for neighbor in self.topology.neighbors(node)
-                        if activations[neighbor] != 0 or np.any(hidden_states[neighbor] != 0)
+                        if (np.any(activations[neighbor] != 0) if isinstance(activations[neighbor], np.ndarray) else activations[neighbor] != 0) or np.any(hidden_states[neighbor] != 0)
                     ]
                     
                     # Update active edges
@@ -94,10 +94,10 @@ class RecurrentNetwork(BaseNetwork):
                     )
                     
                     # Update activation
-                    activations[node] = np.tanh(weighted_sum)
+                    activations[node] = float(np.tanh(weighted_sum).sum())
         
         # Return output node activations
-        return {node: activations[node] for node in self.output_nodes}
+        return {node: float(activations[node]) for node in self.output_nodes}
     
     def get_network_metrics(self) -> Dict[str, Any]:
         """Get RNN-specific metrics."""
