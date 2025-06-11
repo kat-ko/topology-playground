@@ -492,57 +492,66 @@ class ParameterBudget:
         
         return network
 
+SCALING_TABLE = {
+    'modular': {
+        'match_fully_connected': {25: 1.0, 50: 1.1, 100: 1.5},
+        'match_small_world':     {25: 0.6, 50: 0.4, 100: 0.3},
+        'match_modular':         {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_hybrid':          {25: 0.6, 50: 0.4, 100: 0.3},
+    },
+    'hybrid': {
+        'match_fully_connected': {25: 1.2, 50: 1.2, 100: 1.2},
+        'match_small_world':     {25: 1.2, 50: 1.2, 100: 1.1},
+        'match_modular':         {25: 1.2, 50: 1.2, 100: 1.2},
+        'match_hybrid':          {25: 1.0, 50: 1.0, 100: 1.0},
+    },
+    'small_world': {
+        'match_fully_connected': {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_small_world':     {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_modular':         {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_hybrid':          {25: 1.0, 50: 1.0, 100: 1.0},
+    },
+    'fully_connected': {
+        'match_fully_connected': {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_small_world':     {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_modular':         {25: 1.0, 50: 1.0, 100: 1.0},
+        'match_hybrid':          {25: 1.0, 50: 1.0, 100: 1.0},
+    },
+}
+
+SIZE_BINS = [25, 50, 100]
+
+def get_closest_bin(size: int) -> int:
+    return min(SIZE_BINS, key=lambda x: abs(x - size))
+
 def calculate_network_size(size: int, topology: str, experiment_type: str, target_capacity: int) -> int:
-    """
-    Calculate the network size needed to match a target capacity.
-    
-    Args:
-        size: Base network size
-        topology: Network topology ('fully_connected', 'small_world', 'modular', 'hybrid')
-        experiment_type: Type of experiment ('same_size' or 'match_*')
-        target_capacity: Target parameter count to match
-        
-    Returns:
-        int: Scaled network size needed to match target capacity
-    """
     if experiment_type == 'same_size':
         return size
-        
-    # For capacity matching, use topology-specific scaling
-    if topology == 'fully_connected':
-        # For fully connected, size scales with sqrt of target capacity
-        scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5
-    elif topology == 'small_world':
-        # Adjust the base formula to better match parameter growth
-        if size >= 100:
-            # More aggressive scaling for large networks
-            scale_factor = (target_capacity / (0.12 * size**2.1)) ** 0.5
-        else:
-            scale_factor = (target_capacity / (0.15 * size**2.1)) ** 0.5
-    elif topology == 'modular':
-        # Adjust module size calculation based on target capacity and network size
-        if target_capacity < 1000:
-            num_modules = max(2, size // 5)  # More modules for small networks
+
+    # Table-driven scaling for all topologies
+    if topology in SCALING_TABLE and experiment_type in SCALING_TABLE[topology]:
+        size_bin = get_closest_bin(size)
+        scale = SCALING_TABLE[topology][experiment_type].get(size_bin, 1.0)
+        # Use the same base formula as before, but multiply by the table scale
+        if topology == 'modular':
+            num_modules = max(2, size // 10)
             module_size = size // num_modules
-            scale_factor = (target_capacity / (2.05 * (size * module_size))) ** 0.5 * 0.5  # Additional reduction for small networks
-        else:
-            num_modules = max(2, size // 10)  # Fewer modules for large networks
-            module_size = size // num_modules
-            # Add size-dependent scaling for large networks
-            size_factor = 1.0
+            base = (target_capacity / (2.05 * (size * module_size))) ** 0.5
+            scale_factor = base * scale
+        elif topology == 'hybrid':
+            base = target_capacity / (11.03 * size**1.25)
+            scale_factor = base * scale
+        elif topology == 'small_world':
             if size >= 100:
-                if target_capacity < 3000:  # For small_world matching
-                    size_factor = 0.4  # More aggressive reduction
-                else:
-                    size_factor = 1.2  # Increase scaling for fully_connected matching
+                base = (target_capacity / (0.12 * size**2.1)) ** 0.5
             elif size >= 50:
-                size_factor = 1.1  # Increase scaling for medium networks
-            scale_factor = (target_capacity / (2.05 * (size * module_size))) ** 0.5 * size_factor
-    elif topology == 'hybrid':
-        # Keep current hybrid scaling as it works well
-        multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
-        scale_factor = target_capacity / (11.03 * size**1.25 * multiplier)
-    else:
-        raise ValueError(f"Unknown topology: {topology}")
-        
-    return int(size * scale_factor) 
+                base = (target_capacity / (0.13 * size**2.1)) ** 0.5
+            else:
+                base = (target_capacity / (0.15 * size**2.1)) ** 0.5
+            scale_factor = base * scale
+        elif topology == 'fully_connected':
+            base = (target_capacity / (2.05 * (size * size))) ** 0.5
+            scale_factor = base * scale
+        return int(size * scale_factor)
+
+    raise ValueError(f"Unknown topology: {topology}") 
