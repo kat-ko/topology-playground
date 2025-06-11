@@ -32,7 +32,7 @@ class CurriculumConfig:
     ])
     
     # Network parameters (reusing from ExperimentConfig)
-    network_sizes: List[int] = field(default_factory=lambda: [100, 200, 500])
+    network_sizes: List[int] = field(default_factory=lambda: [25, 50, 100])
     seeds: List[int] = field(default_factory=lambda: [42, 123, 456])
     num_layers: List[int] = field(default_factory=lambda: [1, 2, 3])
     network_types: List[str] = field(default_factory=lambda: ['ffn', 'rnn'])

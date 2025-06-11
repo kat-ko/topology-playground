@@ -78,15 +78,15 @@ class ModularTopology(BaseTopology, BasePlugin):
         for module1 in range(self.num_modules):
             for module2 in range(self.num_modules):
                 if module1 != module2:
-                    module1_nodes = [node for node, mod in self.module_assignments.items() if mod == module1]
-                    module2_nodes = [node for node, mod in self.module_assignments.items() if mod == module2]
+                module1_nodes = [node for node, mod in self.module_assignments.items() if mod == module1]
+                module2_nodes = [node for node, mod in self.module_assignments.items() if mod == module2]
                     # Sort nodes to ensure acyclicity
                     module1_nodes.sort()
                     module2_nodes.sort()
-                    for node1 in module1_nodes:
-                        for node2 in module2_nodes:
+                for node1 in module1_nodes:
+                    for node2 in module2_nodes:
                             if node1 < node2 and self.rng.random() < self.inter_module_prob:
-                                G.add_edge(node1, node2)
+                            G.add_edge(node1, node2)
         
         return G
     
@@ -98,10 +98,10 @@ class ModularTopology(BaseTopology, BasePlugin):
         # For inter-layer connections in a feedforward network,
         # layer1 nodes should only connect to layer2 nodes
         if layer1 < layer2:
-            for node1 in range(self.size):
-                for node2 in range(self.size):
-                    if self.rng.random() < self.inter_layer_prob:
-                        G.add_edge(node1, node2)
+        for node1 in range(self.size):
+            for node2 in range(self.size):
+                if self.rng.random() < self.inter_layer_prob:
+                    G.add_edge(node1, node2)
         else:
             for node2 in range(self.size):
                 for node1 in range(self.size):

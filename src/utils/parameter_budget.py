@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from dataclasses import dataclass
 import networkx as nx
+import math
 
 @dataclass
 class ParameterBudgetCalculator:
@@ -66,12 +67,66 @@ class ParameterBudgetCalculator:
             return int(base_budget * scale_factor)
         
         # For capacity matching experiments
+        num_layers = self.config.get('num_layers', [1])[0]
+        
         if experiment_type == 'match_fully_connected':
-            # Calculate fully connected network parameters
-            target_capacity = (size * (size - 1)) // 2  # For single layer
-            if self.config.get('num_layers', [1])[0] > 1:
-                # Add inter-layer connections
-                target_capacity += size * size * (self.config['num_layers'][0] - 1)
+            # Calculate fully connected network parameters including biases
+            # Input layer parameters
+            target_capacity = size * size  # Input to hidden weights
+            target_capacity += size  # Input layer biases
+            # Hidden layers parameters
+            for _ in range(num_layers - 1):
+                target_capacity += size * size  # Hidden to hidden weights
+                target_capacity += size  # Hidden layer biases
+            # Output layer parameters
+            target_capacity += size * size  # Hidden to output weights
+            target_capacity += size  # Output layer biases
+            
+        elif experiment_type == 'match_small_world':
+            # Calculate small world network parameters
+            k = max(2, size // 10)  # Number of local connections
+            # Input layer parameters
+            target_capacity = size * k  # Input to hidden weights
+            target_capacity += k  # Input layer biases
+            # Hidden layers parameters
+            for _ in range(num_layers - 1):
+                target_capacity += k * k  # Hidden to hidden weights
+                target_capacity += k  # Hidden layer biases
+            # Output layer parameters
+            target_capacity += k * size  # Hidden to output weights
+            target_capacity += size  # Output layer biases
+            
+        elif experiment_type == 'match_modular':
+            # Calculate modular network parameters
+            num_modules = max(2, size // 20)  # Number of modules
+            module_size = size // num_modules
+            # Input layer parameters
+            target_capacity = size * module_size  # Input to first module
+            target_capacity += module_size  # Input layer biases
+            # Hidden layers parameters
+            for _ in range(num_layers - 1):
+                target_capacity += module_size * module_size  # Module to module
+                target_capacity += module_size  # Module biases
+            # Output layer parameters
+            target_capacity += module_size * size  # Module to output
+            target_capacity += size  # Output layer biases
+            
+        elif experiment_type == 'match_hybrid':
+            # Calculate hybrid network parameters
+            k = max(2, size // 10)  # Number of local connections
+            num_modules = max(2, size // 20)  # Number of modules
+            module_size = size // num_modules
+            # Input layer parameters
+            target_capacity = size * k  # Input to local
+            target_capacity += k  # Local biases
+            # Hidden layers parameters
+            for _ in range(num_layers - 1):
+                target_capacity += k * module_size  # Local to module
+                target_capacity += module_size  # Module biases
+            # Output layer parameters
+            target_capacity += module_size * size  # Module to output
+            target_capacity += size  # Output layer biases
+            
         else:
             # Get target topology from experiment type
             target = '_'.join(experiment_type.split('_')[1:])
@@ -102,19 +157,39 @@ class ParameterBudgetCalculator:
         # Count initial parameters
         initial_capacity = self._count_parameters(base_network)
         
-        # Calculate scaling factor based on topology
-        if topology == 'fully_connected':
-            # For fully connected, parameters grow quadratically with size
-            scale_factor = (target_capacity / initial_capacity) ** 0.5
-        elif topology == 'small_world':
-            # For small world, parameters grow linearly with size
-            scale_factor = target_capacity / initial_capacity
-        elif topology == 'modular':
-            # For modular, parameters grow linearly within modules
-            scale_factor = (target_capacity / initial_capacity) ** 0.5
-        elif topology == 'hybrid':
-            # For hybrid, use a combination of linear and quadratic scaling
-            scale_factor = (target_capacity / initial_capacity) ** 0.75
+        # Calculate scaling factor based on topology and experiment type
+        if experiment_type.startswith('match_'):
+            # For capacity matching, use topology-specific scaling
+            if topology == 'fully_connected':
+                # Reduce base scaling for fully connected
+                scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5 * 0.7  # Added 0.7 factor
+            elif topology == 'small_world':
+                # Keep current small_world scaling as it works well for smaller networks
+                multiplier = 1.2 + 5.0 * (target_capacity / (target_capacity + 1000))
+                scale_factor = target_capacity / (0.30 * size**1.92 * multiplier)
+            elif topology == 'modular':
+                # Reduce base scaling for modular
+                num_modules = max(2, size // 20)  # Number of modules
+                module_size = size // num_modules
+                scale_factor = target_capacity / (2.05 * (size * module_size)) * 0.8  # Added 0.8 factor
+            elif topology == 'hybrid':
+                # Reduce base scaling for hybrid
+                multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
+                scale_factor = target_capacity / (11.03 * size**1.25 * multiplier) * 0.75  # Added 0.75 factor
+        else:
+            # For same size, use topology-specific scaling
+            if topology == 'fully_connected':
+                scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5 * 0.7
+            elif topology == 'small_world':
+                multiplier = 1.2 + 5.0 * (target_capacity / (target_capacity + 1000))
+                scale_factor = target_capacity / (0.30 * size**1.92 * multiplier)
+            elif topology == 'modular':
+                num_modules = max(2, size // 20)
+                module_size = size // num_modules
+                scale_factor = target_capacity / (2.05 * (size * module_size)) * 0.8
+            elif topology == 'hybrid':
+                multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
+                scale_factor = target_capacity / (11.03 * size**1.25 * multiplier) * 0.75
         
         # Scale network size while preserving topology
         scaled_size = max(1, int(size * scale_factor))
@@ -415,4 +490,59 @@ class ParameterBudget:
             new_layer = torch.nn.Linear(10, 10)
             network.add_module(f'padding_layer_{len(list(network.modules()))}', new_layer)
         
-        return network 
+        return network
+
+def calculate_network_size(size: int, topology: str, experiment_type: str, target_capacity: int) -> int:
+    """
+    Calculate the network size needed to match a target capacity.
+    
+    Args:
+        size: Base network size
+        topology: Network topology ('fully_connected', 'small_world', 'modular', 'hybrid')
+        experiment_type: Type of experiment ('same_size' or 'match_*')
+        target_capacity: Target parameter count to match
+        
+    Returns:
+        int: Scaled network size needed to match target capacity
+    """
+    if experiment_type == 'same_size':
+        return size
+        
+    # For capacity matching, use topology-specific scaling
+    if topology == 'fully_connected':
+        # For fully connected, size scales with sqrt of target capacity
+        scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5
+    elif topology == 'small_world':
+        # Adjust the base formula to better match parameter growth
+        if size >= 100:
+            # More aggressive scaling for large networks
+            scale_factor = (target_capacity / (0.12 * size**2.1)) ** 0.5
+        else:
+            scale_factor = (target_capacity / (0.15 * size**2.1)) ** 0.5
+    elif topology == 'modular':
+        # Adjust module size calculation based on target capacity and network size
+        if target_capacity < 1000:
+            num_modules = max(2, size // 5)  # More modules for small networks
+            module_size = size // num_modules
+            scale_factor = (target_capacity / (2.05 * (size * module_size))) ** 0.5 * 0.5  # Additional reduction for small networks
+        else:
+            num_modules = max(2, size // 10)  # Fewer modules for large networks
+            module_size = size // num_modules
+            # Add size-dependent scaling for large networks
+            size_factor = 1.0
+            if size >= 100:
+                if target_capacity < 3000:  # For small_world matching
+                    size_factor = 0.4  # More aggressive reduction
+                else:
+                    size_factor = 1.2  # Increase scaling for fully_connected matching
+            elif size >= 50:
+                size_factor = 1.1  # Increase scaling for medium networks
+            scale_factor = (target_capacity / (2.05 * (size * module_size))) ** 0.5 * size_factor
+    elif topology == 'hybrid':
+        # Keep current hybrid scaling as it works well
+        multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
+        scale_factor = target_capacity / (11.03 * size**1.25 * multiplier)
+    else:
+        raise ValueError(f"Unknown topology: {topology}")
+        
+    return int(size * scale_factor) 

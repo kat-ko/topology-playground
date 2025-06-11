@@ -72,7 +72,7 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
                 if self.rng.random() < self.inter_layer_prob:
                     # In a feedforward network, layer1 nodes should only connect to layer2 nodes
                     if layer1 < layer2:
-                        G.add_edge(node1, node2)
+                    G.add_edge(node1, node2)
                     else:
                         G.add_edge(node2, node1)
         
