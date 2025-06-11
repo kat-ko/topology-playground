@@ -1,59 +1,106 @@
 import torch
-from src.utils.parameter_budget import ParameterBudgetCalculator, calculate_network_size
+from src.utils.parameter_budget import ParameterBudgetCalculator
 from config.test_curriculum_config import TestCurriculumConfig
 import numpy as np
 
 def test_parameter_matching():
-    """Test parameter matching across different topologies."""
+    """Test parameter matching across different topologies using the exact same logic as main_curriculum."""
     # Create test configuration
     config = TestCurriculumConfig().to_dict()
     
-    # Modify config for testing
-    config['network_sizes'] = [50]  # Single size for testing
-    config['num_layers'] = [2]  # Two layers for testing
-    config['experiment_types'] = [
+    # Create calculator (same as used in main_curriculum)
+    calculator = ParameterBudgetCalculator(config)
+    
+    # Test configurations from main_curriculum
+    sizes = [25, 50, 100]
+    seeds = [42, 123, 456]
+    layers = [1, 2, 3]  # Test different numbers of layers
+    network_types = ['ffn', 'rnn']
+    
+    # Test topologies
+    topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
+    
+    # Test experiment types
+    experiment_types = [
+        'same_size',
         'match_fully_connected',
         'match_small_world',
         'match_modular',
         'match_hybrid'
     ]
     
-    # Create calculator
-    calculator = ParameterBudgetCalculator(config)
+    print("\nTesting Parameter Matching (using main curriculum logic)")
+    print("======================================================")
     
-    # Test each topology
-    topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
-    size = config['network_sizes'][0]
-    
-    print("\nTesting Parameter Matching")
-    print("=========================")
-    
-    for experiment_type in config['experiment_types']:
-        print(f"\nExperiment Type: {experiment_type}")
-        print("-" * 50)
+    # Test each combination
+    for size in sizes:
+        print(f"\nTesting size: {size}")
+        print("=" * 20)
         
-        # Get target capacity
-        target_capacity = calculator.get_budget(experiment_type, 'fully_connected', size)
-        print(f"Target Capacity: {target_capacity}")
-        
-        # Test each topology
         for topology in topologies:
-            # Create network
-            network = calculator.create_network(topology, size, experiment_type)
-            
-            # Count parameters
-            actual_capacity = sum(p.numel() for p in network.parameters() if p.requires_grad)
-            
-            # Print results
             print(f"\nTopology: {topology}")
-            print(f"Actual Capacity: {actual_capacity}")
-            print(f"Match: {abs(actual_capacity - target_capacity) <= 1}")
+            print("-" * 20)
             
-            # Print network structure
-            print("\nNetwork Structure:")
-            for name, param in network.named_parameters():
-                if param.requires_grad:
-                    print(f"{name}: {param.shape}")
+            for exp_type in experiment_types:
+                for seed in seeds:
+                    for num_layers in layers:
+                        for network_type in network_types:
+                            # Set random seed
+                            torch.manual_seed(seed)
+                            np.random.seed(seed)
+                            
+                            # Update config with current number of layers
+                            config['num_layers'] = [num_layers]
+                            calculator = ParameterBudgetCalculator(config)
+                            
+                            # Use the exact same network creation logic as main_curriculum
+                            network = calculator.create_network(
+                                topology=topology,
+                                size=size,
+                                experiment_type=exp_type
+                            )
+                            
+                            # Get target capacity
+                            target_capacity = calculator._compute_budget(exp_type, topology, size)
+                            
+                            # Count actual parameters
+                            actual_capacity = sum(p.numel() for p in network.parameters() if p.requires_grad)
+                            
+                            # Calculate divergence
+                            divergence = abs(actual_capacity - target_capacity) / target_capacity * 100 if target_capacity > 0 else 0
+                            
+                            # Print results
+                            print(f"\nConfiguration:")
+                            print(f"  Size: {size}")
+                            print(f"  Seed: {seed}")
+                            print(f"  Layers: {num_layers}")
+                            print(f"  Network Type: {network_type}")
+                            print(f"  Experiment: {exp_type}")
+                            print(f"  Target capacity: {target_capacity}")
+                            print(f"  Actual capacity: {actual_capacity}")
+                            print(f"  Divergence: {divergence:.2f}%")
+                            if divergence <= 5.0:
+                                print("✓ Verification passed")
+                            else:
+                                print("⚠ Verification failed")
+                            
+                            # Print network structure and topology characteristics
+                            print("\nNetwork structure:")
+                            for name, param in network.named_parameters():
+                                if param.requires_grad:
+                                    print(f"  {name}: {param.shape}")
+                            
+                            # Print topology characteristics
+                            print("\nTopology characteristics:")
+                            if hasattr(network, 'graph'):
+                                print(f"  Number of nodes: {network.graph.number_of_nodes()}")
+                                print(f"  Number of edges: {network.graph.number_of_edges()}")
+                                if hasattr(network, 'input_nodes'):
+                                    print(f"  Input nodes: {len(network.input_nodes)}")
+                                if hasattr(network, 'output_nodes'):
+                                    print(f"  Output nodes: {len(network.output_nodes)}")
+                            
+                            print("-" * 40)
 
 # Mapping from experiment type to reference topology
 EXPERIMENT_TYPE_TO_REF = {

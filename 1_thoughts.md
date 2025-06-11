@@ -1,3 +1,44 @@
+# Tasks Collection
+
+### Continual World
+- Reference:  “Continual World: A Robotic Benchmark for Continual Reinforcement Learning,” NeurIPS 2021 https://arxiv.org/pdf/2105.10919
+- Subset of 50 Meta-World goal-conditioned robotic manipulations (e.g. push, reach, pick-place). Out of 50 tasks defined in Meta-World, they picked those that are not too easy or too hard in the assumed sample budget
+- uses MuJoCo physics engine
+
+Why used:
+- Realistic continuous control,
+- Tasks share high-dimensional state representations (robot joint angles, object positions) but require distinct motor skills.
+- "The main contribution of this work is a CL benchmark that poses optimizing forward transfer as the central goal and shows that existing methods struggle to outperform simple baselines in terms of the
+forward transfer capability."
+
+Evaluation:
+- Success rate per task,
+- Forward transfer (performance jump on new tasks due to prior knowledge),
+- Backward transfer / forgetting on earlier tasks after training new ones.
+
+What it teaches:
+- How well continual-learning methods balance plasticity (learning new skills) vs stability (not forgetting).
+- Impact of task similarity (all are robotic but distinct) on transfer and interference.
+
+### Atari 
+- Reference: M. G. Bellemare, Y. Naddaf, J. Veness, and M. Bowling. The arcade learning environment: An evaluation platform for general agents. Journal of Artificial Intelligence Research, 47:253–279, jun 2013.
+- The Atari 2600 suite  is a widely accepted RL benchmark. 
+- Sequences of different Atari games have been used for evaluating continual learning approaches. 
+
+Limitations:
+- Using Atari can be computationally expensive, e.g., training a sequence of ten games typically requires 100M steps or more. 
+- These games lack a meaningful overlap, limiting their relevance for studying transfers.
+
+
+### Continuous control
+- Continuous control use continuous control tasks such as Humanoid or Walker2D.
+
+Limitations: 
+- The considered sequences are short, and the range of experiments is limited.
+
+
+
+
 # Intersection of modularity and memory and world representations in RL
 
 Towards Understanding the Link Between Modularity and Performance in Neural Networks for Reinforcement Learning - https://arxiv.org/pdf/2205.06451v2
@@ -15,8 +56,6 @@ Towards Understanding the Link Between Modularity and Performance in Neural Netw
 - "This view is reinforced by the significant levels of modularity seen in the human brain and other complex systems. Limitations include generalizing findings
 to backpropagation-trained networks and the need for further investigation in complex domains and the cause of entanglement."
 - " Future studies could explore complex network structures such as convolutional layers [17], use larger networks, and incorporate network weights into the modularity calculations by using community detection algorithms such as [36]."
-
-
 
 
 TODOs

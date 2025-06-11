@@ -4,7 +4,7 @@ from .curriculum_config import CurriculumConfig
 
 @dataclass
 class TestCurriculumConfig(CurriculumConfig):
-    """Test configuration for quick curriculum learning experiments."""
+    """Configuration for curriculum learning test experiments."""
     
     # Reduced network sizes for testing
     network_sizes: List[int] = field(default_factory=lambda: [50])
@@ -35,8 +35,8 @@ class TestCurriculumConfig(CurriculumConfig):
     
     # Reduced experiment types
     experiment_types: List[str] = field(default_factory=lambda: [
-        'match_fully_connected',  # Test both basic and capacity matching
         'same_size',
+        'match_small_world',
     ])
     
     # Include transfer learning tasks for testing
@@ -56,8 +56,20 @@ class TestCurriculumConfig(CurriculumConfig):
     
     def __post_init__(self):
         super().__post_init__()
+        
+        # Override with test values
+        self.network_sizes = [50]  # Single size for testing
+        self.seeds = [42]  # Single seed
+        self.num_layers = [1]  # Single layer
+        self.network_types = ['rnn', 'ffn']  # Single network type
+        self.node_selection_strategies = ['random']  # Single strategy
+        self.experiment_types = [
+            'same_size',
+            'match_small_world',
+        ]
+        
         # Mark as test run
-        self.is_test_run = True 
+        self.is_test_run = True
 
     def to_dict(self):
         return {
