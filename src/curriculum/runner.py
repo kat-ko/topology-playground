@@ -10,6 +10,7 @@ import time
 import logging
 from ..utils.logging_utils import setup_logger, LogLevel
 from collections import defaultdict
+from ..utils.parameter_budget import ParameterBudgetCalculator, calculate_network_size
 
 from ..topologies.small_world import SmallWorldTopology
 from ..topologies.modular import ModularTopology
@@ -77,6 +78,8 @@ class CurriculumRunner:
         
         results = []
         
+        calculator = ParameterBudgetCalculator(self.config)
+        
         for experiment_type in self.config['experiment_types']:
             print(f"\nRunning experiment type: {experiment_type}")
             
@@ -84,18 +87,26 @@ class CurriculumRunner:
                 for seed in tqdm(self.config['seeds'], desc="Seeds", leave=False):
                     for num_layers in tqdm(self.config['num_layers'], desc="Number of layers", leave=False):
                         for network_type in tqdm(self.config['network_types'], desc="Network types", leave=False):
-                            # Generate networks
+                            # --- Capacity-matching scaling logic ---
+                            sw_target_capacity = calculator.get_budget(experiment_type, 'small_world', size)
+                            sw_size = calculate_network_size(size, 'small_world', experiment_type, sw_target_capacity)
+                            mod_target_capacity = calculator.get_budget(experiment_type, 'modular', size)
+                            mod_size = calculate_network_size(size, 'modular', experiment_type, mod_target_capacity)
+                            hybrid_target_capacity = calculator.get_budget(experiment_type, 'hybrid', size)
+                            hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, hybrid_target_capacity)
+                            fc_target_capacity = calculator.get_budget(experiment_type, 'fully_connected', size)
+                            fc_size = calculate_network_size(size, 'fully_connected', experiment_type, fc_target_capacity)
+                            # --- Instantiate topologies with scaled sizes ---
                             small_world = SmallWorldTopology(
-                                size=size,
+                                size=sw_size,
                                 k=self.config['small_world_params']['k'],
                                 p=self.config['small_world_params']['p'],
                                 num_layers=num_layers,
                                 inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
                                 seed=seed
                             )
-                            
                             modular = ModularTopology(
-                                size=size,
+                                size=mod_size,
                                 num_modules=self.config['modular_params']['num_modules'],
                                 inter_module_prob=self.config['modular_params']['inter_module_prob'],
                                 intra_module_prob=self.config['modular_params']['intra_module_prob'],
@@ -103,9 +114,8 @@ class CurriculumRunner:
                                 inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                                 seed=seed
                             )
-                            
                             hybrid = HybridTopology(
-                                size=size,
+                                size=hybrid_size,
                                 num_modules=self.config['modular_params']['num_modules'],
                                 k=self.config['small_world_params']['k'],
                                 p=self.config['small_world_params']['p'],
@@ -114,9 +124,8 @@ class CurriculumRunner:
                                 inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                                 seed=seed
                             )
-                            
                             fully_connected = FullyConnectedTopology(
-                                size=size,
+                                size=fc_size,
                                 num_layers=num_layers,
                                 inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
                                 intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
