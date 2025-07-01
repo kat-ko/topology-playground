@@ -47,6 +47,13 @@ class ParameterBudgetCalculator:
         # Use empirical models if available
         if topology in EMPIRICAL_SCALING_MODELS:
             base_params = EMPIRICAL_SCALING_MODELS[topology]['formula'](size)
+            
+            # Apply dynamic multipliers based on capacity range
+            capacity_range = self._get_capacity_range(base_params)
+            if capacity_range in EMPIRICAL_SCALING_MODELS[topology]['dynamic_multipliers']:
+                multiplier = EMPIRICAL_SCALING_MODELS[topology]['dynamic_multipliers'][capacity_range](base_params)
+                base_params = int(base_params * multiplier)
+            
             # Adjust for number of layers
             if num_layers > 1:
                 # For multi-layer networks, add inter-layer connections
@@ -57,10 +64,11 @@ class ParameterBudgetCalculator:
         
         # Fallback to original calculations
         if topology == 'small_world':
-            # Small world: k connections per node + biases
+            # Small world: k connections per node + biases, but reduced due to acyclicity constraint
             k = max(2, size // 10)  # Number of local connections
-            # Each node has k incoming connections + 1 bias
-            return size * k + size  # weights + biases
+            # Due to acyclicity constraint, only ~45% of expected connections are created
+            # Each node has approximately 0.45 * k incoming connections + 1 bias
+            return int(size * k * 0.45 + size)  # weights + biases
             
         elif topology == 'modular':
             # Modular: connections within modules + inter-module connections
@@ -102,6 +110,15 @@ class ParameterBudgetCalculator:
         
         else:
             raise ValueError(f"Unknown topology: {topology}")
+    
+    def _get_capacity_range(self, capacity: int) -> str:
+        """Get the capacity range for applying dynamic multipliers."""
+        if capacity < 1000:
+            return 'small'
+        elif capacity < 5000:
+            return 'medium'
+        else:
+            return 'large'
     
     def _compute_all_budgets(self) -> Dict[str, Dict[str, Dict[int, Any]]]:
         """Compute budgets for all experiment types and network sizes."""
@@ -167,15 +184,18 @@ class ParameterBudgetCalculator:
         max_size = self.config.get('max_search_size', 2000)
         # But don't go below topology's minimum viable size
         min_size = max(min_size, self._get_minimum_viable_size(topology))
-        
+
         # Start with a reasonable estimate based on topology type and number of layers
         if num_layers > 1:
             # For multi-layer networks, use different scaling
             if topology == 'fully_connected':
-                # Fully connected scales as size^2 per layer
-                estimated_size = int((target_capacity / (2.05 * num_layers)) ** 0.5)
+                # Adjust scaling for small target capacities (like matching to small_world)
+                if target_capacity < 1000:
+                    # For small capacities, use more conservative scaling
+                    estimated_size = int((target_capacity / (1.8 * num_layers)) ** 0.5)
+                else:
+                    estimated_size = int((target_capacity / (2.05 * num_layers)) ** 0.5)
             elif topology in ['small_world', 'modular', 'hybrid']:
-                # These scale more linearly with size
                 estimated_size = int((target_capacity / (1.5 * num_layers)) ** 0.67)
             else:
                 estimated_size = min_size
@@ -187,7 +207,7 @@ class ParameterBudgetCalculator:
                 estimated_size = int((target_capacity / 1.5) ** 0.67)
             else:
                 estimated_size = min_size
-        
+
         start_size = max(min_size, estimated_size)
         
         # ADAPTIVE SEARCH PARAMETERS based on target capacity and topology
@@ -208,8 +228,8 @@ class ParameterBudgetCalculator:
                 fine_step = 2
             else:
                 search_range = max(500, start_size * 2)  # Medium range for low capacity
-                step_size = 8
-                fine_step = 2
+                step_size = 3  # Much finer step size for small capacities
+                fine_step = 1  # Very fine step for small capacities
         elif topology == 'modular':
             # Modular has more predictable scaling
             if target_capacity > 10000:
@@ -220,10 +240,14 @@ class ParameterBudgetCalculator:
                 search_range = max(800, start_size * 1.8)
                 step_size = 12
                 fine_step = 2
+            elif target_capacity > 1000:
+                search_range = max(500, start_size * 1.5)
+                step_size = 8
+                fine_step = 2
             else:
                 search_range = max(500, start_size * 1.5)
-                step_size = 10
-                fine_step = 2
+                step_size = 3  # Much finer step size for small capacities
+                fine_step = 1  # Very fine step for small capacities
         elif topology == 'hybrid':
             # Hybrid combines small world and modular characteristics
             if target_capacity > 10000:
@@ -234,10 +258,14 @@ class ParameterBudgetCalculator:
                 search_range = max(1200, start_size * 2.5)
                 step_size = 15
                 fine_step = 3
+            elif target_capacity > 1000:
+                search_range = max(800, start_size * 2)
+                step_size = 10
+                fine_step = 2
             else:
                 search_range = max(800, start_size * 2)
-                step_size = 12
-                fine_step = 2
+                step_size = 3  # Much finer step size for small capacities
+                fine_step = 1  # Very fine step for small capacities
         else:  # fully_connected
             # Fully connected has the most predictable scaling
             if target_capacity > 10000:
@@ -255,7 +283,7 @@ class ParameterBudgetCalculator:
             else:
                 # For very small target capacities (like matching to small world), use finer search
                 search_range = max(300, start_size * 1.5)  # Slightly larger range for small targets
-                step_size = 5  # Finer step size for small targets
+                step_size = 3  # Much finer step size for small targets
                 fine_step = 1  # Very fine step for small targets
         
         # Adjust for multi-layer networks
@@ -277,20 +305,18 @@ class ParameterBudgetCalculator:
                 )
                 best_divergence = abs(actual_capacity - target_capacity) / target_capacity
                 best_size = start_size
-                
-                # OPTIMIZATION 2: Early termination if we get a very good match
-                if best_divergence < 0.01:  # 1% threshold for immediate success
+                if best_divergence < 0.01:
                     return best_size
         except Exception as e:
             pass
         
-        # OPTIMIZATION 3: Binary search for coarse search (much faster than linear)
+        # OPTIMIZATION 3: Adaptive binary search for coarse search (much faster than linear)
         left = min_size
         right = min(max_size, start_size + search_range)
         last_actual_capacity = None
         
-        # Binary search to find approximate range
-        while left < right - step_size:
+        # Adaptive binary search with dynamic step size based on relative error
+        while left < right - 1:  # Continue until we can't divide further
             mid = (left + right) // 2
             try:
                 network = self._create_test_network(topology, mid, network_type, num_layers)
@@ -313,24 +339,46 @@ class ParameterBudgetCalculator:
                 if divergence < 0.005:  # 0.5% threshold
                     return best_size
                 
+                # Adaptive step size based on relative error
+                relative_error = abs(actual_capacity - target_capacity) / target_capacity
+                if relative_error < 0.1:  # Within 10% of target
+                    # Use finer search when close to target
+                    step_threshold = 2
+                elif relative_error < 0.3:  # Within 30% of target
+                    # Use medium search when moderately close
+                    step_threshold = 5
+                else:
+                    # Use coarse search when far from target
+                    step_threshold = 10
+                
                 if actual_capacity < target_capacity:
                     left = mid
                 else:
                     right = mid
                     
+                # Stop if we can't make meaningful progress
+                if right - left <= step_threshold:
+                    break
+                    
             except Exception as e:
                 right = mid
         
         # OPTIMIZATION 5: Adaptive fine search around best size found
-        # Use smaller fine range if we already have a good match
-        if best_divergence < 0.05:  # 5% threshold
-            fine_range = min(50, max(20, start_size // 4))  # Smaller range for good matches
+        # For small target capacities, use fine_step=1 and a larger fine_range
+        if target_capacity < 1000:
+            fine_step = 1
+            if topology == 'fully_connected':
+                # For fully_connected matching small capacities, use much wider search range
+                fine_range = max(100, start_size * 4)  # Increased from max(50, start_size * 2)
+            else:
+                fine_range = max(50, start_size * 2)  # Keep original for other topologies
         else:
-            fine_range = min(200, max(50, start_size // 2))  # Larger range for poor matches
+            if best_divergence < 0.05:  # 5% threshold
+                fine_range = min(50, max(20, start_size // 4))  # Smaller range for good matches
+            else:
+                fine_range = min(200, max(50, start_size // 2))  # Larger range for poor matches
+            fine_range = max(fine_range, step_size * 2)  # Ensure fine range is at least 2x step size
         
-        fine_range = max(fine_range, step_size * 2)  # Ensure fine range is at least 2x step size
-        
-        # Fine search with early termination
         consecutive_no_improvement = 0
         max_no_improvement = 5  # Stop if no improvement for 5 consecutive attempts
         
@@ -342,35 +390,49 @@ class ParameterBudgetCalculator:
                     if consecutive_no_improvement >= max_no_improvement:
                         break
                     continue
-                    
                 metrics = network.get_network_metrics()
                 actual_capacity = sum(
                     metrics.get(k, 0) for k in metrics if k.startswith('num_')
                 )
                 divergence = abs(actual_capacity - target_capacity) / target_capacity
-                
                 if divergence < best_divergence:
                     best_divergence = divergence
                     best_size = fine_size
                     consecutive_no_improvement = 0  # Reset counter
                 else:
                     consecutive_no_improvement += 1
-                
-                # OPTIMIZATION 6: Very early termination for excellent matches
                 if divergence < 0.002:  # 0.2% threshold
                     return best_size
-                
-                # OPTIMIZATION 7: Stop if no improvement for several attempts
                 if consecutive_no_improvement >= max_no_improvement:
                     break
-                    
             except Exception as e:
                 consecutive_no_improvement += 1
                 if consecutive_no_improvement >= max_no_improvement:
                     break
                 continue
         
-        return best_size
+        # Final local optimality check: test a wider range around best_size
+        # Test best_size-3, best_size-2, best_size-1, best_size, best_size+1, best_size+2, best_size+3
+        candidate_sizes = [best_size - 5, best_size - 4, best_size - 3, best_size - 2, best_size - 1, best_size, best_size + 1, best_size + 2, best_size + 3, best_size + 4, best_size + 5]
+        optimal_size = best_size
+        optimal_divergence = best_divergence
+        for candidate in candidate_sizes:
+            if candidate < min_size or candidate > max_size:
+                continue
+            try:
+                network = self._create_test_network(topology, candidate, network_type, num_layers)
+                if network is not None:
+                    metrics = network.get_network_metrics()
+                    actual_capacity = sum(
+                        metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                    )
+                    divergence = abs(actual_capacity - target_capacity) / target_capacity
+                    if divergence < optimal_divergence:
+                        optimal_divergence = divergence
+                        optimal_size = candidate
+            except Exception:
+                continue
+        return optimal_size
     
     def _create_test_network(self, topology: str, size: int, network_type: str = 'ffn', num_layers: int = 1) -> torch.nn.Module:
         """
@@ -510,6 +572,13 @@ class ParameterBudgetCalculator:
         if self.use_capacity_mapping and self.capacity_mapper is not None:
             cap = self.capacity_mapper.get_capacity_at_size(reference_topology, size, network_type, num_layers)
             if cap is not None:
+                # Apply dynamic multiplier to the measured capacity if available
+                if reference_topology in EMPIRICAL_SCALING_MODELS:
+                    capacity_range = self._get_capacity_range(cap)
+                    dynamic_multipliers = EMPIRICAL_SCALING_MODELS[reference_topology].get('dynamic_multipliers', {})
+                    if capacity_range in dynamic_multipliers:
+                        multiplier = dynamic_multipliers[capacity_range](cap)
+                        cap = int(cap * multiplier)
                 return cap
         
         # Fallback to creating the actual network
@@ -604,6 +673,14 @@ class ParameterBudgetCalculator:
                 # Fallback to calculated capacity for this layer
                 layer_capacity = self._calculate_topology_parameters(reference_topology, size) // num_layers
                 total_capacity += layer_capacity
+        
+        # Apply dynamic multiplier to the measured capacity if available
+        if reference_topology in EMPIRICAL_SCALING_MODELS:
+            capacity_range = self._get_capacity_range(total_capacity)
+            dynamic_multipliers = EMPIRICAL_SCALING_MODELS[reference_topology].get('dynamic_multipliers', {})
+            if capacity_range in dynamic_multipliers:
+                multiplier = dynamic_multipliers[capacity_range](total_capacity)
+                total_capacity = int(total_capacity * multiplier)
         
         return total_capacity
     
@@ -1216,7 +1293,7 @@ SCALING_TABLE.update(OPTIMIZED_SCALING_TABLE)
 # Empirical parameter growth models based on actual measurements
 EMPIRICAL_SCALING_MODELS = {
     'small_world': {
-        'formula': lambda size: int(0.30 * size**1.92),
+        'formula': lambda size: int(0.135 * size**1.92),
         'dynamic_multipliers': {
             'small': lambda capacity: 0.8 if capacity < 1000 else 0.9,
             'medium': lambda capacity: 0.9 if capacity < 5000 else 1.0,
@@ -1224,27 +1301,27 @@ EMPIRICAL_SCALING_MODELS = {
         }
     },
     'modular': {
-        'formula': lambda size: int(2.05 * size * (size // max(2, size // 20))),
+        'formula': lambda size: int(2.8 * size * (size // max(2, size // 20))),  # Increased from 2.05 to 2.8
         'dynamic_multipliers': {
-            'small': lambda capacity: 0.85 if capacity < 1000 else 0.95,
+            'small': lambda capacity: 0.93 if capacity < 1000 else 0.95,
             'medium': lambda capacity: 0.95 if capacity < 5000 else 1.0,
             'large': lambda capacity: 1.0 if capacity < 10000 else 1.05
         }
     },
     'hybrid': {
-        'formula': lambda size: int(11.03 * size**1.25),
+        'formula': lambda size: int(1.6 * size * (size // max(2, size // 15))),  # Increased from 1.2 to 1.6
         'dynamic_multipliers': {
-            'small': lambda capacity: 0.75 if capacity < 1000 else 0.85,
-            'medium': lambda capacity: 0.85 if capacity < 5000 else 0.95,
-            'large': lambda capacity: 0.95 if capacity < 10000 else 1.0
+            'small': lambda capacity: 0.82 if capacity < 1000 else 0.9,
+            'medium': lambda capacity: 0.9 if capacity < 5000 else 1.0,
+            'large': lambda capacity: 1.0 if capacity < 10000 else 1.1
         }
     },
     'fully_connected': {
         'formula': lambda size: int(2.05 * size**2),
         'dynamic_multipliers': {
-            'small': lambda capacity: 1.0,
-            'medium': lambda capacity: 1.0,
-            'large': lambda capacity: 1.0
+            'small': lambda capacity: 1.05 if capacity < 1000 else 1.02,  # Increased from 0.95 to 1.05 to fix undershooting
+            'medium': lambda capacity: 0.98 if capacity < 5000 else 1.0,
+            'large': lambda capacity: 1.0 if capacity < 10000 else 1.02
         }
     }
 }

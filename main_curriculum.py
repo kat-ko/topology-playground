@@ -229,6 +229,9 @@ def main():
     # Create curriculum configuration
     config = CurriculumConfig().to_dict()
     
+    # Disable capacity mapping to use the optimized incremental adjustment logic
+    config['use_capacity_mapping'] = False
+    
     # Verify capacity matching before starting (using actual training logic)
     verify_capacity_matching(config)
     
