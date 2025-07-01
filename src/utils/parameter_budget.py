@@ -4,6 +4,7 @@ import numpy as np
 from dataclasses import dataclass
 import networkx as nx
 import math
+from .capacity_mapping import CapacityMapper
 
 @dataclass
 class ParameterBudgetCalculator:
@@ -12,10 +13,16 @@ class ParameterBudgetCalculator:
     config: Dict[str, Any]
     
     def __post_init__(self):
-        """Initialize the calculator with base parameters."""
+        """Initialize the calculator with base parameters and capacity mapping."""
         self.base_size = min(self.config['network_sizes'])
         self.topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
         self.experiment_types = self.config['experiment_types']
+        # Capacity mapping system (default: enabled)
+        self.use_capacity_mapping = self.config.get('use_capacity_mapping', True)
+        if self.use_capacity_mapping:
+            self.capacity_mapper = CapacityMapper(self.config)
+        else:
+            self.capacity_mapper = None
         
         # Pre-compute base capacities for each topology
         self.base_capacities = self._compute_base_capacities()
@@ -28,20 +35,75 @@ class ParameterBudgetCalculator:
         capacities = {}
         
         for topology in self.topologies:
-            if topology == 'small_world':
-                network = self._create_sample_small_world(self.base_size)
-            elif topology == 'modular':
-                network = self._create_sample_modular(self.base_size)
-            elif topology == 'hybrid':
-                network = self._create_sample_hybrid(self.base_size)
-            elif topology == 'fully_connected':
-                network = self._create_sample_fully_connected(self.base_size)
-            
-            capacities[topology] = self._count_parameters(network)
+            # Calculate parameters based on actual topology structure
+            capacities[topology] = self._calculate_topology_parameters(topology, self.base_size)
         
         return capacities
     
-    def _compute_all_budgets(self) -> Dict[str, Dict[str, Dict[int, int]]]:
+    def _calculate_topology_parameters(self, topology: str, size: int) -> int:
+        """Calculate actual parameters for a given topology and size using empirical models."""
+        num_layers = self.config.get('num_layers', [1])[0]
+        
+        # Use empirical models if available
+        if topology in EMPIRICAL_SCALING_MODELS:
+            base_params = EMPIRICAL_SCALING_MODELS[topology]['formula'](size)
+            # Adjust for number of layers
+            if num_layers > 1:
+                # For multi-layer networks, add inter-layer connections
+                # This is a simplified approximation
+                inter_layer_params = size * size * (num_layers - 1) * 0.1  # 10% connectivity between layers
+                return int(base_params + inter_layer_params)
+            return base_params
+        
+        # Fallback to original calculations
+        if topology == 'small_world':
+            # Small world: k connections per node + biases
+            k = max(2, size // 10)  # Number of local connections
+            # Each node has k incoming connections + 1 bias
+            return size * k + size  # weights + biases
+            
+        elif topology == 'modular':
+            # Modular: connections within modules + inter-module connections
+            num_modules = max(2, size // 20)
+            module_size = size // num_modules
+            # Intra-module connections: each module has module_size^2 connections
+            intra_module_connections = num_modules * (module_size * module_size)
+            # Inter-module connections: sparse connections between modules
+            inter_module_connections = num_modules * (num_modules - 1) * module_size * 2
+            # Biases: one per node
+            return intra_module_connections + inter_module_connections + size
+            
+        elif topology == 'hybrid':
+            # Hybrid: combines small world and modular
+            k = max(2, size // 10)
+            num_modules = max(2, size // 20)
+            module_size = size // num_modules
+            # Small world connections: k per node
+            sw_connections = size * k
+            # Modular connections within modules
+            modular_connections = num_modules * (module_size * module_size)
+            # Biases: one per node
+            return sw_connections + modular_connections + size
+            
+        elif topology == 'fully_connected':
+            # Fully connected: all nodes connected to all nodes
+            # For each layer: size^2 connections + size biases
+            total_connections = 0
+            for layer in range(num_layers):
+                if layer == 0:
+                    # Input layer: size^2 connections
+                    total_connections += size * size
+                else:
+                    # Hidden layers: size^2 connections
+                    total_connections += size * size
+                # Add biases for each layer
+                total_connections += size
+            return total_connections
+        
+        else:
+            raise ValueError(f"Unknown topology: {topology}")
+    
+    def _compute_all_budgets(self) -> Dict[str, Dict[str, Dict[int, Any]]]:
         """Compute budgets for all experiment types and network sizes."""
         budgets = {}
         
@@ -51,246 +113,704 @@ class ParameterBudgetCalculator:
             for topology in self.topologies:
                 budgets[experiment_type][topology] = {}
                 
-                for size in [25, 50, 100]:  # Explicitly use all sizes
-                    budgets[experiment_type][topology][size] = self._compute_budget(
-                        experiment_type, topology, size
-                    )
+                for size in self.config['network_sizes']:
+                    # For capacity matching experiments, we need to compute budgets for each network type and layer count
+                    if experiment_type.startswith('match_'):
+                        # Create a nested structure to store budgets for different network types and layer counts
+                        budgets[experiment_type][topology][size] = {}
+                        
+                        for network_type in self.config['network_types']:
+                            budgets[experiment_type][topology][size][network_type] = {}
+                            
+                            for num_layers in self.config['num_layers']:
+                                # Get target capacity only - don't pre-calculate matching size
+                                target_capacity = self._compute_budget(
+                                    experiment_type, topology, size, network_type, num_layers
+                                )
+                                
+                                # Store only target capacity - matching size will be calculated on-demand
+                                budgets[experiment_type][topology][size][network_type][num_layers] = {
+                                    'target_capacity': target_capacity
+                                }
+                    else:
+                        # For non-matching experiments, use the original structure
+                        budgets[experiment_type][topology][size] = self._compute_budget(
+                            experiment_type, topology, size
+                        )
         
         return budgets
     
-    def _compute_budget(self, experiment_type: str, topology: str, size: int) -> int:
+    def _pre_calculate_matching_size(self, topology: str, target_capacity: int, network_type: str = 'ffn', num_layers: int = 1) -> int:
+        """
+        Pre-calculate the matching size for a topology to achieve target capacity.
+        Uses incremental adjustment to find the right size step by step.
+        """
+        # Use capacity mapper if available
+        if self.use_capacity_mapping and self.capacity_mapper is not None:
+            try:
+                return self.capacity_mapper.find_matching_size(topology, target_capacity, network_type, num_layers)
+            except Exception as e:
+                print(f"[CapacityMapper fallback] {e}")
+                # Fallback to incremental adjustment below
+        
+        # Use incremental adjustment to find the right size
+        return self._find_matching_size_incremental(topology, target_capacity, network_type, num_layers)
+    
+    def _find_matching_size_incremental(self, topology: str, target_capacity: int, network_type: str = 'ffn', num_layers: int = 1) -> int:
+        """
+        Find matching size using incremental adjustment with adaptive search parameters.
+        Designed to work robustly across all network sizes and topologies.
+        Optimized for performance with early termination and adaptive search.
+        """
+        # Allow config override for min/max size
+        min_size = self.config.get('min_search_size', 10)
+        max_size = self.config.get('max_search_size', 2000)
+        # But don't go below topology's minimum viable size
+        min_size = max(min_size, self._get_minimum_viable_size(topology))
+        
+        # Start with a reasonable estimate based on topology type and number of layers
+        if num_layers > 1:
+            # For multi-layer networks, use different scaling
+            if topology == 'fully_connected':
+                # Fully connected scales as size^2 per layer
+                estimated_size = int((target_capacity / (2.05 * num_layers)) ** 0.5)
+            elif topology in ['small_world', 'modular', 'hybrid']:
+                # These scale more linearly with size
+                estimated_size = int((target_capacity / (1.5 * num_layers)) ** 0.67)
+            else:
+                estimated_size = min_size
+        else:
+            # Single layer networks use original scaling
+            if topology == 'fully_connected':
+                estimated_size = int((target_capacity / 2.05) ** 0.5)
+            elif topology in ['small_world', 'modular', 'hybrid']:
+                estimated_size = int((target_capacity / 1.5) ** 0.67)
+            else:
+                estimated_size = min_size
+        
+        start_size = max(min_size, estimated_size)
+        
+        # ADAPTIVE SEARCH PARAMETERS based on target capacity and topology
+        # For small world topology, we need much larger search ranges due to acyclicity constraint
+        if topology == 'small_world':
+            # Small world has highly variable parameter scaling due to acyclicity
+            if target_capacity > 10000:
+                search_range = max(2000, start_size * 4)  # Very large range for high capacity
+                step_size = 20
+                fine_step = 5
+            elif target_capacity > 5000:
+                search_range = max(1500, start_size * 3)  # Large range for medium-high capacity
+                step_size = 15
+                fine_step = 3
+            elif target_capacity > 1000:
+                search_range = max(1000, start_size * 2.5)  # Large range for medium capacity
+                step_size = 10
+                fine_step = 2
+            else:
+                search_range = max(500, start_size * 2)  # Medium range for low capacity
+                step_size = 8
+                fine_step = 2
+        elif topology == 'modular':
+            # Modular has more predictable scaling
+            if target_capacity > 10000:
+                search_range = max(1000, start_size * 2)
+                step_size = 15
+                fine_step = 3
+            elif target_capacity > 5000:
+                search_range = max(800, start_size * 1.8)
+                step_size = 12
+                fine_step = 2
+            else:
+                search_range = max(500, start_size * 1.5)
+                step_size = 10
+                fine_step = 2
+        elif topology == 'hybrid':
+            # Hybrid combines small world and modular characteristics
+            if target_capacity > 10000:
+                search_range = max(1500, start_size * 3)
+                step_size = 18
+                fine_step = 4
+            elif target_capacity > 5000:
+                search_range = max(1200, start_size * 2.5)
+                step_size = 15
+                fine_step = 3
+            else:
+                search_range = max(800, start_size * 2)
+                step_size = 12
+                fine_step = 2
+        else:  # fully_connected
+            # Fully connected has the most predictable scaling
+            if target_capacity > 10000:
+                search_range = max(800, start_size * 1.5)
+                step_size = 12
+                fine_step = 2
+            elif target_capacity > 5000:
+                search_range = max(600, start_size * 1.3)
+                step_size = 10
+                fine_step = 2
+            elif target_capacity > 1000:
+                search_range = max(400, start_size * 1.2)
+                step_size = 8
+                fine_step = 2
+            else:
+                # For very small target capacities (like matching to small world), use finer search
+                search_range = max(300, start_size * 1.5)  # Slightly larger range for small targets
+                step_size = 5  # Finer step size for small targets
+                fine_step = 1  # Very fine step for small targets
+        
+        # Adjust for multi-layer networks
+        if num_layers > 1:
+            search_range = int(search_range * 1.5)  # Increase search range for multi-layer
+            step_size = max(step_size // 2, 5)  # Use finer steps for multi-layer
+            fine_step = max(fine_step // 2, 1)  # Use even finer steps for multi-layer
+        
+        best_size = start_size
+        best_divergence = float('inf')
+        
+        # OPTIMIZATION 1: Try the estimated size first (often very close)
+        try:
+            network = self._create_test_network(topology, start_size, network_type, num_layers)
+            if network is not None:
+                metrics = network.get_network_metrics()
+                actual_capacity = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                best_divergence = abs(actual_capacity - target_capacity) / target_capacity
+                best_size = start_size
+                
+                # OPTIMIZATION 2: Early termination if we get a very good match
+                if best_divergence < 0.01:  # 1% threshold for immediate success
+                    return best_size
+        except Exception as e:
+            pass
+        
+        # OPTIMIZATION 3: Binary search for coarse search (much faster than linear)
+        left = min_size
+        right = min(max_size, start_size + search_range)
+        last_actual_capacity = None
+        
+        # Binary search to find approximate range
+        while left < right - step_size:
+            mid = (left + right) // 2
+            try:
+                network = self._create_test_network(topology, mid, network_type, num_layers)
+                if network is None:
+                    right = mid
+                    continue
+                    
+                metrics = network.get_network_metrics()
+                actual_capacity = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                last_actual_capacity = actual_capacity
+                
+                divergence = abs(actual_capacity - target_capacity) / target_capacity
+                if divergence < best_divergence:
+                    best_divergence = divergence
+                    best_size = mid
+                
+                # OPTIMIZATION 4: Early termination for excellent matches
+                if divergence < 0.005:  # 0.5% threshold
+                    return best_size
+                
+                if actual_capacity < target_capacity:
+                    left = mid
+                else:
+                    right = mid
+                    
+            except Exception as e:
+                right = mid
+        
+        # OPTIMIZATION 5: Adaptive fine search around best size found
+        # Use smaller fine range if we already have a good match
+        if best_divergence < 0.05:  # 5% threshold
+            fine_range = min(50, max(20, start_size // 4))  # Smaller range for good matches
+        else:
+            fine_range = min(200, max(50, start_size // 2))  # Larger range for poor matches
+        
+        fine_range = max(fine_range, step_size * 2)  # Ensure fine range is at least 2x step size
+        
+        # Fine search with early termination
+        consecutive_no_improvement = 0
+        max_no_improvement = 5  # Stop if no improvement for 5 consecutive attempts
+        
+        for fine_size in range(max(min_size, best_size - fine_range), min(max_size, best_size + fine_range), fine_step):
+            try:
+                network = self._create_test_network(topology, fine_size, network_type, num_layers)
+                if network is None:
+                    consecutive_no_improvement += 1
+                    if consecutive_no_improvement >= max_no_improvement:
+                        break
+                    continue
+                    
+                metrics = network.get_network_metrics()
+                actual_capacity = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                divergence = abs(actual_capacity - target_capacity) / target_capacity
+                
+                if divergence < best_divergence:
+                    best_divergence = divergence
+                    best_size = fine_size
+                    consecutive_no_improvement = 0  # Reset counter
+                else:
+                    consecutive_no_improvement += 1
+                
+                # OPTIMIZATION 6: Very early termination for excellent matches
+                if divergence < 0.002:  # 0.2% threshold
+                    return best_size
+                
+                # OPTIMIZATION 7: Stop if no improvement for several attempts
+                if consecutive_no_improvement >= max_no_improvement:
+                    break
+                    
+            except Exception as e:
+                consecutive_no_improvement += 1
+                if consecutive_no_improvement >= max_no_improvement:
+                    break
+                continue
+        
+        return best_size
+    
+    def _create_test_network(self, topology: str, size: int, network_type: str = 'ffn', num_layers: int = 1) -> torch.nn.Module:
+        """
+        Create a test network for capacity measurement.
+        Returns None if creation fails.
+        """
+        try:
+            # Import here to avoid circular imports
+            from ..topologies.small_world import SmallWorldTopology
+            from ..topologies.modular import ModularTopology
+            from ..topologies.hybrid import HybridTopology
+            from ..topologies.fully_connected import FullyConnectedTopology
+            from ..networks.ffn import FeedForwardNetwork
+            from ..networks.rnn import RecurrentNetwork
+            import numpy as np
+            
+            # Network class mapping
+            network_class_map = {
+                'ffn': FeedForwardNetwork,
+                'rnn': RecurrentNetwork
+            }
+            
+            # Create the actual topology
+            topo_map = {
+                'small_world': SmallWorldTopology(
+                    size=size,
+                    k=self.config['small_world_params']['k'],
+                    p=self.config['small_world_params']['p'],
+                    num_layers=num_layers,
+                    inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
+                    seed=42
+                ),
+                'modular': ModularTopology(
+                    size=size,
+                    num_modules=self.config['modular_params']['num_modules'],
+                    inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                    intra_module_prob=self.config['modular_params']['intra_module_prob'],
+                    num_layers=num_layers,
+                    inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                    seed=42
+                ),
+                'hybrid': HybridTopology(
+                    size=size,
+                    num_modules=self.config['modular_params']['num_modules'],
+                    k=self.config['small_world_params']['k'],
+                    p=self.config['small_world_params']['p'],
+                    inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                    num_layers=num_layers,
+                    inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                    seed=42
+                ),
+                'fully_connected': FullyConnectedTopology(
+                    size=size,
+                    num_layers=num_layers,
+                    inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
+                    intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
+                    seed=42
+                )
+            }
+            
+            # Generate graphs
+            graphs = topo_map[topology].generate(num_layers)
+            if num_layers == 1:
+                graphs = [graphs]
+            
+            # Select input/output nodes for each layer (like training does)
+            def select_nodes(graph, strategy, size, seed):
+                rng = np.random.RandomState(seed)
+                all_nodes = list(range(size))
+                rng.shuffle(all_nodes)
+                num_io_nodes = self.config['num_io_nodes']
+                input_nodes = all_nodes[:num_io_nodes]
+                output_nodes = all_nodes[num_io_nodes:2*num_io_nodes]
+                return input_nodes, output_nodes
+            
+            # Create networks for each layer (like training does)
+            networks = []
+            total_params = 0
+            
+            for layer_idx in range(num_layers):
+                input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, 42)
+                
+                network = network_class_map[network_type](
+                    graphs[layer_idx],
+                    input_nodes,
+                    output_nodes,
+                    self.config['network_params'][network_type]
+                )
+                
+                networks.append(network)
+                
+                # Get metrics for this layer
+                metrics = network.get_network_metrics()
+                layer_params = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                total_params += layer_params
+            
+            # Return the first network but with total parameter count
+            # We'll modify the first network's metrics to reflect total capacity
+            first_network = networks[0]
+            
+            # Create a wrapper that returns the total capacity
+            class MultiLayerNetworkWrapper:
+                def __init__(self, network, total_capacity):
+                    self.network = network
+                    self.total_capacity = total_capacity
+                
+                def get_network_metrics(self):
+                    # Return metrics with total capacity
+                    metrics = self.network.get_network_metrics()
+                    # Scale up the parameter counts to reflect total capacity
+                    current_total = sum(
+                        metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                    )
+                    if current_total > 0:
+                        scale_factor = self.total_capacity / current_total
+                        for key in metrics:
+                            if key.startswith('num_'):
+                                metrics[key] = int(metrics[key] * scale_factor)
+                    return metrics
+                
+                def __getattr__(self, name):
+                    return getattr(self.network, name)
+            
+            return MultiLayerNetworkWrapper(first_network, total_params)
+            
+        except Exception as e:
+            return None
+    
+    def _get_reference_capacity(self, reference_topology: str, size: int, network_type: str = 'ffn', num_layers: int = 1, seed: int = 42) -> int:
+        """
+        Get the actual parameter count of the reference topology at the given size.
+        Uses capacity mapper if available, otherwise creates the network directly.
+        """
+        # Use capacity mapper if available
+        if self.use_capacity_mapping and self.capacity_mapper is not None:
+            cap = self.capacity_mapper.get_capacity_at_size(reference_topology, size, network_type, num_layers)
+            if cap is not None:
+                return cap
+        
+        # Fallback to creating the actual network
+        # Import here to avoid circular imports
+        from ..topologies.small_world import SmallWorldTopology
+        from ..topologies.modular import ModularTopology
+        from ..topologies.hybrid import HybridTopology
+        from ..topologies.fully_connected import FullyConnectedTopology
+        from ..networks.ffn import FeedForwardNetwork
+        from ..networks.rnn import RecurrentNetwork
+        import numpy as np
+        
+        # Network class mapping
+        network_class_map = {
+            'ffn': FeedForwardNetwork,
+            'rnn': RecurrentNetwork
+        }
+        
+        # Create the actual reference topology
+        topo_map = {
+            'small_world': SmallWorldTopology(
+                size=size,
+                k=self.config['small_world_params']['k'],
+                p=self.config['small_world_params']['p'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'modular': ModularTopology(
+                size=size,
+                num_modules=self.config['modular_params']['num_modules'],
+                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                intra_module_prob=self.config['modular_params']['intra_module_prob'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'hybrid': HybridTopology(
+                size=size,
+                num_modules=self.config['modular_params']['num_modules'],
+                k=self.config['small_world_params']['k'],
+                p=self.config['small_world_params']['p'],
+                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'fully_connected': FullyConnectedTopology(
+                size=size,
+                num_layers=num_layers,
+                inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
+                intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
+                seed=seed
+            )
+        }
+        
+        # Generate graphs
+        graphs = topo_map[reference_topology].generate(num_layers)
+        if num_layers == 1:
+            graphs = [graphs]
+        
+        # Select input/output nodes for each layer
+        def select_nodes(graph, strategy, size, seed):
+            rng = np.random.RandomState(seed)
+            all_nodes = list(range(size))
+            rng.shuffle(all_nodes)
+            num_io_nodes = self.config['num_io_nodes']
+            input_nodes = all_nodes[:num_io_nodes]
+            output_nodes = all_nodes[num_io_nodes:2*num_io_nodes]
+            return input_nodes, output_nodes
+        
+        # Create networks for each layer and sum their parameters
+        total_capacity = 0
+        
+        for layer_idx in range(num_layers):
+            input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, seed)
+            
+            # Create network for this layer
+            network_class = network_class_map[network_type]
+            network_params = self.config['network_params'][network_type]
+            
+            try:
+                network = network_class(graphs[layer_idx], input_nodes, output_nodes, network_params)
+                metrics = network.get_network_metrics()
+                # Count actual parameters for this layer
+                layer_capacity = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                total_capacity += layer_capacity
+            except Exception as e:
+                print(f"Warning: Could not get actual reference capacity for {reference_topology} layer {layer_idx}: {e}")
+                # Fallback to calculated capacity for this layer
+                layer_capacity = self._calculate_topology_parameters(reference_topology, size) // num_layers
+                total_capacity += layer_capacity
+        
+        return total_capacity
+    
+    def _compute_budget(self, experiment_type: str, topology: str, size: int, network_type: str = None, num_layers: int = None) -> int:
         """Compute the parameter budget for a specific experiment type, topology, and size."""
         if experiment_type == 'same_size':
-            # For same_size, use the base budget scaled by size
-            base_budget = self.config['parameter_budget']['target_budget']
-            scale_factor = size / self.base_size
-            return int(base_budget * scale_factor)
-        
-        # For capacity matching experiments
-        num_layers = self.config.get('num_layers', [1])[0]
-        
-        if experiment_type == 'match_fully_connected':
-            # Calculate fully connected network parameters including biases
-            # Input layer parameters
-            target_capacity = size * size  # Input to hidden weights
-            target_capacity += size  # Input layer biases
-            # Hidden layers parameters
-            for _ in range(num_layers - 1):
-                target_capacity += size * size  # Hidden to hidden weights
-                target_capacity += size  # Hidden layer biases
-            # Output layer parameters
-            target_capacity += size * size  # Hidden to output weights
-            target_capacity += size  # Output layer biases
+            # For same_size, we don't enforce a specific budget - just use the actual capacity
+            # that this topology naturally has at this size
+            if network_type is None:
+                network_type = self.config['network_types'][0] if self.config['network_types'] else 'ffn'
+            if num_layers is None:
+                num_layers = self.config['num_layers'][0] if self.config['num_layers'] else 1
             
-        elif experiment_type == 'match_small_world':
-            # Calculate small world network parameters
-            k = max(2, size // 10)  # Number of local connections
-            # Input layer parameters
-            target_capacity = size * k  # Input to hidden weights
-            target_capacity += k  # Input layer biases
-            # Hidden layers parameters
-            for _ in range(num_layers - 1):
-                target_capacity += k * k  # Hidden to hidden weights
-                target_capacity += k  # Hidden layer biases
-            # Output layer parameters
-            target_capacity += k * size  # Hidden to output weights
-            target_capacity += size  # Output layer biases
-            
-        elif experiment_type == 'match_modular':
-            # Calculate modular network parameters
-            num_modules = max(2, size // 20)  # Number of modules
-            module_size = size // num_modules
-            # Input layer parameters
-            target_capacity = size * module_size  # Input to first module
-            target_capacity += module_size  # Input layer biases
-            # Hidden layers parameters
-            for _ in range(num_layers - 1):
-                target_capacity += module_size * module_size  # Module to module
-                target_capacity += module_size  # Module biases
-            # Output layer parameters
-            target_capacity += module_size * size  # Module to output
-            target_capacity += size  # Output layer biases
-            
-        elif experiment_type == 'match_hybrid':
-            # Calculate hybrid network parameters
-            k = max(2, size // 10)  # Number of local connections
-            num_modules = max(2, size // 20)  # Number of modules
-            module_size = size // num_modules
-            # Input layer parameters
-            target_capacity = size * k  # Input to local
-            target_capacity += k  # Local biases
-            # Hidden layers parameters
-            for _ in range(num_layers - 1):
-                target_capacity += k * module_size  # Local to module
-                target_capacity += module_size  # Module biases
-            # Output layer parameters
-            target_capacity += module_size * size  # Module to output
-            target_capacity += size  # Output layer biases
-            
-        else:
-            # Get target topology from experiment type
-            target = '_'.join(experiment_type.split('_')[1:])
-            target_capacity = self.base_capacities[target]
-            # Scale the target capacity by the ratio of current size to base size
-            scale_factor = size / self.base_size
-            target_capacity = int(target_capacity * scale_factor)
+            # Get the actual parameter count for this topology at this size
+            actual_capacity = self._get_reference_capacity(topology, size, network_type, num_layers)
+            return actual_capacity
         
-        # Use the fine-tuned SCALING_TABLE for scaling
-        if topology in SCALING_TABLE and experiment_type in SCALING_TABLE[topology]:
-            size_bin = get_closest_bin(size)
-            scale = SCALING_TABLE[topology][experiment_type].get(size_bin, 1.0)
-            return int(target_capacity * scale)
-        
-        return target_capacity
-    
-    def create_network(self, topology: str, size: int, experiment_type: str) -> torch.nn.Module:
-        """Create a network with the specified topology and size, respecting the experiment type's budget."""
-        # Get target capacity
-        target_capacity = self.get_budget(experiment_type, topology, size)
-        
-        # Create base network to measure initial capacity
-        if topology == 'small_world':
-            base_network = self._create_sample_small_world(size)
-        elif topology == 'modular':
-            base_network = self._create_sample_modular(size)
-        elif topology == 'hybrid':
-            base_network = self._create_sample_hybrid(size)
-        elif topology == 'fully_connected':
-            base_network = self._create_sample_fully_connected(size, target_capacity)
-        else:
-            raise ValueError(f"Unknown topology: {topology}")
-        
-        # Count initial parameters
-        initial_capacity = self._count_parameters(base_network)
-        
-        # Calculate scaling factor based on topology and experiment type
+        # For capacity matching experiments, get actual reference capacity
         if experiment_type.startswith('match_'):
-            # For capacity matching, use topology-specific scaling
-            if topology == 'fully_connected':
-                # Reduce base scaling for fully connected
-                scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5 * 0.7  # Added 0.7 factor
-            elif topology == 'small_world':
-                # Keep current small_world scaling as it works well for smaller networks
-                multiplier = 1.2 + 5.0 * (target_capacity / (target_capacity + 1000))
-                scale_factor = target_capacity / (0.30 * size**1.92 * multiplier)
-            elif topology == 'modular':
-                # Reduce base scaling for modular
-                num_modules = max(2, size // 20)  # Number of modules
-                module_size = size // num_modules
-                scale_factor = target_capacity / (2.05 * (size * module_size)) * 0.8  # Added 0.8 factor
-            elif topology == 'hybrid':
-                # Reduce base scaling for hybrid
-                multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
-                scale_factor = target_capacity / (11.03 * size**1.25 * multiplier) * 0.75  # Added 0.75 factor
-        else:
-            # For same size, use topology-specific scaling
-            if topology == 'fully_connected':
-                scale_factor = (target_capacity / (2.05 * (size * size))) ** 0.5 * 0.7
-            elif topology == 'small_world':
-                multiplier = 1.2 + 5.0 * (target_capacity / (target_capacity + 1000))
-                scale_factor = target_capacity / (0.30 * size**1.92 * multiplier)
-            elif topology == 'modular':
-                num_modules = max(2, size // 20)
-                module_size = size // num_modules
-                scale_factor = target_capacity / (2.05 * (size * module_size)) * 0.8
-            elif topology == 'hybrid':
-                multiplier = 1.1 + 0.25 * (target_capacity / (target_capacity + 3000))
-                scale_factor = target_capacity / (11.03 * size**1.25 * multiplier) * 0.75
+            # Extract reference topology from experiment type
+            reference_topology = experiment_type[len('match_'):]
+            
+            # Use provided network type and layer count, or defaults from config
+            if network_type is None:
+                network_type = self.config['network_types'][0] if self.config['network_types'] else 'ffn'
+            if num_layers is None:
+                num_layers = self.config['num_layers'][0] if self.config['num_layers'] else 1
+            
+            target_capacity = self._get_reference_capacity(
+                reference_topology, size, network_type, num_layers
+            )
+            
+            return target_capacity
         
-        # Scale network size while preserving topology
-        scaled_size = max(1, int(size * scale_factor))
-        
-        # Create network with scaled size
-        if topology == 'small_world':
-            network = self._create_sample_small_world(scaled_size, target_capacity)
-        elif topology == 'modular':
-            network = self._create_sample_modular(scaled_size, target_capacity)
-        elif topology == 'hybrid':
-            network = self._create_sample_hybrid(scaled_size, target_capacity)
-        elif topology == 'fully_connected':
-            network = self._create_sample_fully_connected(scaled_size, target_capacity)
-        
-        # Verify final parameter count
-        final_capacity = self._count_parameters(network)
-        print(f"\nCreating {topology} network for {experiment_type}:")
-        print(f"Initial size: {size}, Scaled size: {scaled_size}")
-        print(f"Initial capacity: {initial_capacity}")
-        print(f"Target capacity: {target_capacity}")
-        print(f"Final capacity: {final_capacity}")
-        print(f"Capacity match: {abs(final_capacity - target_capacity) <= 1}\n")
-        
-        return network
-    
-    def _create_sample_fully_connected(self, size: int, target_capacity: int = None) -> torch.nn.Module:
-        """Create a sample fully connected network with parameter count matching the target."""
-        # If target_capacity is not provided, use the default formula
-        if target_capacity is None:
-            # For fully connected: 2 * (size * size + size) parameters
-            target_capacity = 2 * (size * size + size)
-        # Solve n^2 + n - (T/2) = 0
-        n = int((-1 + np.sqrt(1 + 2 * target_capacity)) // 2)
-        network = torch.nn.Sequential(
-            torch.nn.Linear(n, n),
-            torch.nn.ReLU(),
-            torch.nn.Linear(n, n)
-        )
-        return network
-    
-    def _create_sample_small_world(self, size: int, target_capacity: int = None) -> torch.nn.Module:
-        """Create a sample small world network with parameter count matching the target."""
-        if target_capacity is None:
-            # Default: k = max(2, size // 10)
-            k = max(2, size // 10)
         else:
-            # Solve for k: T = 2sk + k + s => k = (T - s) / (2s + 1)
-            k = int(max(2, (target_capacity - size) / (2 * size + 1)))
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, k),
-            torch.nn.ReLU(),
-            torch.nn.Linear(k, size)
-        )
-        return network
+            # Fallback: use base capacity scaled by size
+            target_capacity = self.base_capacities[topology]
+            scale_factor = size / self.base_size
+            return int(target_capacity * scale_factor)
     
-    def _create_sample_modular(self, size: int, target_capacity: int = None) -> torch.nn.Module:
-        """Create a sample modular network with parameter count matching the target."""
-        if target_capacity is None:
-            # Default: module_size = size // 2
-            module_size = size // 2
-        else:
-            # Solve for module_size: T = 2sm + m + s => m = (T - s) / (2s + 1)
-            module_size = int(max(2, (target_capacity - size) / (2 * size + 1)))
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, module_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(module_size, size)
-        )
-        return network
+    def create_network(self, topology: str, size: int, experiment_type: str, network_type: str = 'ffn', num_layers: int = 1, seed: int = 42) -> torch.nn.Module:
+        """Create a network with the specified topology and size, using the same logic as training."""
+        # Import here to avoid circular imports
+        from ..topologies.small_world import SmallWorldTopology
+        from ..topologies.modular import ModularTopology
+        from ..topologies.hybrid import HybridTopology
+        from ..topologies.fully_connected import FullyConnectedTopology
+        from ..networks.ffn import FeedForwardNetwork
+        from ..networks.rnn import RecurrentNetwork
+        import numpy as np
+        
+        # For match_* experiments, use pre-calculated matching size
+        if experiment_type.startswith('match_'):
+            # Pass the original size to get_matching_size, not the matching size
+            matching_size = self.get_matching_size(experiment_type, topology, size, network_type, num_layers)
+            # Use the matching size for network creation
+            size = matching_size
+        
+        # Network class mapping
+        network_class_map = {
+            'ffn': FeedForwardNetwork,
+            'rnn': RecurrentNetwork
+        }
+        
+        # Create the actual topology
+        topo_map = {
+            'small_world': SmallWorldTopology(
+                size=size,
+                k=self.config['small_world_params']['k'],
+                p=self.config['small_world_params']['p'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'modular': ModularTopology(
+                size=size,
+                num_modules=self.config['modular_params']['num_modules'],
+                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                intra_module_prob=self.config['modular_params']['intra_module_prob'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'hybrid': HybridTopology(
+                size=size,
+                num_modules=self.config['modular_params']['num_modules'],
+                k=self.config['small_world_params']['k'],
+                p=self.config['small_world_params']['p'],
+                inter_module_prob=self.config['modular_params']['inter_module_prob'],
+                num_layers=num_layers,
+                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
+                seed=seed
+            ),
+            'fully_connected': FullyConnectedTopology(
+                size=size,
+                num_layers=num_layers,
+                inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
+                intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
+                seed=seed
+            )
+        }
+        
+        # Generate graphs
+        graphs = topo_map[topology].generate(num_layers)
+        if num_layers == 1:
+            graphs = [graphs]
+        
+        # Select input/output nodes for each layer
+        def select_nodes(graph, strategy, size, seed):
+            rng = np.random.RandomState(seed)
+            all_nodes = list(range(size))
+            rng.shuffle(all_nodes)
+            num_io_nodes = self.config['num_io_nodes']
+            input_nodes = all_nodes[:num_io_nodes]
+            output_nodes = all_nodes[num_io_nodes:2*num_io_nodes]
+            return input_nodes, output_nodes
+        
+        # Create networks for each layer
+        networks = []
+        total_params = 0
+        
+        for layer_idx in range(num_layers):
+            input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, seed)
+            
+            # Create network for this layer
+            network_class = network_class_map[network_type]
+            network_params = self.config['network_params'][network_type]
+            
+            try:
+                network = network_class(graphs[layer_idx], input_nodes, output_nodes, network_params)
+                networks.append(network)
+                
+                # Get metrics for this layer
+                metrics = network.get_network_metrics()
+                layer_params = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                total_params += layer_params
+                
+            except Exception as e:
+                print(f"Error creating network for {topology} layer {layer_idx}: {e}")
+                raise
+        
+        # For single layer, return the network directly
+        if num_layers == 1:
+            return networks[0]
+        
+        # For multi-layer, return a wrapper that represents the total capacity
+        first_network = networks[0]
+        
+        # Create a wrapper that returns the total capacity
+        class MultiLayerNetworkWrapper:
+            def __init__(self, network, total_capacity):
+                self.network = network
+                self.total_capacity = total_capacity
+            
+            def get_network_metrics(self):
+                # Return metrics with total capacity
+                metrics = self.network.get_network_metrics()
+                # Scale up the parameter counts to reflect total capacity
+                current_total = sum(
+                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                )
+                if current_total > 0:
+                    scale_factor = self.total_capacity / current_total
+                    for key in metrics:
+                        if key.startswith('num_'):
+                            metrics[key] = int(metrics[key] * scale_factor)
+                return metrics
+            
+            def __getattr__(self, name):
+                return getattr(self.network, name)
+        
+        return MultiLayerNetworkWrapper(first_network, total_params)
     
-    def _create_sample_hybrid(self, size: int, target_capacity: int = None) -> torch.nn.Module:
-        """Create a sample hybrid network with parameter count matching the target."""
-        if target_capacity is None:
-            # Default: k = max(2, size // 10), module_size = k + 1
-            k = max(2, size // 10)
-            module_size = k + 1
-        else:
-            # Solve for k: k^2 + (2*size + 3)k + (2*size + 1 - T) = 0
-            a = 1
-            b = 2 * size + 3
-            c = 2 * size + 1 - target_capacity
-            k = int(max(2, (-b + np.sqrt(b**2 - 4*a*c)) / (2*a)))
-            module_size = k + 1
-        network = torch.nn.Sequential(
-            torch.nn.Linear(size, k),
-            torch.nn.ReLU(),
-            torch.nn.Linear(k, module_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(module_size, size)
-        )
-        return network
-    
-    def get_budget(self, experiment_type: str, topology: str, size: int) -> int:
+    def get_budget(self, experiment_type: str, topology: str, size: int, network_type: str = None, num_layers: int = None) -> int:
         """Get the budget for a specific configuration."""
-        return self.budgets[experiment_type][topology][size]
+        if experiment_type.startswith('match_') and network_type is not None and num_layers is not None:
+            # For capacity matching experiments with specific network type and layer count
+            budget_info = self.budgets[experiment_type][topology][size][network_type][num_layers]
+            return budget_info['target_capacity']
+        else:
+            # For other experiments or when network_type/num_layers not specified, use the first available
+            if experiment_type.startswith('match_'):
+                network_type = network_type or self.config['network_types'][0]
+                num_layers = num_layers or self.config['num_layers'][0]
+                budget_info = self.budgets[experiment_type][topology][size][network_type][num_layers]
+                return budget_info['target_capacity']
+            else:
+                return self.budgets[experiment_type][topology][size]
+    
+    def get_matching_size(self, experiment_type: str, topology: str, size: int, network_type: str = None, num_layers: int = None) -> int:
+        """Get the matching size for a specific configuration (only for match_* experiments)."""
+        if not experiment_type.startswith('match_'):
+            return size  # For non-matching experiments, return original size
+        
+        if network_type is None:
+            network_type = self.config['network_types'][0]
+        if num_layers is None:
+            num_layers = self.config['num_layers'][0]
+        
+        # Get target capacity from pre-computed budget
+        budget_info = self.budgets[experiment_type][topology][size][network_type][num_layers]
+        target_capacity = budget_info['target_capacity']
+        
+        # Calculate matching size on-demand using incremental adjustment
+        return self.calculate_matching_size(topology, target_capacity, network_type, num_layers)
     
     def get_budget_stats(self, experiment_type: str, topology: str, size: int) -> Dict[str, Any]:
         """Get statistics about the budget for a specific configuration."""
@@ -312,6 +832,47 @@ class ParameterBudgetCalculator:
     def _count_parameters(self, network: torch.nn.Module) -> int:
         """Count total number of parameters in the network."""
         return sum(p.numel() for p in network.parameters() if p.requires_grad)
+    
+    def calculate_matching_size(self, topology: str, target_capacity: int, network_type: str = 'ffn', num_layers: int = 1) -> int:
+        """
+        Calculate the number of nodes needed for a topology to achieve the target capacity.
+        Uses incremental adjustment to find the right size step by step.
+        """
+        # Use capacity mapper if available
+        if self.use_capacity_mapping and self.capacity_mapper is not None:
+            try:
+                return self.capacity_mapper.find_matching_size(topology, target_capacity, network_type, num_layers)
+            except Exception as e:
+                print(f"[CapacityMapper fallback] {e}")
+                # Fallback to incremental adjustment below
+        
+        # Use incremental adjustment to find the right size
+        return self._find_matching_size_incremental(topology, target_capacity, network_type, num_layers)
+    
+    def _get_minimum_viable_size(self, topology: str) -> int:
+        """Get the minimum viable size for a topology based on its parameters."""
+        if topology == 'small_world':
+            k = self.config['small_world_params']['k']
+            # Small world needs at least k+1 nodes, but allow smaller sizes
+            return max(10, k + 1)  # Reduced from 50 to 10
+            
+        elif topology == 'modular':
+            num_modules = self.config['modular_params']['num_modules']
+            # Modular needs at least num_modules nodes, but allow smaller sizes
+            return max(10, num_modules)  # Reduced from 50 to 10
+            
+        elif topology == 'hybrid':
+            k = self.config['small_world_params']['k']
+            num_modules = self.config['modular_params']['num_modules']
+            # Hybrid needs at least max(k, num_modules) nodes, but allow smaller sizes
+            return max(10, max(k, num_modules))  # Reduced from 50 to 10
+            
+        elif topology == 'fully_connected':
+            # Fully connected can work with smaller sizes
+            return 10  # Reduced from 30 to 10
+            
+        else:
+            return 10  # Default minimum reduced from 50 to 10
 
 @dataclass
 class ParameterBudget:
@@ -550,36 +1111,63 @@ def get_closest_bin(size: int) -> int:
     return min(SIZE_BINS, key=lambda x: abs(x - size))
 
 def calculate_network_size(size: int, topology: str, experiment_type: str, target_capacity: int) -> int:
+    """
+    Calculate the network size needed for a topology to achieve target capacity.
+    Uses empirical models and dynamic scaling for better accuracy.
+    """
     if experiment_type == 'same_size':
         return size
 
-    # Table-driven scaling for all topologies
-    if topology in SCALING_TABLE and experiment_type in SCALING_TABLE[topology]:
-        size_bin = get_closest_bin(size)
-        scale = SCALING_TABLE[topology][experiment_type].get(size_bin, 1.0)
-        # Use the same base formula as before, but multiply by the table scale
-        if topology == 'modular':
-            num_modules = max(2, size // 10)
-            module_size = size // num_modules
-            base = (target_capacity / (2.05 * (size * module_size))) ** 0.5
-            scale_factor = base * scale
-        elif topology == 'hybrid':
-            base = target_capacity / (11.03 * size**1.25)
-            scale_factor = base * scale
-        elif topology == 'small_world':
-            if size >= 100:
-                base = (target_capacity / (0.12 * size**2.1)) ** 0.5
-            elif size >= 50:
-                base = (target_capacity / (0.13 * size**2.1)) ** 0.5
-            else:
-                base = (target_capacity / (0.15 * size**2.1)) ** 0.5
-            scale_factor = base * scale
-        elif topology == 'fully_connected':
-            base = (target_capacity / (2.05 * (size * size))) ** 0.5
-            scale_factor = base * scale
-        return int(size * scale_factor)
+    if topology not in EMPIRICAL_SCALING_MODELS:
+        raise ValueError(f"Unknown topology: {topology}")
 
-    raise ValueError(f"Unknown topology: {topology}")
+    # Get empirical model
+    model = EMPIRICAL_SCALING_MODELS[topology]
+    
+    # Determine capacity range for dynamic scaling
+    capacity_range = get_capacity_range(target_capacity)
+    
+    # Get dynamic multiplier based on capacity range
+    dynamic_multiplier = model['dynamic_multipliers'][capacity_range](target_capacity)
+    
+    # Calculate base size using empirical formula
+    # We need to solve: target_capacity = model['formula'](base_size)
+    # For most models, we can use inverse approximation
+    
+    if topology == 'small_world':
+        # Inverse of 0.30 * size^1.92
+        base_size = int((target_capacity / 0.30) ** (1/1.92))
+    elif topology == 'modular':
+        # For modular, we need to estimate module size first
+        # Approximate: target_capacity ≈ 2.05 * size * (size/num_modules)
+        # Assuming num_modules ≈ size/20
+        base_size = int((target_capacity / 2.05) ** 0.5)
+    elif topology == 'hybrid':
+        # Inverse of 11.03 * size^1.25
+        base_size = int((target_capacity / 11.03) ** (1/1.25))
+    elif topology == 'fully_connected':
+        # Inverse of 2.05 * size^2
+        base_size = int((target_capacity / 2.05) ** 0.5)
+    else:
+        base_size = size
+    
+    # Apply dynamic multiplier
+    scaled_size = int(base_size * dynamic_multiplier)
+    
+    # Ensure minimum viable size
+    min_size = 30
+    scaled_size = max(min_size, scaled_size)
+    
+    return scaled_size
+
+def get_capacity_range(capacity: int) -> str:
+    """Determine capacity range for dynamic scaling."""
+    if capacity < 1000:
+        return 'small'
+    elif capacity < 5000:
+        return 'medium'
+    else:
+        return 'large'
 
 def calculate_divergence(actual: float, target: float) -> float:
     return abs((actual - target) / target) * 100
@@ -624,5 +1212,41 @@ OPTIMIZED_SCALING_TABLE = optimize_scaling_factors()
 
 # Update SCALING_TABLE with optimized values
 SCALING_TABLE.update(OPTIMIZED_SCALING_TABLE)
+
+# Empirical parameter growth models based on actual measurements
+EMPIRICAL_SCALING_MODELS = {
+    'small_world': {
+        'formula': lambda size: int(0.30 * size**1.92),
+        'dynamic_multipliers': {
+            'small': lambda capacity: 0.8 if capacity < 1000 else 0.9,
+            'medium': lambda capacity: 0.9 if capacity < 5000 else 1.0,
+            'large': lambda capacity: 1.0 if capacity < 10000 else 1.1
+        }
+    },
+    'modular': {
+        'formula': lambda size: int(2.05 * size * (size // max(2, size // 20))),
+        'dynamic_multipliers': {
+            'small': lambda capacity: 0.85 if capacity < 1000 else 0.95,
+            'medium': lambda capacity: 0.95 if capacity < 5000 else 1.0,
+            'large': lambda capacity: 1.0 if capacity < 10000 else 1.05
+        }
+    },
+    'hybrid': {
+        'formula': lambda size: int(11.03 * size**1.25),
+        'dynamic_multipliers': {
+            'small': lambda capacity: 0.75 if capacity < 1000 else 0.85,
+            'medium': lambda capacity: 0.85 if capacity < 5000 else 0.95,
+            'large': lambda capacity: 0.95 if capacity < 10000 else 1.0
+        }
+    },
+    'fully_connected': {
+        'formula': lambda size: int(2.05 * size**2),
+        'dynamic_multipliers': {
+            'small': lambda capacity: 1.0,
+            'medium': lambda capacity: 1.0,
+            'large': lambda capacity: 1.0
+        }
+    }
+}
 
 # ... existing code ... 

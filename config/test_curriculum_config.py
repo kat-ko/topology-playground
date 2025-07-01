@@ -4,19 +4,19 @@ from .curriculum_config import CurriculumConfig
 
 @dataclass
 class TestCurriculumConfig(CurriculumConfig):
-    """Configuration for curriculum learning test experiments."""
+    """Configuration for curriculum learning test experiments - focused on problematic cases."""
     
-    # Reduced network sizes for testing
-    network_sizes: List[int] = field(default_factory=lambda: [50])
+    # Focus on the sizes that showed large divergences
+    network_sizes: List[int] = field(default_factory=lambda: [25, 50, 100])
     
-    # Single seed for testing
-    seeds: List[int] = field(default_factory=lambda: [42])
+    # Use the same seeds as main curriculum
+    seeds: List[int] = field(default_factory=lambda: [42, 123, 456])
     
-    # Test with single layer only
-    num_layers: List[int] = field(default_factory=lambda: [1])
+    # Focus on the layer counts that showed issues
+    num_layers: List[int] = field(default_factory=lambda: [1, 2, 3])
     
-    # Test with one network type
-    network_types: List[str] = field(default_factory=lambda: ['rnn', 'ffn'])
+    # Test both network types that showed problems
+    network_types: List[str] = field(default_factory=lambda: ['ffn', 'rnn'])
     
     # Include all tasks for curriculum testing
     task_sequence: List[str] = field(default_factory=lambda: [
@@ -25,28 +25,35 @@ class TestCurriculumConfig(CurriculumConfig):
         'acrobot'
     ])
     
-    # Reduced training parameters
-    episodes_per_task: int = 200
-    evaluation_episodes: int = 20
-    max_env_steps_per_task: int = 20000
+    # Reduced training parameters for faster testing
+    episodes_per_task: int = 50  # Very small for debugging
+    evaluation_episodes: int = 10
+    max_env_steps_per_task: int = 5000
     
-    # Reduced node selection strategies
-    node_selection_strategies: List[str] = field(default_factory=lambda: ['random'])
+    # Test all node selection strategies to see if issue is consistent
+    node_selection_strategies: List[str] = field(default_factory=lambda: [
+        'random',
+        'centrality_based', 
+        'distance_based',
+        'module_based'
+    ])
     
-    # Reduced experiment types
+    # Focus on the experiment types that showed large divergences
     experiment_types: List[str] = field(default_factory=lambda: [
-        'same_size',
-        'match_small_world',
+        'match_fully_connected',  # This showed 100%+ divergences
+        'match_small_world',      # This showed 40-200% divergences
+        'match_modular',          # This showed 90-200% divergences
+        'match_hybrid'            # This showed 90-200% divergences
     ])
     
     # Include transfer learning tasks for testing
     backward_transfer_tasks: List[str] = field(default_factory=lambda: ['cartpole'])
     forward_transfer_tasks: List[str] = field(default_factory=lambda: ['mountain_car', 'acrobot'])
     
-    # Reduced retention testing
+    # Minimal retention testing for debugging
     forgetting_test: Dict[str, Any] = field(default_factory=lambda: {
-        'retention_interval': 5,
-        'retention_episodes': 5,
+        'retention_interval': 2,
+        'retention_episodes': 2,
         'forgetting_threshold': 0.8,
         'retention_threshold': 0.9
     })
@@ -56,17 +63,18 @@ class TestCurriculumConfig(CurriculumConfig):
     
     def __post_init__(self):
         super().__post_init__()
-        
-        # Override with test values
-        self.network_sizes = [50]  # Single size for testing
-        self.seeds = [42]  # Single seed
-        self.num_layers = [1]  # Single layer
-        self.network_types = ['rnn', 'ffn']  # Single network type
-        self.node_selection_strategies = ['random']  # Single strategy
+
+        self.network_sizes = [25,100]  
+        self.seeds = [42] 
+        self.num_layers = [2,3]  
+        self.network_types = ['ffn', 'rnn']  
+        self.node_selection_strategies = [
+            'random',
+            ] 
         self.experiment_types = [
-            'same_size',
+            'match_fully_connected',
             'match_small_world',
-        ]
+        ]  
         
         # Mark as test run
         self.is_test_run = True
@@ -92,5 +100,6 @@ class TestCurriculumConfig(CurriculumConfig):
             'modular_params': self.modular_params,
             'node_selection_strategies': self.node_selection_strategies,
             'num_io_nodes': self.num_io_nodes,
-            'rl_params': self.rl_params
+            'rl_params': self.rl_params,
+            'use_capacity_mapping': False  # Temporarily disable for testing
         } 

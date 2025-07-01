@@ -1,0 +1,290 @@
+{
+  "small_world_100_ffn_1": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 1,
+    "actual_capacity": 297,
+    "measurement_time": "2025-07-01T11:53:28.209601",
+    "seed": 42
+  },
+  "small_world_100_ffn_2": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 2,
+    "actual_capacity": 593,
+    "measurement_time": "2025-07-01T11:53:28.265575",
+    "seed": 42
+  },
+  "small_world_100_ffn_3": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 3,
+    "actual_capacity": 889,
+    "measurement_time": "2025-07-01T11:53:28.360931",
+    "seed": 42
+  },
+  "small_world_100_ffn_4": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 4,
+    "actual_capacity": 1185,
+    "measurement_time": "2025-07-01T11:53:28.655659",
+    "seed": 42
+  },
+  "small_world_100_rnn_1": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 1,
+    "actual_capacity": 3694,
+    "measurement_time": "2025-07-01T11:53:28.669903",
+    "seed": 42
+  },
+  "small_world_100_rnn_2": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 2,
+    "actual_capacity": 7386,
+    "measurement_time": "2025-07-01T11:53:28.714249",
+    "seed": 42
+  },
+  "small_world_100_rnn_3": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 3,
+    "actual_capacity": 11078,
+    "measurement_time": "2025-07-01T11:53:28.796662",
+    "seed": 42
+  },
+  "small_world_100_rnn_4": {
+    "topology": "small_world",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 4,
+    "actual_capacity": 14770,
+    "measurement_time": "2025-07-01T11:53:28.959856",
+    "seed": 42
+  },
+  "modular_100_ffn_1": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 1,
+    "actual_capacity": 864,
+    "measurement_time": "2025-07-01T11:53:28.985261",
+    "seed": 42
+  },
+  "modular_100_ffn_2": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 2,
+    "actual_capacity": 1702,
+    "measurement_time": "2025-07-01T11:53:29.041970",
+    "seed": 42
+  },
+  "modular_100_ffn_3": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 3,
+    "actual_capacity": 2519,
+    "measurement_time": "2025-07-01T11:53:29.164400",
+    "seed": 42
+  },
+  "modular_100_ffn_4": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 4,
+    "actual_capacity": 3348,
+    "measurement_time": "2025-07-01T11:53:29.347189",
+    "seed": 42
+  },
+  "modular_100_rnn_1": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 1,
+    "actual_capacity": 4828,
+    "measurement_time": "2025-07-01T11:53:29.376369",
+    "seed": 42
+  },
+  "modular_100_rnn_2": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 2,
+    "actual_capacity": 9604,
+    "measurement_time": "2025-07-01T11:53:29.451964",
+    "seed": 42
+  },
+  "modular_100_rnn_3": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 3,
+    "actual_capacity": 14338,
+    "measurement_time": "2025-07-01T11:53:29.584642",
+    "seed": 42
+  },
+  "modular_100_rnn_4": {
+    "topology": "modular",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 4,
+    "actual_capacity": 19096,
+    "measurement_time": "2025-07-01T11:53:29.798908",
+    "seed": 42
+  },
+  "hybrid_100_ffn_1": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 1,
+    "actual_capacity": 659,
+    "measurement_time": "2025-07-01T11:53:29.829430",
+    "seed": 42
+  },
+  "hybrid_100_ffn_2": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 2,
+    "actual_capacity": 1333,
+    "measurement_time": "2025-07-01T11:53:29.907318",
+    "seed": 42
+  },
+  "hybrid_100_ffn_3": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 3,
+    "actual_capacity": 1979,
+    "measurement_time": "2025-07-01T11:53:30.030600",
+    "seed": 42
+  },
+  "hybrid_100_ffn_4": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 4,
+    "actual_capacity": 2659,
+    "measurement_time": "2025-07-01T11:53:30.221886",
+    "seed": 42
+  },
+  "hybrid_100_rnn_1": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 1,
+    "actual_capacity": 4418,
+    "measurement_time": "2025-07-01T11:53:30.248122",
+    "seed": 42
+  },
+  "hybrid_100_rnn_2": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 2,
+    "actual_capacity": 8866,
+    "measurement_time": "2025-07-01T11:53:30.328237",
+    "seed": 42
+  },
+  "hybrid_100_rnn_3": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 3,
+    "actual_capacity": 13258,
+    "measurement_time": "2025-07-01T11:53:30.448967",
+    "seed": 42
+  },
+  "hybrid_100_rnn_4": {
+    "topology": "hybrid",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 4,
+    "actual_capacity": 17718,
+    "measurement_time": "2025-07-01T11:53:30.649193",
+    "seed": 42
+  },
+  "fully_connected_100_ffn_1": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 1,
+    "actual_capacity": 5030,
+    "measurement_time": "2025-07-01T11:53:30.706746",
+    "seed": 42
+  },
+  "fully_connected_100_ffn_2": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 2,
+    "actual_capacity": 10060,
+    "measurement_time": "2025-07-01T11:53:30.853834",
+    "seed": 42
+  },
+  "fully_connected_100_ffn_3": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 3,
+    "actual_capacity": 15090,
+    "measurement_time": "2025-07-01T11:53:31.067441",
+    "seed": 42
+  },
+  "fully_connected_100_ffn_4": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "ffn",
+    "num_layers": 4,
+    "actual_capacity": 20120,
+    "measurement_time": "2025-07-01T11:53:31.335102",
+    "seed": 42
+  },
+  "fully_connected_100_rnn_1": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 1,
+    "actual_capacity": 13160,
+    "measurement_time": "2025-07-01T11:53:31.409306",
+    "seed": 42
+  },
+  "fully_connected_100_rnn_2": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 2,
+    "actual_capacity": 26320,
+    "measurement_time": "2025-07-01T11:53:31.566919",
+    "seed": 42
+  },
+  "fully_connected_100_rnn_3": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 3,
+    "actual_capacity": 39480,
+    "measurement_time": "2025-07-01T11:53:31.846294",
+    "seed": 42
+  },
+  "fully_connected_100_rnn_4": {
+    "topology": "fully_connected",
+    "size": 100,
+    "network_type": "rnn",
+    "num_layers": 4,
+    "actual_capacity": 52640,
+    "measurement_time": "2025-07-01T11:53:32.318246",
+    "seed": 42
+  }
+}

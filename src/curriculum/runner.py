@@ -87,15 +87,50 @@ class CurriculumRunner:
                 for seed in tqdm(self.config['seeds'], desc="Seeds", leave=False):
                     for num_layers in tqdm(self.config['num_layers'], desc="Number of layers", leave=False):
                         for network_type in tqdm(self.config['network_types'], desc="Network types", leave=False):
-                            # --- Capacity-matching scaling logic ---
-                            sw_target_capacity = calculator.get_budget(experiment_type, 'small_world', size)
-                            sw_size = calculate_network_size(size, 'small_world', experiment_type, sw_target_capacity)
-                            mod_target_capacity = calculator.get_budget(experiment_type, 'modular', size)
-                            mod_size = calculate_network_size(size, 'modular', experiment_type, mod_target_capacity)
-                            hybrid_target_capacity = calculator.get_budget(experiment_type, 'hybrid', size)
-                            hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, hybrid_target_capacity)
-                            fc_target_capacity = calculator.get_budget(experiment_type, 'fully_connected', size)
-                            fc_size = calculate_network_size(size, 'fully_connected', experiment_type, fc_target_capacity)
+                            # --- Correct Capacity-matching scaling logic ---
+                            # Determine reference topology and target capacity
+                            if experiment_type.startswith('match_'):
+                                # Extract reference topology from experiment type (e.g., 'small_world' from 'match_small_world')
+                                reference_topology = experiment_type[len('match_'):]
+                                # Calculate NATURAL capacity of reference topology (not scaled)
+                                # Scale the base capacity by the ratio of current size to base size
+                                base_capacity = calculator.base_capacities[reference_topology]
+                                scale_factor = size / calculator.base_size
+                                target_capacity = int(base_capacity * scale_factor)
+                            else:  # 'same_size'
+                                # For same_size, use the base budget scaled by size
+                                target_capacity = calculator.get_budget(experiment_type, 'small_world', size)
+                            
+                            # Scale all topologies to match the target capacity
+                            # BUT keep reference topology at natural size for match_* experiments
+                            if experiment_type.startswith('match_'):
+                                # Reference topology keeps natural size
+                                if reference_topology == 'small_world':
+                                    sw_size = size  # No scaling
+                                else:
+                                    sw_size = calculate_network_size(size, 'small_world', experiment_type, target_capacity)
+                                
+                                if reference_topology == 'modular':
+                                    mod_size = size  # No scaling
+                                else:
+                                    mod_size = calculate_network_size(size, 'modular', experiment_type, target_capacity)
+                                
+                                if reference_topology == 'hybrid':
+                                    hybrid_size = size  # No scaling
+                                else:
+                                    hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, target_capacity)
+                                
+                                if reference_topology == 'fully_connected':
+                                    fc_size = size  # No scaling
+                                else:
+                                    fc_size = calculate_network_size(size, 'fully_connected', experiment_type, target_capacity)
+                            else:  # 'same_size'
+                                # For same_size, scale all topologies
+                                sw_size = calculate_network_size(size, 'small_world', experiment_type, target_capacity)
+                                mod_size = calculate_network_size(size, 'modular', experiment_type, target_capacity)
+                                hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, target_capacity)
+                                fc_size = calculate_network_size(size, 'fully_connected', experiment_type, target_capacity)
+                            
                             # --- Instantiate topologies with scaled sizes ---
                             small_world = SmallWorldTopology(
                                 size=sw_size,
@@ -156,19 +191,19 @@ class CurriculumRunner:
                                 fc_input_nodes = []
                                 fc_output_nodes = []
                                 
-                                # Select nodes for each layer
+                                # Select nodes for each layer using scaled sizes
                                 for layer_idx in range(num_layers):
                                     sw_input, sw_output = self._select_nodes(
-                                        sw_graphs[layer_idx], strategy, size, seed
+                                        sw_graphs[layer_idx], strategy, sw_size, seed
                                     )
                                     mod_input, mod_output = self._select_nodes(
-                                        mod_graphs[layer_idx], strategy, size, seed
+                                        mod_graphs[layer_idx], strategy, mod_size, seed
                                     )
                                     hybrid_input, hybrid_output = self._select_nodes(
-                                        hybrid_graphs[layer_idx], strategy, size, seed
+                                        hybrid_graphs[layer_idx], strategy, hybrid_size, seed
                                     )
                                     fc_input, fc_output = self._select_nodes(
-                                        fc_graphs[layer_idx], strategy, size, seed
+                                        fc_graphs[layer_idx], strategy, fc_size, seed
                                     )
                                     
                                     sw_input_nodes.append(sw_input)
@@ -219,28 +254,47 @@ class CurriculumRunner:
                                         network_params
                                     ))
                                 
+                                # Verify capacity matching for debugging
+                                if layer_idx == 0:  # Only check first layer to avoid spam
+                                    print(f"\nCapacity verification for {experiment_type} (size {size}):")
+                                    print(f"Target capacity: {target_capacity}")
+                                    for topology_name, networks_list, actual_size in [
+                                        ('small_world', sw_networks, sw_size),
+                                        ('modular', mod_networks, mod_size),
+                                        ('hybrid', hybrid_networks, hybrid_size),
+                                        ('fully_connected', fc_networks, fc_size)
+                                    ]:
+                                        if networks_list:
+                                            network = networks_list[0]
+                                            metrics = network.get_network_metrics()
+                                            total_params = (metrics.get('num_input_weights', 0) + 
+                                                          metrics.get('num_recurrent_weights', 0) + 
+                                                          metrics.get('num_hidden_weights', 0) + 
+                                                          metrics.get('num_biases', 0))
+                                            print(f"  {topology_name}: size={actual_size}, params={total_params}")
+                                
                                 # Run task sequence
                                 task_results = self._run_task_sequence(
                                     sw_networks, sw_input_nodes, sw_output_nodes,
-                                    size, seed, strategy, 'small_world', network_type, num_layers
+                                    sw_size, seed, strategy, 'small_world', network_type, num_layers
                                 )
                                 results.append(task_results)
                                 
                                 task_results = self._run_task_sequence(
                                     mod_networks, mod_input_nodes, mod_output_nodes,
-                                    size, seed, strategy, 'modular', network_type, num_layers
+                                    mod_size, seed, strategy, 'modular', network_type, num_layers
                                 )
                                 results.append(task_results)
                                 
                                 task_results = self._run_task_sequence(
                                     hybrid_networks, hybrid_input_nodes, hybrid_output_nodes,
-                                    size, seed, strategy, 'hybrid', network_type, num_layers
+                                    hybrid_size, seed, strategy, 'hybrid', network_type, num_layers
                                 )
                                 results.append(task_results)
                                 
                                 task_results = self._run_task_sequence(
                                     fc_networks, fc_input_nodes, fc_output_nodes,
-                                    size, seed, strategy, 'fully_connected', network_type, num_layers
+                                    fc_size, seed, strategy, 'fully_connected', network_type, num_layers
                                 )
                                 results.append(task_results)
         

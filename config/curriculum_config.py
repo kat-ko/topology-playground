@@ -8,7 +8,6 @@ class CurriculumConfig:
     
     # Experiment types
     experiment_types: List[str] = field(default_factory=lambda: [
-        'same_size',  # All topologies with same node size
         'match_hybrid',  # All topologies matched to hybrid capacity
         'match_small_world',  # All topologies matched to small world capacity
         'match_modular',  # All topologies matched to modular capacity
