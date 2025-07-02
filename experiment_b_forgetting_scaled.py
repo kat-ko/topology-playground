@@ -27,43 +27,63 @@ from src.curriculum.enhanced_runner import EnhancedCurriculumRunner
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 
+# GPU Support: Initialize device manager early
+try:
+    from src.utils.device_manager import get_device_manager, get_device_info
+    DEVICE_MANAGER = get_device_manager()
+    DEVICE_INFO = get_device_info()
+    GPU_SUPPORT_ENABLED = True
+except ImportError as e:
+    print(f"Warning: GPU support not available: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+except Exception as e:
+    print(f"Warning: Failed to initialize GPU support: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+
 class ExperimentBScaledConfig:
     """Configuration for Experiment B Scaled: Forgetting Baseline with larger networks."""
     
     def __init__(self):
-        # Core experiment settings - OPTIMIZED FOR SPEED & LEARNING
-        self.network_sizes = [150, 300]  # Increased for better learning capacity
+        # Core experiment settings - DRAMATICALLY SCALED UP FOR MEANINGFUL LEARNING
+        self.network_sizes = [1000, 2000]  # Increased 10x from [150, 300] for meaningful capacity
         self.num_layers = [1]
         self.network_types = ['ffn']
         self.experiment_types = ['match_small_world']
-        self.task_sequence = ['acrobot', 'mountain_car']  # Changed to available tasks
+        self.task_sequence = ['acrobot', 'mountain_car']  # Keep available tasks
         self.seeds = [42]
         self.node_selection_strategies = ['random']
         
-        # Training parameters - OPTIMIZED FOR SPEED
-        self.episodes_per_task = 150  # Reduced from 500 for speed
-        self.evaluation_episodes = 10  # Reduced for speed
-        self.max_env_steps_per_task = 500  # Reduced from 10000 for speed
+        # Training parameters - DRAMATICALLY INCREASED FOR LEARNING
+        self.episodes_per_task = 1000  # Increased 5x from 150 for convergence
+        self.evaluation_episodes = 50  # Increased for better evaluation
+        self.max_env_steps = 1000  # Increased from 500 for more exploration
+        self.learning_rate = 0.001
+        self.batch_size = 64  # Increased for better training
         
-        # Transfer learning (minimal for forgetting baseline)
-        self.backward_transfer_tasks = []
-        self.forward_transfer_tasks = []
+        # Parameter budget - MUCH LARGER FOR MEANINGFUL NETWORKS
+        self.parameter_budget = {
+            'budget_type': 'edges',
+            'target_budget': 1000000,  # Increased 10x for larger networks
+            'normalize_by_size': True,
+            'threshold': 0.05
+        }
         
-        # Forgetting test - ENABLED for Experiment B
+        # Forgetting test settings - ENABLED FOR EXPERIMENT B
         self.forgetting_test = {
             'enabled': True,
             'retention_interval': 1,
-            'retention_episodes': 5,  # Reduced from 10 for speed
+            'retention_episodes': 10,  # Increased for better forgetting measurement
             'forgetting_threshold': 0.8,
             'retention_threshold': 0.9
         }
         
-        # Parameter budget - INCREASED FOR MEANINGFUL LEARNING
-        self.parameter_budget = {
-            'budget_type': 'edges',
-            'target_budget': 100000,  # Increased from 10000
-            'normalize_by_size': True
-        }
+        # Transfer learning (minimal for forgetting baseline)
+        self.backward_transfer_tasks = []
+        self.forward_transfer_tasks = []
         
         # Network parameters
         self.network_params = {
@@ -125,7 +145,7 @@ class ExperimentBScaledConfig:
             'node_selection_strategies': self.node_selection_strategies,
             'episodes_per_task': self.episodes_per_task,
             'evaluation_episodes': self.evaluation_episodes,
-            'max_env_steps_per_task': self.max_env_steps_per_task,
+            'max_env_steps': self.max_env_steps,
             'backward_transfer_tasks': self.backward_transfer_tasks,
             'forward_transfer_tasks': self.forward_transfer_tasks,
             'forgetting_test': self.forgetting_test,
@@ -334,7 +354,7 @@ def run_experiment_b_scaled_training(config):
     print(f"Topologies: {', '.join(config['topologies'])}")
     print(f"Episodes per task: {config['episodes_per_task']}")
     print(f"Evaluation episodes: {config['evaluation_episodes']}")
-    print(f"Max env steps: {config['max_env_steps_per_task']}")
+    print(f"Max env steps: {config['max_env_steps']}")
     print(f"Forgetting test: {config['forgetting_test']['enabled']}")
     if config['forgetting_test']['enabled']:
         print(f"  Retention interval: {config['forgetting_test']['retention_interval']}")
@@ -677,6 +697,17 @@ def main():
     logger = logging.getLogger(__name__)
     
     logger.info("Starting Experiment B Scaled: Forgetting Baseline")
+    
+    # GPU Support: Log device information
+    if GPU_SUPPORT_ENABLED:
+        print(f"\n🔧 GPU Support: {DEVICE_INFO['device']}")
+        if DEVICE_INFO['is_cuda']:
+            print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
+            print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
+        else:
+            print(f"   Using CPU (GPU not available or disabled)")
+    else:
+        print(f"\n🔧 GPU Support: Disabled (fallback to CPU)")
     
     # Create configuration
     config_obj = ExperimentBScaledConfig()

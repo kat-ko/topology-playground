@@ -31,6 +31,23 @@ import numpy as np
 from tabulate import tabulate
 from src.utils.capacity_measurement import CapacityMeasurementManager
 
+# GPU Support: Initialize device manager early
+try:
+    from src.utils.device_manager import get_device_manager, get_device_info
+    DEVICE_MANAGER = get_device_manager()
+    DEVICE_INFO = get_device_info()
+    GPU_SUPPORT_ENABLED = True
+except ImportError as e:
+    print(f"Warning: GPU support not available: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+except Exception as e:
+    print(f"Warning: Failed to initialize GPU support: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+
 def verify_capacity_matching(config, divergence_threshold=10.0):
     """
     Verify capacity matching for all experiment types and configurations.
@@ -656,6 +673,17 @@ def main():
     logger = logging.getLogger(__name__)
     
     logger.info("Starting curriculum learning smoke test")
+    
+    # GPU Support: Log device information
+    if GPU_SUPPORT_ENABLED:
+        print(f"\n🔧 GPU Support: {DEVICE_INFO['device']}")
+        if DEVICE_INFO['is_cuda']:
+            print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
+            print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
+        else:
+            print(f"   Using CPU (GPU not available or disabled)")
+    else:
+        print(f"\n🔧 GPU Support: Disabled (fallback to CPU)")
     
     # Create test configuration
     config = TestCurriculumConfig()

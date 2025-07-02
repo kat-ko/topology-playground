@@ -28,6 +28,23 @@ import torch
 import sys
 import numpy as np
 
+# GPU Support: Initialize device manager early
+try:
+    from src.utils.device_manager import get_device_manager, get_device_info
+    DEVICE_MANAGER = get_device_manager()
+    DEVICE_INFO = get_device_info()
+    GPU_SUPPORT_ENABLED = True
+except ImportError as e:
+    print(f"Warning: GPU support not available: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+except Exception as e:
+    print(f"Warning: Failed to initialize GPU support: {e}")
+    DEVICE_MANAGER = None
+    DEVICE_INFO = {'device': 'cpu', 'is_cuda': False, 'is_gpu_available': False}
+    GPU_SUPPORT_ENABLED = False
+
 def verify_capacity_matching(config, divergence_threshold=5.0):
     """Comprehensive verification of capacity matching using the two-phase approach with incremental adjustment."""
     print("\n" + "="*80)
@@ -227,6 +244,17 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     logger = logging.getLogger(__name__)
+    
+    # GPU Support: Log device information
+    if GPU_SUPPORT_ENABLED:
+        print(f"\n🔧 GPU Support: {DEVICE_INFO['device']}")
+        if DEVICE_INFO['is_cuda']:
+            print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
+            print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
+        else:
+            print(f"   Using CPU (GPU not available or disabled)")
+    else:
+        print(f"\n🔧 GPU Support: Disabled (fallback to CPU)")
     
     # Create curriculum configuration
     config = CurriculumConfig().to_dict()
