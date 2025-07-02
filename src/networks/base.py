@@ -128,22 +128,44 @@ class BaseNetwork(ABC):
             'edges_removed': original_edges - pruned_edges
         })
         
-        # Calculate connectivity-dependent metrics only if graph is connected
-        if nx.is_connected(self.topology):
-            metrics.update({
-            'diameter': nx.diameter(self.topology),
-            'avg_shortest_path': nx.average_shortest_path_length(self.topology)
-            })
+        # Handle connectivity-dependent metrics for both directed and undirected graphs
+        if self.topology.is_directed():
+            # For directed graphs, convert to undirected for connectivity metrics
+            G_undirected = self.topology.to_undirected()
+            
+            # Check if undirected graph is connected
+            if nx.is_connected(G_undirected):
+                metrics.update({
+                    'diameter': nx.diameter(G_undirected),
+                    'avg_shortest_path': nx.average_shortest_path_length(G_undirected)
+                })
+            else:
+                # Calculate metrics for largest connected component
+                largest_cc = max(nx.connected_components(G_undirected), key=len)
+                largest_cc_graph = G_undirected.subgraph(largest_cc)
+                metrics.update({
+                    'diameter': nx.diameter(largest_cc_graph),
+                    'avg_shortest_path': nx.average_shortest_path_length(largest_cc_graph),
+                    'num_connected_components': nx.number_connected_components(G_undirected),
+                    'largest_component_size': len(largest_cc)
+                })
         else:
-            # Calculate metrics for largest connected component
-            largest_cc = max(nx.connected_components(self.topology), key=len)
-            largest_cc_graph = self.topology.subgraph(largest_cc)
-            metrics.update({
-                'diameter': nx.diameter(largest_cc_graph),
-                'avg_shortest_path': nx.average_shortest_path_length(largest_cc_graph),
-                'num_connected_components': nx.number_connected_components(self.topology),
-                'largest_component_size': len(largest_cc)
-            })
+            # For undirected graphs, use original logic
+            if nx.is_connected(self.topology):
+                metrics.update({
+                    'diameter': nx.diameter(self.topology),
+                    'avg_shortest_path': nx.average_shortest_path_length(self.topology)
+                })
+            else:
+                # Calculate metrics for largest connected component
+                largest_cc = max(nx.connected_components(self.topology), key=len)
+                largest_cc_graph = self.topology.subgraph(largest_cc)
+                metrics.update({
+                    'diameter': nx.diameter(largest_cc_graph),
+                    'avg_shortest_path': nx.average_shortest_path_length(largest_cc_graph),
+                    'num_connected_components': nx.number_connected_components(self.topology),
+                    'largest_component_size': len(largest_cc)
+                })
         
         return metrics
     

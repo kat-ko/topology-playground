@@ -76,9 +76,12 @@ class FullyConnectedTopology:
         """Calculate network metrics."""
         G = self._generate_single_layer()
         
+        # Convert to undirected for metrics that don't support directed graphs
+        G_undirected = G.to_undirected() if G.is_directed() else G
+        
         return {
             'density': nx.density(G),
-            'average_clustering': nx.average_clustering(G),
-            'average_shortest_path_length': nx.average_shortest_path_length(G),
+            'average_clustering': nx.average_clustering(G_undirected),
+            'average_shortest_path_length': nx.average_shortest_path_length(G_undirected),
             'parameter_count': self.get_parameter_count()
         } 

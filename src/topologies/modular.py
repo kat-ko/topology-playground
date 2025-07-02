@@ -158,12 +158,16 @@ class ModularTopology(BaseTopology, BasePlugin):
             raise ValueError(f"Layer {layer} does not exist")
         
         G = self.layers[layer]
+        
+        # Convert to undirected for metrics that don't support directed graphs
+        G_undirected = G.to_undirected() if G.is_directed() else G
+        
         return {
-            'clustering_coefficient': nx.average_clustering(G),
+            'clustering_coefficient': nx.average_clustering(G_undirected),
             'density': nx.density(G),
             'avg_degree': np.mean([d for n, d in G.degree()]),
-            'diameter': nx.diameter(G),
-            'avg_shortest_path': nx.average_shortest_path_length(G)
+            'diameter': nx.diameter(G_undirected),
+            'avg_shortest_path': nx.average_shortest_path_length(G_undirected)
         }
     
     def get_node_distances(self, graph: nx.Graph) -> np.ndarray:

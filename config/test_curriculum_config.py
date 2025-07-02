@@ -26,7 +26,7 @@ class TestCurriculumConfig(CurriculumConfig):
     ])
     
     # Reduced training parameters for faster testing
-    episodes_per_task: int = 50  # Very small for debugging
+    episodes_per_task: int = 20  # Very small for debugging
     evaluation_episodes: int = 10
     max_env_steps_per_task: int = 5000
     
@@ -64,21 +64,15 @@ class TestCurriculumConfig(CurriculumConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        self.network_sizes = [25,50,100]  
-        self.seeds = [42, 128] 
-        self.num_layers = [1,2,3]  
+        self.network_sizes = [25]  
+        self.seeds = [42] 
+        self.num_layers = [1]  
         self.network_types = ['ffn', 'rnn']  
         self.node_selection_strategies = [
             'random',
-            'centrality_based',
-            'distance_based',
-            'module_based'
             ] 
         self.experiment_types = [
             'match_small_world',
-            'match_fully_connected',
-            'match_modular',
-            'match_hybrid',
         ]  
         
         # Mark as test run

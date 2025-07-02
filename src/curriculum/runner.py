@@ -11,6 +11,7 @@ import logging
 from ..utils.logging_utils import setup_logger, LogLevel
 from collections import defaultdict
 from ..utils.parameter_budget import ParameterBudgetCalculator, calculate_network_size
+from ..utils.capacity_measurement import CapacityMeasurementManager
 
 from ..topologies.small_world import SmallWorldTopology
 from ..topologies.modular import ModularTopology
@@ -90,46 +91,51 @@ class CurriculumRunner:
                             # --- Correct Capacity-matching scaling logic ---
                             # Determine reference topology and target capacity
                             if experiment_type.startswith('match_'):
-                                # Extract reference topology from experiment type (e.g., 'small_world' from 'match_small_world')
                                 reference_topology = experiment_type[len('match_'):]
-                                # Calculate NATURAL capacity of reference topology (not scaled)
-                                # Scale the base capacity by the ratio of current size to base size
-                                base_capacity = calculator.base_capacities[reference_topology]
-                                scale_factor = size / calculator.base_size
-                                target_capacity = int(base_capacity * scale_factor)
+                                measurement_manager = CapacityMeasurementManager(self.config)
+                                # Debug: print config hash and available keys
+                                print(f"[DEBUG] Config hash: {measurement_manager._get_config_hash()}")
+                                lookup_key = f"{reference_topology}_{size}_{network_type}_{num_layers}"
+                                print(f"[DEBUG] Looking for measurement key: {lookup_key}")
+                                print(f"[DEBUG] Available measurement keys: {list(measurement_manager.measurements.keys())}")
+                                target_capacity = measurement_manager.get_target_capacity(
+                                    reference_topology, size, network_type, num_layers
+                                )
+                                if target_capacity is None:
+                                    print(f"[WARNING] No baseline measurement available for {lookup_key}, falling back to calculator.")
+                                    target_capacity = calculator.get_budget(experiment_type, reference_topology, size, network_type, num_layers)
                             else:  # 'same_size'
                                 # For same_size, use the base budget scaled by size
-                                target_capacity = calculator.get_budget(experiment_type, 'small_world', size)
+                                target_capacity = calculator.get_budget(experiment_type, 'small_world', size, network_type, num_layers)
                             
-                            # Scale all topologies to match the target capacity
-                            # BUT keep reference topology at natural size for match_* experiments
+                            # Use the same capacity matching logic as smoke test
                             if experiment_type.startswith('match_'):
                                 # Reference topology keeps natural size
                                 if reference_topology == 'small_world':
                                     sw_size = size  # No scaling
                                 else:
-                                    sw_size = calculate_network_size(size, 'small_world', experiment_type, target_capacity)
+                                    sw_size = calculator.calculate_matching_size('small_world', target_capacity, network_type, num_layers)
                                 
                                 if reference_topology == 'modular':
                                     mod_size = size  # No scaling
                                 else:
-                                    mod_size = calculate_network_size(size, 'modular', experiment_type, target_capacity)
+                                    mod_size = calculator.calculate_matching_size('modular', target_capacity, network_type, num_layers)
                                 
                                 if reference_topology == 'hybrid':
                                     hybrid_size = size  # No scaling
                                 else:
-                                    hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, target_capacity)
+                                    hybrid_size = calculator.calculate_matching_size('hybrid', target_capacity, network_type, num_layers)
                                 
                                 if reference_topology == 'fully_connected':
                                     fc_size = size  # No scaling
                                 else:
-                                    fc_size = calculate_network_size(size, 'fully_connected', experiment_type, target_capacity)
+                                    fc_size = calculator.calculate_matching_size('fully_connected', target_capacity, network_type, num_layers)
                             else:  # 'same_size'
-                                # For same_size, scale all topologies
-                                sw_size = calculate_network_size(size, 'small_world', experiment_type, target_capacity)
-                                mod_size = calculate_network_size(size, 'modular', experiment_type, target_capacity)
-                                hybrid_size = calculate_network_size(size, 'hybrid', experiment_type, target_capacity)
-                                fc_size = calculate_network_size(size, 'fully_connected', experiment_type, target_capacity)
+                                # For same_size, scale all topologies using the same logic
+                                sw_size = calculator.calculate_matching_size('small_world', target_capacity, network_type, num_layers)
+                                mod_size = calculator.calculate_matching_size('modular', target_capacity, network_type, num_layers)
+                                hybrid_size = calculator.calculate_matching_size('hybrid', target_capacity, network_type, num_layers)
+                                fc_size = calculator.calculate_matching_size('fully_connected', target_capacity, network_type, num_layers)
                             
                             # --- Instantiate topologies with scaled sizes ---
                             small_world = SmallWorldTopology(
@@ -267,11 +273,18 @@ class CurriculumRunner:
                                         if networks_list:
                                             network = networks_list[0]
                                             metrics = network.get_network_metrics()
-                                            total_params = (metrics.get('num_input_weights', 0) + 
-                                                          metrics.get('num_recurrent_weights', 0) + 
-                                                          metrics.get('num_hidden_weights', 0) + 
-                                                          metrics.get('num_biases', 0))
-                                            print(f"  {topology_name}: size={actual_size}, params={total_params}")
+                                            # Use same parameter counting method as smoke test
+                                            total_params = sum(
+                                                metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                                            )
+                                            divergence = abs(total_params - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
+                                            status = "✅" if divergence <= 5.0 else "⚠️"
+                                            print(f"  {topology_name}: size={actual_size}, params={total_params}, divergence={divergence:.2f}% {status}")
+                                            
+                                            # Validate that capacity matching is working
+                                            if divergence > 10.0:  # More lenient threshold for training
+                                                print(f"    ⚠️  WARNING: Large capacity divergence detected during training!")
+                                                print(f"    Expected: {target_capacity}, Actual: {total_params}")
                                 
                                 # Run task sequence
                                 task_results = self._run_task_sequence(
@@ -299,6 +312,8 @@ class CurriculumRunner:
                                 results.append(task_results)
         
         self._save_results(results)
+        
+        return results  # Return results for validation
     
     def _run_task_sequence(self, networks, input_nodes, output_nodes,
                           size, seed, strategy, topology, network_type, num_layers):
