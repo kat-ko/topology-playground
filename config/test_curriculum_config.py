@@ -27,8 +27,8 @@ class TestCurriculumConfig(CurriculumConfig):
     
     # Reduced training parameters for faster testing
     episodes_per_task: int = 20  # Very small for debugging
-    evaluation_episodes: int = 10
-    max_env_steps_per_task: int = 5000
+    evaluation_episodes: int = 100
+    max_env_steps_per_task: int = 500
     
     # Test all node selection strategies to see if issue is consistent
     node_selection_strategies: List[str] = field(default_factory=lambda: [
@@ -67,7 +67,7 @@ class TestCurriculumConfig(CurriculumConfig):
         self.network_sizes = [25]  
         self.seeds = [42] 
         self.num_layers = [1]  
-        self.network_types = ['ffn', 'rnn']  
+        self.network_types = ['ffn']  
         self.node_selection_strategies = [
             'random',
             ] 

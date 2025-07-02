@@ -1,0 +1,338 @@
+[
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 25.8,
+            "std_reward": 0.0,
+            "mean_length": 25.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 25.8,
+            "std_reward": 0.0,
+            "mean_length": 25.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 95,
+          "num_biases": 50,
+          "avg_weight_magnitude": 0.07163158503293314,
+          "avg_bias_magnitude": 0.07119700044735296
+        }
+      }
+    }
+  },
+  {
+    "network_size": 30,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 19.7,
+            "std_reward": 0.0,
+            "mean_length": 19.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 19.7,
+            "std_reward": 0.0,
+            "mean_length": 19.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 119,
+          "num_biases": 30,
+          "avg_weight_magnitude": 0.08643090879400143,
+          "avg_bias_magnitude": 0.09007791957976803
+        }
+      }
+    }
+  },
+  {
+    "network_size": 35,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 18.8,
+            "std_reward": 0.0,
+            "mean_length": 18.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 18.8,
+            "std_reward": 0.0,
+            "mean_length": 18.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 113,
+          "num_biases": 35,
+          "avg_weight_magnitude": 0.08553317366795161,
+          "avg_bias_magnitude": 0.08316245254643778
+        }
+      }
+    }
+  },
+  {
+    "network_size": 19,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 25.0,
+            "std_reward": 0.0,
+            "mean_length": 25.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 25.0,
+            "std_reward": 0.0,
+            "mean_length": 25.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 127,
+          "num_biases": 19,
+          "avg_weight_magnitude": 0.07971731629464918,
+          "avg_bias_magnitude": 0.06885814005083851
+        }
+      }
+    }
+  },
+  {
+    "network_size": 100,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 24.2,
+            "std_reward": 0.0,
+            "mean_length": 24.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 24.2,
+            "std_reward": 0.0,
+            "mean_length": 24.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 197,
+          "num_biases": 100,
+          "avg_weight_magnitude": 0.080807722098492,
+          "avg_bias_magnitude": 0.07373770478770698
+        }
+      }
+    }
+  },
+  {
+    "network_size": 44,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 19.7,
+            "std_reward": 0.0,
+            "mean_length": 19.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 19.7,
+            "std_reward": 0.0,
+            "mean_length": 19.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 249,
+          "num_biases": 44,
+          "avg_weight_magnitude": 0.07999449397120252,
+          "avg_bias_magnitude": 0.08018510151365746
+        }
+      }
+    }
+  },
+  {
+    "network_size": 58,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 19.1,
+            "std_reward": 0.0,
+            "mean_length": 19.1,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 19.1,
+            "std_reward": 0.0,
+            "mean_length": 19.1,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 238,
+          "num_biases": 58,
+          "avg_weight_magnitude": 0.07207475520612823,
+          "avg_bias_magnitude": 0.07101077008510305
+        }
+      }
+    }
+  },
+  {
+    "network_size": 27,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 34.1,
+            "std_reward": 0.0,
+            "mean_length": 34.1,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {},
+        "forward_transfer": {},
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 34.1,
+            "std_reward": 0.0,
+            "mean_length": 34.1,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 272,
+          "num_biases": 27,
+          "avg_weight_magnitude": 0.08249548821937552,
+          "avg_bias_magnitude": 0.06138693903599571
+        }
+      }
+    }
+  }
+]

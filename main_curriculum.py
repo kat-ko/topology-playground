@@ -1,4 +1,6 @@
 """
+ACTUAL MAIN FILE TO RUN COMPLETE SET OF EXPERIMENT VARIATIONS
+
 # first activate the conda environment
 .\venv\Scripts\Activate.ps1
 

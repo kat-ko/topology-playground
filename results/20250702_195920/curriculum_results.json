@@ -1,0 +1,986 @@
+[
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 19.2,
+            "std_reward": 0.0,
+            "mean_length": 19.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 24.2,
+            "std_reward": 0.0,
+            "mean_length": 24.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 25.2,
+            "std_reward": 0.0,
+            "mean_length": 25.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.8873239436619719
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 25.2,
+            "std_reward": 0.0,
+            "mean_length": 25.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 96,
+          "num_biases": 50,
+          "avg_weight_magnitude": 0.07931734965486116,
+          "avg_bias_magnitude": 0.09087128647880854
+        }
+      }
+    }
+  },
+  {
+    "network_size": 37,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 26.2,
+            "std_reward": 0.0,
+            "mean_length": 26.2,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 37.0,
+            "std_reward": 0.0,
+            "mean_length": 37.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 21.4,
+            "std_reward": 0.0,
+            "mean_length": 21.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 1.1263157894736842
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 21.4,
+            "std_reward": 0.0,
+            "mean_length": 21.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 113,
+          "num_biases": 37,
+          "avg_weight_magnitude": 0.07420570142975964,
+          "avg_bias_magnitude": 0.09278128014096357
+        }
+      }
+    }
+  },
+  {
+    "network_size": 38,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 21.5,
+            "std_reward": 0.0,
+            "mean_length": 21.5,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 20.6,
+            "std_reward": 0.0,
+            "mean_length": 20.6,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 24.8,
+            "std_reward": 0.0,
+            "mean_length": 24.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 1.1753554502369667
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 24.8,
+            "std_reward": 0.0,
+            "mean_length": 24.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 115,
+          "num_biases": 38,
+          "avg_weight_magnitude": 0.08439296340059849,
+          "avg_bias_magnitude": 0.08197253392584729
+        }
+      }
+    }
+  },
+  {
+    "network_size": 18,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "ffn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 16.9,
+            "std_reward": 0.0,
+            "mean_length": 16.9,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 22.0,
+            "std_reward": 0.0,
+            "mean_length": 22.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 19.6,
+            "std_reward": 0.0,
+            "mean_length": 19.6,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 1.0
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 19.6,
+            "std_reward": 0.0,
+            "mean_length": 19.6,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_weights": 133,
+          "num_biases": 18,
+          "avg_weight_magnitude": 0.08350384419240414,
+          "avg_bias_magnitude": 0.07175182722141088
+        }
+      }
+    }
+  },
+  {
+    "network_size": 50,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "small_world",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 9.7,
+            "std_reward": 0.0,
+            "mean_length": 9.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 9.3,
+            "std_reward": 0.0,
+            "mean_length": 9.3,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 9.4,
+            "std_reward": 0.0,
+            "mean_length": 9.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9591836734693877
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 9.4,
+            "std_reward": 0.0,
+            "mean_length": 9.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_input_weights": 96,
+          "num_recurrent_weights": 96,
+          "num_hidden_weights": 1600,
+          "num_biases": 50,
+          "avg_input_weight_magnitude": 0.07435910962181784,
+          "avg_recurrent_weight_magnitude": 0.07453543257371094,
+          "avg_hidden_weight_magnitude": 0.08044438439300955,
+          "avg_bias_magnitude": 0.09294237171281065
+        }
+      }
+    }
+  },
+  {
+    "network_size": 46,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "modular",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 23.9,
+            "std_reward": 0.0,
+            "mean_length": 23.9,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 21.7,
+            "std_reward": 0.0,
+            "mean_length": 21.7,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 22.6,
+            "std_reward": 0.0,
+            "mean_length": 22.6,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9699570815450644
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 22.6,
+            "std_reward": 0.0,
+            "mean_length": 22.6,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_input_weights": 159,
+          "num_recurrent_weights": 159,
+          "num_hidden_weights": 1472,
+          "num_biases": 46,
+          "avg_input_weight_magnitude": 0.08254205185700224,
+          "avg_recurrent_weight_magnitude": 0.07848600951921736,
+          "avg_hidden_weight_magnitude": 0.0819879606897608,
+          "avg_bias_magnitude": 0.0736970431405342
+        }
+      }
+    }
+  },
+  {
+    "network_size": 46,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "hybrid",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 31.5,
+            "std_reward": 0.0,
+            "mean_length": 31.5,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 33.0,
+            "std_reward": 0.0,
+            "mean_length": 33.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 32.8,
+            "std_reward": 0.0,
+            "mean_length": 32.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.984984984984985
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 32.8,
+            "std_reward": 0.0,
+            "mean_length": 32.8,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_input_weights": 162,
+          "num_recurrent_weights": 162,
+          "num_hidden_weights": 1472,
+          "num_biases": 46,
+          "avg_input_weight_magnitude": 0.08596828888049718,
+          "avg_recurrent_weight_magnitude": 0.08020234485864661,
+          "avg_hidden_weight_magnitude": 0.07922626605146087,
+          "avg_bias_magnitude": 0.0848957269363192
+        }
+      }
+    }
+  },
+  {
+    "network_size": 30,
+    "seed": 42,
+    "num_layers": 1,
+    "network_type": "rnn",
+    "strategy": "random",
+    "topology": "fully_connected",
+    "curriculum_results": {
+      "performance_history": {
+        "cartpole": {
+          "cartpole": {
+            "mean_reward": 9.5,
+            "std_reward": 0.0,
+            "mean_length": 9.5,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "mountain_car": {
+          "cartpole": {
+            "mean_reward": 9.4,
+            "std_reward": 0.0,
+            "mean_length": 9.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        },
+        "acrobot": {
+          "cartpole": {
+            "mean_reward": 9.4,
+            "std_reward": 0.0,
+            "mean_length": 9.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "transfer_metrics": {
+        "backward_transfer": {
+          "cartpole": 0.9791666666666667
+        },
+        "forward_transfer": {
+          "mountain_car": 1.0,
+          "acrobot": 1.0
+        },
+        "final_performance": {
+          "cartpole": {
+            "mean_reward": 9.4,
+            "std_reward": 0.0,
+            "mean_length": 9.4,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "mountain_car": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          },
+          "acrobot": {
+            "mean_reward": -200.0,
+            "std_reward": 0.0,
+            "mean_length": 200.0,
+            "std_length": 0.0,
+            "solved_rate": 0.0
+          }
+        }
+      },
+      "task_metrics": {
+        "training_metrics": {
+          "num_input_weights": 415,
+          "num_recurrent_weights": 415,
+          "num_hidden_weights": 960,
+          "num_biases": 30,
+          "avg_input_weight_magnitude": 0.07886817866761126,
+          "avg_recurrent_weight_magnitude": 0.08092608471872599,
+          "avg_hidden_weight_magnitude": 0.08186252406434148,
+          "avg_bias_magnitude": 0.09814129200937752
+        }
+      }
+    }
+  }
+]
