@@ -49,20 +49,26 @@ class ExperimentBScaledConfig:
     
     def __init__(self):
         # Core experiment settings - DRAMATICALLY SCALED UP FOR MEANINGFUL LEARNING
-        self.network_sizes = [1000, 2000]  # Increased 10x from [150, 300] for meaningful capacity
+        self.network_sizes = [20,200,2000]  # Increased 10x from [150, 300] for meaningful capacity
         self.num_layers = [1]
         self.network_types = ['ffn']
-        self.experiment_types = ['match_small_world']
-        self.task_sequence = ['acrobot', 'mountain_car']  # Keep available tasks
+        self.experiment_types = ['same_size', 'match_small_world']
+        self.task_sequence = ['mountain_car', 'acrobot']  # Keep available tasks
         self.seeds = [42]
         self.node_selection_strategies = ['random']
         
         # Training parameters - DRAMATICALLY INCREASED FOR LEARNING
-        self.episodes_per_task = 1000  # Increased 5x from 150 for convergence
-        self.evaluation_episodes = 50  # Increased for better evaluation
-        self.max_env_steps = 1000  # Increased from 500 for more exploration
+        self.episodes_per_task = 20000  # Increased 5x from 150 for convergence
+        self.evaluation_episodes = 500  # Increased for better evaluation
+        self.max_env_steps = 5000  # Increased from 500 for more exploration
         self.learning_rate = 0.001
         self.batch_size = 64  # Increased for better training
+        
+        # Adaptive training parameters
+        self.convergence_window = 100  # Episodes to check for convergence
+        self.convergence_threshold = 0.02  # Performance stability threshold
+        self.min_episodes = 200  # Minimum episodes before early stopping
+        self.convergence_patience = 3  # How many times to check before stopping
         
         # Parameter budget - MUCH LARGER FOR MEANINGFUL NETWORKS
         self.parameter_budget = {
@@ -146,6 +152,10 @@ class ExperimentBScaledConfig:
             'episodes_per_task': self.episodes_per_task,
             'evaluation_episodes': self.evaluation_episodes,
             'max_env_steps': self.max_env_steps,
+            'convergence_window': self.convergence_window,
+            'convergence_threshold': self.convergence_threshold,
+            'min_episodes': self.min_episodes,
+            'convergence_patience': self.convergence_patience,
             'backward_transfer_tasks': self.backward_transfer_tasks,
             'forward_transfer_tasks': self.forward_transfer_tasks,
             'forgetting_test': self.forgetting_test,
@@ -199,23 +209,30 @@ def verify_capacity_matching(config):
     results_summary = {'passed': 0, 'failed': 0, 'errors': 0, 'details': {}}
     
     for exp_type in experiment_types:
-        reference_topology = exp_type[len('match_'):]
         print(f"\n{'='*20} EXPERIMENT TYPE: {exp_type.upper()} {'='*20}")
-        print(f"All topologies matched to {reference_topology} capacity")
+        
+        if exp_type == 'same_size':
+            print("All topologies use the same node count (not matched capacities)")
+        else:
+            reference_topology = exp_type[len('match_'):]
+            print(f"All topologies matched to {reference_topology} capacity")
         
         for size in sizes:
             print(f"\n--- Network Size: {size} ---")
             
-            # Get target capacities from baseline
-            target_capacities = {}
-            for network_type in network_types:
-                for num_layers in num_layers_list:
-                    target_capacity = measurement_manager.get_target_capacity(
-                        reference_topology, size, network_type, num_layers
-                    )
-                    target_capacities[f"{network_type}_{num_layers}"] = target_capacity
-            
-            print(f"Target capacities from baseline: {target_capacities}")
+            if exp_type == 'same_size':
+                print("All topologies will use this exact node count")
+            else:
+                # Get target capacities from baseline
+                target_capacities = {}
+                for network_type in network_types:
+                    for num_layers in num_layers_list:
+                        target_capacity = measurement_manager.get_target_capacity(
+                            reference_topology, size, network_type, num_layers
+                        )
+                        target_capacities[f"{network_type}_{num_layers}"] = target_capacity
+                
+                print(f"Target capacities from baseline: {target_capacities}")
             
             # Test each topology
             for topology in topologies:
@@ -230,40 +247,18 @@ def verify_capacity_matching(config):
                                 np.random.seed(seed)
                                 
                                 config_key = f"{exp_type}_{topology}_{size}_{network_type}_{num_layers}_{seed}_{strategy}"
-                                target_capacity = target_capacities[f"{network_type}_{num_layers}"]
                                 
-                                if target_capacity is None:
+                                if exp_type == 'same_size':
+                                    # For same_size experiments, use the original size directly
+                                    matching_size = size
                                     print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                    print(f"      ❌ NO BASELINE MEASUREMENT AVAILABLE")
-                                    results_summary['errors'] += 1
-                                    results_summary['details'][config_key] = {
-                                        'status': 'error',
-                                        'error': 'No baseline measurement available',
-                                        'type': 'error'
-                                    }
-                                    continue
-                                
-                                try:
-                                    # For the reference topology, use the baseline size
-                                    if topology == reference_topology:
-                                        matching_size = size
-                                        print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                        print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
-                                        print(f"      Size: {matching_size} nodes (reference, no adjustment)")
-                                    else:
-                                        # Use incremental adjustment to find matching size
-                                        matching_size = calculator.calculate_matching_size(
-                                            topology, target_capacity, network_type, num_layers
-                                        )
-                                        print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                        print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
-                                        print(f"      Size adjustment: {size} → {matching_size} nodes (incremental adjustment)")
+                                    print(f"      Size: {matching_size} nodes (same_size experiment)")
                                     
-                                    # Create network using the matching size
+                                    # Create network using the original size
                                     network = calculator.create_network(
                                         topology=topology,
                                         size=matching_size,
-                                        experiment_type='same_size',
+                                        experiment_type=exp_type,
                                         network_type=network_type,
                                         num_layers=num_layers,
                                         seed=seed
@@ -274,36 +269,92 @@ def verify_capacity_matching(config):
                                         metrics.get(k, 0) for k in metrics if k.startswith('num_')
                                     )
                                     
-                                    # Calculate divergence
-                                    divergence = abs(actual_capacity - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
-                                    
                                     print(f"      Actual: {actual_capacity:,} parameters")
-                                    print(f"      Divergence: {divergence:.2f}%")
+                                    print(f"      ✅ Same size experiment - no capacity matching required")
                                     
-                                    if divergence <= 5.0:
-                                        print(f"      ✅ Within threshold (5.0%)")
-                                        results_summary['passed'] += 1
-                                        status = 'passed'
-                                    else:
-                                        print(f"      ⚠️  Exceeds threshold (5.0%)")
-                                        results_summary['failed'] += 1
-                                        status = 'failed'
-                                    
+                                    results_summary['passed'] += 1
                                     results_summary['details'][config_key] = {
-                                        'status': status,
-                                        'target_capacity': target_capacity,
+                                        'status': 'passed',
                                         'actual_capacity': actual_capacity,
                                         'matching_size': matching_size,
-                                        'divergence': divergence
+                                        'type': 'same_size'
                                     }
-                                except Exception as e:
-                                    print(f"      ❌ ERROR: {e}")
-                                    results_summary['errors'] += 1
-                                    results_summary['details'][config_key] = {
-                                        'status': 'error',
-                                        'error': str(e),
-                                        'type': 'error'
-                                    }
+                                else:
+                                    # For match_* experiments, use capacity matching logic
+                                    target_capacity = target_capacities[f"{network_type}_{num_layers}"]
+                                    
+                                    if target_capacity is None:
+                                        print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
+                                        print(f"      ❌ NO BASELINE MEASUREMENT AVAILABLE")
+                                        results_summary['errors'] += 1
+                                        results_summary['details'][config_key] = {
+                                            'status': 'error',
+                                            'error': 'No baseline measurement available',
+                                            'type': 'error'
+                                        }
+                                        continue
+                                    
+                                    try:
+                                        # For the reference topology, use the baseline size
+                                        if topology == reference_topology:
+                                            matching_size = size
+                                            print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
+                                            print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
+                                            print(f"      Size: {matching_size} nodes (reference, no adjustment)")
+                                        else:
+                                            # Use incremental adjustment to find matching size directly
+                                            matching_size = calculator.calculate_matching_size(
+                                                topology, target_capacity, network_type, num_layers
+                                            )
+                                            print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
+                                            print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
+                                            print(f"      Size adjustment: {size} → {matching_size} nodes (incremental adjustment)")
+                                        
+                                        # Create network using the matching size with 'same_size' to avoid recursive matching
+                                        network = calculator.create_network(
+                                            topology=topology,
+                                            size=matching_size,
+                                            experiment_type='same_size',  # Use same_size to avoid recursive matching
+                                            network_type=network_type,
+                                            num_layers=num_layers,
+                                            seed=seed
+                                        )
+                                        
+                                        metrics = network.get_network_metrics()
+                                        actual_capacity = sum(
+                                            metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                                        )
+                                        
+                                        # Calculate divergence
+                                        divergence = abs(actual_capacity - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
+                                        
+                                        print(f"      Actual: {actual_capacity:,} parameters")
+                                        print(f"      Divergence: {divergence:.2f}%")
+                                        
+                                        if divergence <= 5.0:
+                                            print(f"      ✅ Within threshold (5.0%)")
+                                            results_summary['passed'] += 1
+                                            status = 'passed'
+                                        else:
+                                            print(f"      ⚠️  Exceeds threshold (5.0%)")
+                                            results_summary['failed'] += 1
+                                            status = 'failed'
+                                        
+                                        results_summary['details'][config_key] = {
+                                            'status': status,
+                                            'target_capacity': target_capacity,
+                                            'actual_capacity': actual_capacity,
+                                            'matching_size': matching_size,
+                                            'divergence': divergence
+                                        }
+                                    except Exception as e:
+                                        print(f"      ❌ ERROR: {e}")
+                                        results_summary['errors'] += 1
+                                        results_summary['details'][config_key] = {
+                                            'status': 'error',
+                                            'error': str(e),
+                                            'type': 'error'
+                                        }
     
     # Print comprehensive summary
     print("\n" + "="*80)
@@ -391,44 +442,47 @@ def analyze_experiment_b_scaled_results(results, results_dir):
     transfer_metrics = {}
     learning_curves = {}
     
+    # Get the actual task names from the experiment (should be ['acrobot', 'mountain_car'])
+    task_names = ['acrobot', 'mountain_car']  # From ExperimentBScaledConfig.task_sequence
+    
     for result in results:
         topology = result['topology']
         size = result['network_size']
         curriculum_results = result['curriculum_results']
         
-        # Extract final performance for each task - handle both enhanced and regular formats
-        if 'final_performance' in curriculum_results:
-            # Enhanced format
+        # Extract final performance for each task - handle enhanced runner format
+        if 'performance_history' in curriculum_results:
+            # Enhanced runner format
+            performance_history = curriculum_results['performance_history']
+            transfer_metrics_data = curriculum_results.get('transfer_metrics', {})
+            
+            # Extract final performance from the last task in sequence
+            final_task = task_names[-1]  # 'mountain_car'
+            if final_task in performance_history:
+                final_performance = performance_history[final_task]
+            else:
+                final_performance = {}
+        elif 'final_performance' in curriculum_results:
+            # Alternative enhanced format
             final_performance = curriculum_results['final_performance']
             transfer_metrics_data = curriculum_results.get('transfer_metrics', {})
-        elif 'performance_history' in curriculum_results:
-            # Regular format - extract from performance history
-            performance_history = curriculum_results['performance_history']
-            final_performance = {}
-            transfer_metrics_data = {}
-            
-            # Extract final performance from the last task
-            if 'mountain_car' in performance_history:
-                final_performance = performance_history['mountain_car']
-            elif 'cartpole' in performance_history:
-                final_performance = performance_history['cartpole']
         else:
             # No performance data available
             final_performance = {}
             transfer_metrics_data = {}
         
-        # Extract task-specific performance with fallbacks
-        cartpole_perf = final_performance.get('cartpole', {})
+        # Extract task-specific performance with correct task names
+        acrobot_perf = final_performance.get('acrobot', {})
         mountain_car_perf = final_performance.get('mountain_car', {})
         
         forgetting_data.append({
             'topology': topology,
             'size': size,
-            'cartpole_reward': cartpole_perf.get('mean_reward', 0),
-            'cartpole_solved': cartpole_perf.get('solved_rate', 0),
+            'acrobot_reward': acrobot_perf.get('mean_reward', 0),
+            'acrobot_solved': acrobot_perf.get('solved_rate', 0),
             'mountain_car_reward': mountain_car_perf.get('mean_reward', 0),
             'mountain_car_solved': mountain_car_perf.get('solved_rate', 0),
-            'backward_transfer': transfer_metrics_data.get('backward_transfer', {}).get('cartpole', 1.0),
+            'backward_transfer': transfer_metrics_data.get('backward_transfer', {}).get('acrobot', 1.0),
             'forward_transfer': transfer_metrics_data.get('forward_transfer', {}).get('mountain_car', 1.0)
         })
         
@@ -441,13 +495,13 @@ def analyze_experiment_b_scaled_results(results, results_dir):
         # Extract learning curves if available
         if 'learning_curves' in curriculum_results:
             learning_curves_data = curriculum_results['learning_curves']
-            for task_name in ['cartpole', 'mountain_car']:
+            for task_name in task_names:
                 if task_name in learning_curves_data:
                     learning_curves[f"{topology}_{size}_{task_name}"] = learning_curves_data[task_name]
         elif 'performance_history' in curriculum_results:
             # Try to extract from performance history
             performance_history = curriculum_results['performance_history']
-            for task_name in ['cartpole', 'mountain_car']:
+            for task_name in task_names:
                 if task_name in performance_history:
                     task_history = performance_history[task_name]
                     if task_name in task_history:  # Nested structure
@@ -455,26 +509,110 @@ def analyze_experiment_b_scaled_results(results, results_dir):
                         if 'learning_curve' in episode_data:
                             learning_curves[f"{topology}_{size}_{task_name}"] = episode_data['learning_curve']
     
-    # Create forgetting analysis
-    print("\nTopology Forgetting Patterns:")
-    print("-" * 80)
+    # Create sophisticated forgetting analysis
+    print("\n" + "="*80)
+    print("SOPHISTICATED FORGETTING ANALYSIS - DETAILED METRICS")
+    print("="*80)
     
     # Group by size
     for size in sorted(set(d['size'] for d in forgetting_data)):
         print(f"\nNetwork Size: {size}")
-        print("-" * 40)
+        print("-" * 60)
         
         size_data = [d for d in forgetting_data if d['size'] == size]
         size_data.sort(key=lambda x: x['backward_transfer'], reverse=True)
         
         for data in size_data:
-            print(f"{data['topology'].upper():15} | "
-                  f"Cartpole: {data['cartpole_reward']:6.1f} reward, {data['cartpole_solved']:5.1f}% solved | "
+            topology_key = f"{data['topology']}_{size}"
+            acrobot_curve = learning_curves.get(f"{topology_key}_acrobot", [])
+            mountain_car_curve = learning_curves.get(f"{topology_key}_mountain_car", [])
+            
+            print(f"\n{data['topology'].upper():15} | "
+                  f"Acrobot: {data['acrobot_reward']:6.1f} reward, {data['acrobot_solved']:5.1f}% solved | "
                   f"Mountain Car: {data['mountain_car_reward']:6.1f} reward, {data['mountain_car_solved']:5.1f}% solved")
-            print(f"{'':15} | "
-                  f"Backward Transfer: {data['backward_transfer']:6.3f} | "
+            
+            # Basic transfer metrics
+            print(f"{'':15} | Transfer Metrics:")
+            print(f"{'':15} |   Backward Transfer: {data['backward_transfer']:6.3f} | "
                   f"Forward Transfer: {data['forward_transfer']:6.3f}")
-            print()
+            
+            # Sophisticated forgetting analysis
+            if acrobot_curve and mountain_car_curve:
+                # Convert numpy arrays to lists if needed
+                if hasattr(acrobot_curve, 'tolist'):
+                    acrobot_curve = acrobot_curve.tolist()
+                if hasattr(mountain_car_curve, 'tolist'):
+                    mountain_car_curve = mountain_car_curve.tolist()
+                
+                # Calculate forgetting metrics
+                acrobot_initial = acrobot_curve[0] if acrobot_curve else 0
+                acrobot_final = acrobot_curve[-1] if acrobot_curve else 0
+                mountain_car_initial = mountain_car_curve[0] if mountain_car_curve else 0
+                mountain_car_final = mountain_car_curve[-1] if mountain_car_curve else 0
+                
+                # Retention decay analysis
+                retention_decay_acrobot = (acrobot_final - acrobot_initial) / max(abs(acrobot_initial), 1)
+                retention_decay_mountain_car = (mountain_car_final - mountain_car_initial) / max(abs(mountain_car_initial), 1)
+                
+                # Forgetting rate (negative values indicate forgetting)
+                forgetting_rate_acrobot = retention_decay_acrobot if retention_decay_acrobot < 0 else 0
+                forgetting_rate_mountain_car = retention_decay_mountain_car if retention_decay_mountain_car < 0 else 0
+                
+                # Interference analysis (how much learning second task affects first task)
+                interference_score = abs(forgetting_rate_acrobot)  # Higher = more interference
+                
+                # Recovery analysis (ability to recover performance)
+                acrobot_variance = np.std(acrobot_curve) if len(acrobot_curve) > 1 else 0
+                mountain_car_variance = np.std(mountain_car_curve) if len(mountain_car_curve) > 1 else 0
+                recovery_stability = min(acrobot_variance, mountain_car_variance)  # Lower = more stable recovery
+                
+                # Learning efficiency (how quickly each task was learned)
+                acrobot_learning_efficiency = (acrobot_final - acrobot_initial) / len(acrobot_curve) if len(acrobot_curve) > 1 else 0
+                mountain_car_learning_efficiency = (mountain_car_final - mountain_car_initial) / len(mountain_car_curve) if len(mountain_car_curve) > 1 else 0
+                
+                print(f"{'':15} | Sophisticated Forgetting Analysis:")
+                print(f"{'':15} |   Retention Decay:")
+                print(f"{'':15} |     Acrobot: {retention_decay_acrobot:6.3f} | Mountain Car: {retention_decay_mountain_car:6.3f}")
+                print(f"{'':15} |   Forgetting Rate:")
+                print(f"{'':15} |     Acrobot: {forgetting_rate_acrobot:6.3f} | Mountain Car: {forgetting_rate_mountain_car:6.3f}")
+                print(f"{'':15} |   Interference Score: {interference_score:6.3f}")
+                print(f"{'':15} |   Recovery Stability: {recovery_stability:6.3f}")
+                print(f"{'':15} |   Learning Efficiency:")
+                print(f"{'':15} |     Acrobot: {acrobot_learning_efficiency:6.3f} | Mountain Car: {mountain_car_learning_efficiency:6.3f}")
+                
+                # Forgetting pattern classification
+                if interference_score < 0.1:
+                    pattern = "Low Interference"
+                elif interference_score < 0.3:
+                    pattern = "Moderate Interference"
+                else:
+                    pattern = "High Interference"
+                
+                if recovery_stability < 5:
+                    stability = "Very Stable"
+                elif recovery_stability < 10:
+                    stability = "Stable"
+                else:
+                    stability = "Unstable"
+                
+                print(f"{'':15} |   Pattern: {pattern} | Stability: {stability}")
+                
+                # Store sophisticated metrics
+                data.update({
+                    'retention_decay_acrobot': retention_decay_acrobot,
+                    'retention_decay_mountain_car': retention_decay_mountain_car,
+                    'forgetting_rate_acrobot': forgetting_rate_acrobot,
+                    'forgetting_rate_mountain_car': forgetting_rate_mountain_car,
+                    'interference_score': interference_score,
+                    'recovery_stability': recovery_stability,
+                    'acrobot_learning_efficiency': acrobot_learning_efficiency,
+                    'mountain_car_learning_efficiency': mountain_car_learning_efficiency,
+                    'forgetting_pattern': pattern,
+                    'recovery_stability_level': stability
+                })
+            else:
+                print(f"{'':15} | No learning curve data available for sophisticated analysis")
+                print()
     
     # Create plots
     create_forgetting_plots(forgetting_data, learning_curves, results_dir)
@@ -498,6 +636,15 @@ def analyze_experiment_b_scaled_results(results, results_dir):
     print(f"📁 Results saved to: {results_dir}")
     
     return analysis_results
+
+def get_ax(axes, row, col):
+    if isinstance(axes, list):
+        return axes[col]
+    if isinstance(axes, np.ndarray):
+        if axes.ndim == 1:
+            return axes[col]
+        return axes[row, col]
+    return axes  # single Axes object
 
 def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
     """Create comprehensive forgetting and transfer plots."""
@@ -530,7 +677,7 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
         
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         
         x = np.arange(len(topologies))
         width = 0.35
@@ -557,7 +704,7 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
     for i in range(num_sizes, rows * cols):
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         ax.set_visible(False)
     
     plt.tight_layout()
@@ -577,17 +724,17 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
     for i, size in enumerate(sizes):
         size_data = [d for d in forgetting_data if d['size'] == size]
         topologies = [d['topology'] for d in size_data]
-        cartpole_rewards = [d['cartpole_reward'] for d in size_data]
+        acrobot_rewards = [d['acrobot_reward'] for d in size_data]
         mountain_car_rewards = [d['mountain_car_reward'] for d in size_data]
         
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         
         x = np.arange(len(topologies))
         width = 0.35
         
-        bars1 = ax.bar(x - width/2, cartpole_rewards, width, label='Cartpole', alpha=0.7)
+        bars1 = ax.bar(x - width/2, acrobot_rewards, width, label='Acrobot', alpha=0.7)
         bars2 = ax.bar(x + width/2, mountain_car_rewards, width, label='Mountain Car', alpha=0.7)
         
         ax.set_title(f'Network Size: {size}')
@@ -608,7 +755,7 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
     for i in range(num_sizes, rows * cols):
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         ax.set_visible(False)
     
     plt.tight_layout()
@@ -639,7 +786,11 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
                 
                 row = i // cols_curves
                 col = i % cols_curves
-                ax = axes[row, col] if rows_curves > 1 else axes[col]
+                ax = get_ax(axes, row, col)
+                
+                # Convert numpy array to list if needed
+                if hasattr(curve, 'tolist'):
+                    curve = curve.tolist()
                 
                 episodes = list(range(1, len(curve) + 1))
                 ax.plot(episodes, curve, linewidth=2, alpha=0.8)
@@ -652,7 +803,7 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
             for i in range(num_curves, rows_curves * cols_curves):
                 row = i // cols_curves
                 col = i % cols_curves
-                ax = axes[row, col] if rows_curves > 1 else axes[col]
+                ax = get_ax(axes, row, col)
                 ax.set_visible(False)
             
             plt.tight_layout()
@@ -662,24 +813,30 @@ def create_forgetting_plots(forgetting_data, learning_curves, results_dir):
     # 4. Solved rate comparison
     fig, ax = plt.subplots(figsize=(12, 8))
     
-    for size in sizes:
+    for i, size in enumerate(sizes):
         size_data = [d for d in forgetting_data if d['size'] == size]
         topologies = [d['topology'] for d in size_data]
-        cartpole_solved = [d['cartpole_solved'] for d in size_data]
+        acrobot_solved = [d['acrobot_solved'] for d in size_data]
         mountain_car_solved = [d['mountain_car_solved'] for d in size_data]
         
         x = np.arange(len(topologies))
         width = 0.35
         
-        ax.bar(x - width/2 + width * (size == sizes[1]), cartpole_solved, width, 
-               label=f'Cartpole (Size {size})', alpha=0.7)
-        ax.bar(x + width/2 + width * (size == sizes[1]), mountain_car_solved, width, 
+        # Handle single size case
+        if len(sizes) == 1:
+            offset = 0
+        else:
+            offset = width * (i == 1)  # Offset for second size
+        
+        ax.bar(x - width/2 + offset, acrobot_solved, width, 
+               label=f'Acrobot (Size {size})', alpha=0.7)
+        ax.bar(x + width/2 + offset, mountain_car_solved, width, 
                label=f'Mountain Car (Size {size})', alpha=0.7)
     
     ax.set_xlabel('Topology')
     ax.set_ylabel('Solved Rate (%)')
     ax.set_title('Solved Rate Comparison by Task, Topology and Size')
-    ax.set_xticks(x + width/2)
+    ax.set_xticks(x + width/2 if len(sizes) > 1 else x)
     ax.set_xticklabels([d['topology'] for d in forgetting_data if d['size'] == sizes[0]])
     ax.legend()
     ax.grid(True, alpha=0.3)

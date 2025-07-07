@@ -64,15 +64,18 @@ class TestCurriculumConfig(CurriculumConfig):
     def __post_init__(self):
         super().__post_init__()
 
-        self.network_sizes = [25]  
+        self.network_sizes = [500, 1000]  
         self.seeds = [42] 
-        self.num_layers = [1]  
-        self.network_types = ['ffn']  
+        self.num_layers = [1,2,3]  
+        self.network_types = ['ffn', 'rnn']  
         self.node_selection_strategies = [
             'random',
             ] 
         self.experiment_types = [
             'match_small_world',
+            'match_fully_connected',
+            'match_modular',
+            'match_hybrid',
         ]  
         
         # Mark as test run

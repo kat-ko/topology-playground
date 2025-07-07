@@ -76,3 +76,13 @@ TODOs
 
 Generate a testbed for neural network topology performance comparison in hindsight of which nodes we define as input and output nodes. 
 We wantt o compare across a watts-stroganov small-world model, a modular network with 
+
+### Experiment Idea Continual Learning
+Real-life alternated Snake
+
+Though I am categorizing these changes the effects of each can be intertwined. Let's imagine for example an alternate variant of the snake game, where the 
+1. Agent changes (length of the snake)
+2. Environment changes (obstacles can be added or the size could change)
+3. reward changes (the reward for eating an apple or crashing with an obstacle)
+
+then by changing the length of the snake indirectly also the environment changes since the agent can interact with itself, by crashing into its own tail and receiving negative reward for that. Also changes in the environment can influence the reward function, if new elements are added to an experiment for example.  
