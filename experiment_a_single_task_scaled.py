@@ -57,7 +57,7 @@ EXPERIMENT_CONFIG = {
     
     # Task configuration
     'task': 'acrobot',  # Keep acrobot for faster training
-    'episodes': 1000,   # Increased 5x for convergence
+    'episodes': 5000,   # Increased 5x for convergence
     'evaluation_episodes': 50,  # Increased for better evaluation
     'max_env_steps': 1000,  # Increased for more exploration
     
@@ -97,20 +97,26 @@ class ExperimentAScaledConfig:
     
     def __init__(self):
         # Core experiment settings - DRAMATICALLY SCALED UP FOR MEANINGFUL LEARNING
-        self.network_sizes = [1000, 2000]  # Increased 10x from [150, 300] for meaningful capacity
+        self.network_sizes = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]  # Increased 10x from [150, 300] for meaningful capacity
         self.num_layers = [1]
-        self.network_types = ['ffn']
-        self.experiment_types = ['match_small_world']
+        self.network_types = ['rnn']
+        self.experiment_types = ['same_size']
         self.task_sequence = ['acrobot']  # Keep acrobot for faster training
         self.seeds = [42]
         self.node_selection_strategies = ['random']
         
         # Training parameters - DRAMATICALLY INCREASED FOR LEARNING
-        self.episodes_per_task = 1000  # Increased 5x from 150 for convergence
+        self.episodes_per_task = 10000  # Increased 5x from 150 for convergence
         self.evaluation_episodes = 50  # Increased for better evaluation
         self.max_env_steps = 1000  # Increased from 500 for more exploration
         self.learning_rate = 0.001
         self.batch_size = 64  # Increased for better training
+        
+        # Adaptive training parameters
+        self.convergence_window = 100  # Episodes to check for convergence
+        self.convergence_threshold = 0.02  # Performance stability threshold
+        self.min_episodes = 200  # Minimum episodes before early stopping
+        self.convergence_patience = 3  # How many times to check before stopping
         
         # Parameter budget - MUCH LARGER FOR MEANINGFUL NETWORKS
         self.parameter_budget = {
@@ -192,6 +198,10 @@ class ExperimentAScaledConfig:
             'max_env_steps': self.max_env_steps,
             'learning_rate': self.learning_rate,
             'batch_size': self.batch_size,
+            'convergence_window': self.convergence_window,
+            'convergence_threshold': self.convergence_threshold,
+            'min_episodes': self.min_episodes,
+            'convergence_patience': self.convergence_patience,
             'backward_transfer_tasks': self.backward_transfer_tasks,
             'forward_transfer_tasks': self.forward_transfer_tasks,
             'forgetting_test': self.forgetting_test,
@@ -246,111 +256,123 @@ def verify_capacity_matching(config):
     results_summary = {'passed': 0, 'failed': 0, 'errors': 0, 'details': {}}
     
     for exp_type in experiment_types:
-        reference_topology = exp_type[len('match_'):]
         print(f"\n{'='*20} EXPERIMENT TYPE: {exp_type.upper()} {'='*20}")
-        print(f"All topologies matched to {reference_topology} capacity")
+        
+        if exp_type == 'same_size':
+            print("All topologies use the same node count (not matched capacities)")
+        else:
+            reference_topology = exp_type[len('match_'):]
+            print(f"All topologies matched to {reference_topology} capacity")
         
         for size in sizes:
             print(f"\n--- Network Size: {size} ---")
             
-            # Get target capacities from baseline
-            target_capacities = {}
-            for network_type in network_types:
-                for num_layers in num_layers_list:
-                    target_capacity = measurement_manager.get_target_capacity(
-                        reference_topology, size, network_type, num_layers
-                    )
-                    target_capacities[f"{network_type}_{num_layers}"] = target_capacity
-            
-            print(f"Target capacities from baseline: {target_capacities}")
+            if exp_type == 'same_size':
+                print("All topologies will use this exact node count")
+            else:
+                # Get target capacities from baseline
+                target_capacities = {}
+                for network_type in network_types:
+                    for num_layers in num_layers_list:
+                        target_capacity = measurement_manager.get_target_capacity(
+                            reference_topology, size, network_type, num_layers
+                        )
+                        target_capacities[f"{network_type}_{num_layers}"] = target_capacity
+                
+                print(f"Target capacities from baseline: {target_capacities}")
             
             # Test each topology
             for topology in topologies:
                 print(f"\n  Topology: {topology.upper()}")
                 print(f"  {'-' * (len(topology) + 10)}")
-                
                 for network_type in network_types:
                     for num_layers in num_layers_list:
                         for seed in seeds:
                             for strategy in node_selection_strategies:
                                 torch.manual_seed(seed)
                                 np.random.seed(seed)
-                                
                                 config_key = f"{exp_type}_{topology}_{size}_{network_type}_{num_layers}_{seed}_{strategy}"
-                                target_capacity = target_capacities[f"{network_type}_{num_layers}"]
-                                
-                                if target_capacity is None:
+                                if exp_type == 'same_size':
+                                    matching_size = size
                                     print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                    print(f"      ❌ NO BASELINE MEASUREMENT AVAILABLE")
-                                    results_summary['errors'] += 1
-                                    results_summary['details'][config_key] = {
-                                        'status': 'error',
-                                        'error': 'No baseline measurement available',
-                                        'type': 'error'
-                                    }
-                                    continue
-                                
-                                try:
-                                    # For the reference topology, use the baseline size
-                                    if topology == reference_topology:
-                                        matching_size = size
-                                        print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                        print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
-                                        print(f"      Size: {matching_size} nodes (reference, no adjustment)")
-                                    else:
-                                        # Use incremental adjustment to find matching size
-                                        matching_size = calculator.calculate_matching_size(
-                                            topology, target_capacity, network_type, num_layers
-                                        )
-                                        print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
-                                        print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
-                                        print(f"      Size adjustment: {size} → {matching_size} nodes (incremental adjustment)")
-                                    
-                                    # Create network using the matching size
+                                    print(f"      Size: {matching_size} nodes (same_size experiment)")
                                     network = calculator.create_network(
                                         topology=topology,
                                         size=matching_size,
-                                        experiment_type='same_size',
+                                        experiment_type=exp_type,
                                         network_type=network_type,
                                         num_layers=num_layers,
                                         seed=seed
                                     )
-                                    
                                     metrics = network.get_network_metrics()
                                     actual_capacity = sum(
                                         metrics.get(k, 0) for k in metrics if k.startswith('num_')
                                     )
-                                    
-                                    # Calculate divergence
-                                    divergence = abs(actual_capacity - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
-                                    
                                     print(f"      Actual: {actual_capacity:,} parameters")
-                                    print(f"      Divergence: {divergence:.2f}%")
-                                    
-                                    if divergence <= 5.0:
-                                        print(f"      ✅ Within threshold (5.0%)")
-                                        results_summary['passed'] += 1
-                                        status = 'passed'
-                                    else:
-                                        print(f"      ⚠️  Exceeds threshold (5.0%)")
-                                        results_summary['failed'] += 1
-                                        status = 'failed'
-                                    
+                                    print(f"      ✅ Same size experiment - no capacity matching required")
+                                    results_summary['passed'] += 1
                                     results_summary['details'][config_key] = {
-                                        'status': status,
-                                        'target_capacity': target_capacity,
+                                        'status': 'passed',
                                         'actual_capacity': actual_capacity,
                                         'matching_size': matching_size,
-                                        'divergence': divergence
+                                        'type': 'same_size'
                                     }
-                                except Exception as e:
-                                    print(f"      ❌ ERROR: {e}")
-                                    results_summary['errors'] += 1
-                                    results_summary['details'][config_key] = {
-                                        'status': 'error',
-                                        'error': str(e),
-                                        'type': 'error'
-                                    }
+                                elif exp_type.startswith('match_'):
+                                    target_capacity = target_capacities[f"{network_type}_{num_layers}"]
+                                    try:
+                                        if topology == reference_topology:
+                                            matching_size = size
+                                            print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
+                                            print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
+                                            print(f"      Size: {matching_size} nodes (reference, no adjustment)")
+                                        else:
+                                            # Use incremental adjustment to find matching size directly
+                                            matching_size = calculator.calculate_matching_size(
+                                                topology, target_capacity, network_type, num_layers
+                                            )
+                                            print(f"    {network_type.upper()} | {strategy} | {num_layers}L | seed={seed}:")
+                                            print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
+                                            print(f"      Size adjustment: {size} → {matching_size} nodes (incremental adjustment)")
+                                        
+                                        # Create network using the matching size with 'same_size' to avoid recursive matching
+                                        network = calculator.create_network(
+                                            topology=topology,
+                                            size=matching_size,
+                                            experiment_type='same_size',  # Use same_size to avoid recursive matching
+                                            network_type=network_type,
+                                            num_layers=num_layers,
+                                            seed=seed
+                                        )
+                                        metrics = network.get_network_metrics()
+                                        actual_capacity = sum(
+                                            metrics.get(k, 0) for k in metrics if k.startswith('num_')
+                                        )
+                                        divergence = abs(actual_capacity - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
+                                        print(f"      Actual: {actual_capacity:,} parameters")
+                                        print(f"      Divergence: {divergence:.2f}%")
+                                        if divergence <= 5.0:
+                                            print(f"      ✅ Within threshold (5.0%)")
+                                            results_summary['passed'] += 1
+                                            status = 'passed'
+                                        else:
+                                            print(f"      ⚠️  Exceeds threshold (5.0%)")
+                                            results_summary['failed'] += 1
+                                            status = 'failed'
+                                        results_summary['details'][config_key] = {
+                                            'status': status,
+                                            'target_capacity': target_capacity,
+                                            'actual_capacity': actual_capacity,
+                                            'matching_size': matching_size,
+                                            'divergence': divergence
+                                        }
+                                    except Exception as e:
+                                        print(f"      ❌ ERROR: {e}")
+                                        results_summary['errors'] += 1
+                                        results_summary['details'][config_key] = {
+                                            'status': 'error',
+                                            'error': str(e),
+                                            'type': 'error'
+                                        }
     
     # Print comprehensive summary
     print("\n" + "="*80)
@@ -438,19 +460,29 @@ def analyze_experiment_a_scaled_results(results, results_dir):
         size = result['network_size']
         curriculum_results = result['curriculum_results']
         
-        # Extract final performance - handle both enhanced and regular formats
-        if 'final_performance' in curriculum_results:
-            # Enhanced format
-            final_performance = curriculum_results['final_performance']
-            task_name = list(final_performance.keys())[0]  # Should be 'cartpole'
-            task_performance = final_performance[task_name]
-        elif 'performance_history' in curriculum_results:
-            # Regular format - extract from performance history
+        # Get the actual task name from the experiment (should be 'acrobot')
+        task_name = 'acrobot'  # From ExperimentAScaledConfig.task_sequence = ['acrobot']
+        
+        # Extract final performance from the correct location in enhanced runner output
+        if 'performance_history' in curriculum_results:
+            # Enhanced runner format
             performance_history = curriculum_results['performance_history']
-            if 'cartpole' in performance_history:
-                task_performance = performance_history['cartpole']['cartpole']
+            if task_name in performance_history:
+                task_performance = performance_history[task_name][task_name]  # Nested structure
             else:
                 # Fallback - create basic performance data
+                task_performance = {
+                    'mean_reward': 0.0,
+                    'std_reward': 0.0,
+                    'solved_rate': 0.0,
+                    'mean_length': 0.0
+                }
+        elif 'final_performance' in curriculum_results:
+            # Alternative enhanced format
+            final_performance = curriculum_results['final_performance']
+            if task_name in final_performance:
+                task_performance = final_performance[task_name]
+            else:
                 task_performance = {
                     'mean_reward': 0.0,
                     'std_reward': 0.0,
@@ -478,35 +510,92 @@ def analyze_experiment_a_scaled_results(results, results_dir):
         # Extract learning curves if available
         if 'learning_curves' in curriculum_results:
             learning_curves_data = curriculum_results['learning_curves']
-            if 'cartpole' in learning_curves_data:
-                learning_curves[f"{topology}_{size}"] = learning_curves_data['cartpole']
+            if task_name in learning_curves_data:
+                learning_curves[f"{topology}_{size}"] = learning_curves_data[task_name]
         elif 'performance_history' in curriculum_results:
             # Try to extract from performance history
             performance_history = curriculum_results['performance_history']
-            if 'cartpole' in performance_history:
-                task_history = performance_history['cartpole']
-                if 'cartpole' in task_history:  # Nested structure
-                    episode_data = task_history['cartpole']
+            if task_name in performance_history:
+                task_history = performance_history[task_name]
+                if task_name in task_history:  # Nested structure
+                    episode_data = task_history[task_name]
                     if 'learning_curve' in episode_data:
                         learning_curves[f"{topology}_{size}"] = episode_data['learning_curve']
     
-    # Create performance summary
-    print("\nTopology Performance Summary:")
-    print("-" * 60)
+    # Create learning curve analysis summary
+    print("\n" + "="*80)
+    print("LEARNING CURVE ANALYSIS - FOCUS ON TRAINING DYNAMICS")
+    print("="*80)
     
     # Group by size
     for size in sorted(set(d['size'] for d in performance_data)):
         print(f"\nNetwork Size: {size}")
-        print("-" * 30)
+        print("-" * 50)
         
         size_data = [d for d in performance_data if d['size'] == size]
         size_data.sort(key=lambda x: x['mean_reward'], reverse=True)
         
         for data in size_data:
-            print(f"{data['topology'].upper():15} | "
-                  f"Reward: {data['mean_reward']:6.1f} ± {data['std_reward']:4.1f} | "
-                  f"Solved: {data['solved_rate']:5.1f}% | "
-                  f"Length: {data['mean_length']:5.1f}")
+            topology_key = f"{data['topology']}_{size}"
+            learning_curve = learning_curves.get(topology_key, [])
+            
+            print(f"\n{data['topology'].upper():15} | "
+                  f"Final Reward: {data['mean_reward']:6.1f} ± {data['std_reward']:4.1f}")
+            
+            if learning_curve:
+                # Convert numpy array to list if needed
+                if hasattr(learning_curve, 'tolist'):
+                    learning_curve = learning_curve.tolist()
+                
+                # Calculate learning dynamics
+                initial_reward = learning_curve[0] if learning_curve else 0
+                final_reward = learning_curve[-1] if learning_curve else 0
+                max_reward = max(learning_curve) if learning_curve else 0
+                min_reward = min(learning_curve) if learning_curve else 0
+                total_improvement = final_reward - initial_reward
+                learning_rate = total_improvement / len(learning_curve) if len(learning_curve) > 1 else 0
+                stability = np.std(learning_curve[-50:]) if len(learning_curve) >= 50 else np.std(learning_curve)
+                
+                # Calculate convergence point (when performance stabilizes)
+                convergence_window = 50
+                convergence_episode = len(learning_curve)
+                if len(learning_curve) >= convergence_window:
+                    recent_std = np.std(learning_curve[-convergence_window:])
+                    for i in range(len(learning_curve) - convergence_window):
+                        if np.std(learning_curve[i:i+convergence_window]) <= recent_std:
+                            convergence_episode = i
+                            break
+                
+                print(f"{'':15} | Learning Dynamics:")
+                print(f"{'':15} |   Initial: {initial_reward:6.1f} → Final: {final_reward:6.1f} (Δ{total_improvement:+.1f})")
+                print(f"{'':15} |   Max/Min: {max_reward:6.1f} / {min_reward:6.1f}")
+                print(f"{'':15} |   Learning Rate: {learning_rate:6.3f} reward/episode")
+                print(f"{'':15} |   Stability (σ): {stability:6.2f}")
+                print(f"{'':15} |   Convergence: Episode {convergence_episode}/{len(learning_curve)}")
+                
+                # Learning pattern analysis
+                if total_improvement > 0:
+                    if learning_rate > 0.1:
+                        pattern = "Fast Learner"
+                    elif learning_rate > 0.05:
+                        pattern = "Steady Learner"
+                    else:
+                        pattern = "Slow Learner"
+                else:
+                    pattern = "No Improvement"
+                
+                if stability < 5:
+                    stability_desc = "Very Stable"
+                elif stability < 10:
+                    stability_desc = "Stable"
+                elif stability < 20:
+                    stability_desc = "Moderate Variance"
+                else:
+                    stability_desc = "High Variance"
+                
+                print(f"{'':15} |   Pattern: {pattern} | Stability: {stability_desc}")
+            else:
+                print(f"{'':15} | No learning curve data available")
     
     # Create plots
     create_performance_plots(performance_data, learning_curves, results_dir)
@@ -529,6 +618,15 @@ def analyze_experiment_a_scaled_results(results, results_dir):
     print(f"📁 Results saved to: {results_dir}")
     
     return analysis_results
+
+def get_ax(axes, row, col):
+    if isinstance(axes, list):
+        return axes[col]
+    if isinstance(axes, np.ndarray):
+        if axes.ndim == 1:
+            return axes[col]
+        return axes[row, col]
+    return axes  # single Axes object
 
 def create_performance_plots(performance_data, learning_curves, results_dir):
     """Create comprehensive performance plots."""
@@ -561,7 +659,7 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
         
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         
         bars = ax.bar(topologies, rewards, yerr=stds, capsize=5, alpha=0.7)
         ax.set_title(f'Network Size: {size}')
@@ -579,7 +677,7 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
     for i in range(num_sizes, rows * cols):
         row = i // cols
         col = i % cols
-        ax = axes[row, col] if rows > 1 else axes[col]
+        ax = get_ax(axes, row, col)
         ax.set_visible(False)
     
     plt.tight_layout()
@@ -610,7 +708,11 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
                 
                 row = i // cols
                 col = i % cols
-                ax = axes[row, col] if rows > 1 else axes[col]
+                ax = get_ax(axes, row, col)
+                
+                # Convert numpy array to list if needed
+                if hasattr(curve, 'tolist'):
+                    curve = curve.tolist()
                 
                 episodes = list(range(1, len(curve) + 1))
                 ax.plot(episodes, curve, linewidth=2, alpha=0.8)
@@ -623,7 +725,7 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
             for i in range(num_curves, rows * cols):
                 row = i // cols
                 col = i % cols
-                ax = axes[row, col] if rows > 1 else axes[col]
+                ax = get_ax(axes, row, col)
                 ax.set_visible(False)
             
             plt.tight_layout()
@@ -633,7 +735,7 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
     # 3. Solved rate comparison
     fig, ax = plt.subplots(figsize=(12, 8))
     
-    for size in sizes:
+    for i, size in enumerate(sizes):
         size_data = [d for d in performance_data if d['size'] == size]
         topologies = [d['topology'] for d in size_data]
         solved_rates = [d['solved_rate'] for d in size_data]
@@ -641,13 +743,19 @@ def create_performance_plots(performance_data, learning_curves, results_dir):
         x = np.arange(len(topologies))
         width = 0.35
         
-        ax.bar(x + width * (size == sizes[1]), solved_rates, width, 
+        # Handle single size case
+        if len(sizes) == 1:
+            offset = 0
+        else:
+            offset = width * (i == 1)  # Offset for second size
+        
+        ax.bar(x + offset, solved_rates, width, 
                label=f'Size {size}', alpha=0.7)
     
     ax.set_xlabel('Topology')
     ax.set_ylabel('Solved Rate (%)')
     ax.set_title('Solved Rate Comparison by Topology and Size')
-    ax.set_xticks(x + width/2)
+    ax.set_xticks(x + width/2 if len(sizes) > 1 else x)
     ax.set_xticklabels([d['topology'] for d in performance_data if d['size'] == sizes[0]])
     ax.legend()
     ax.grid(True, alpha=0.3)

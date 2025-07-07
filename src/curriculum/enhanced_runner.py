@@ -107,11 +107,16 @@ class EnhancedCurriculumRunner:
                     for num_layers in tqdm(self.config['num_layers'], desc="Number of layers", leave=False):
                         for network_type in tqdm(self.config['network_types'], desc="Network types", leave=False):
                             # --- Correct Capacity-matching scaling logic ---
-                            # Determine reference topology and target capacity
-                            if experiment_type.startswith('match_'):
+                            if experiment_type == 'same_size':
+                                # For same_size, all topologies use the same original size
+                                sw_size = size
+                                mod_size = size
+                                hybrid_size = size
+                                fc_size = size
+                                target_capacity = None
+                            elif experiment_type.startswith('match_'):
                                 reference_topology = experiment_type[len('match_'):]
                                 measurement_manager = CapacityMeasurementManager(self.config)
-                                # Debug: print config hash and available keys
                                 print(f"[DEBUG] Config hash: {measurement_manager._get_config_hash()}")
                                 lookup_key = f"{reference_topology}_{size}_{network_type}_{num_layers}"
                                 print(f"[DEBUG] Looking for measurement key: {lookup_key}")
@@ -122,9 +127,13 @@ class EnhancedCurriculumRunner:
                                 if target_capacity is None:
                                     print(f"[WARNING] No baseline measurement available for {lookup_key}, falling back to calculator.")
                                     target_capacity = calculator.get_budget(experiment_type, reference_topology, size, network_type, num_layers)
-                            else:  # 'same_size'
-                                # For same_size, use the base budget scaled by size
-                                target_capacity = calculator.get_budget(experiment_type, 'small_world', size, network_type, num_layers)
+                                # Reference topology keeps natural size
+                                sw_size = calculator.get_matching_size(experiment_type, 'small_world', size, network_type, num_layers) if reference_topology != 'small_world' else size
+                                mod_size = calculator.get_matching_size(experiment_type, 'modular', size, network_type, num_layers) if reference_topology != 'modular' else size
+                                hybrid_size = calculator.get_matching_size(experiment_type, 'hybrid', size, network_type, num_layers) if reference_topology != 'hybrid' else size
+                                fc_size = calculator.get_matching_size(experiment_type, 'fully_connected', size, network_type, num_layers) if reference_topology != 'fully_connected' else size
+                            else:
+                                raise ValueError(f"Unknown experiment type: {experiment_type}")
                             
                             # Use the same capacity matching logic as smoke test
                             if experiment_type.startswith('match_'):
@@ -149,11 +158,11 @@ class EnhancedCurriculumRunner:
                                 else:
                                     fc_size = calculator.calculate_matching_size('fully_connected', target_capacity, network_type, num_layers)
                             else:  # 'same_size'
-                                # For same_size, scale all topologies using the same logic
-                                sw_size = calculator.calculate_matching_size('small_world', target_capacity, network_type, num_layers)
-                                mod_size = calculator.calculate_matching_size('modular', target_capacity, network_type, num_layers)
-                                hybrid_size = calculator.calculate_matching_size('hybrid', target_capacity, network_type, num_layers)
-                                fc_size = calculator.calculate_matching_size('fully_connected', target_capacity, network_type, num_layers)
+                                # For same_size, all topologies use the same original size
+                                sw_size = size
+                                mod_size = size
+                                hybrid_size = size
+                                fc_size = size
                             
                             # --- Instantiate topologies with scaled sizes ---
                             small_world = SmallWorldTopology(
@@ -258,7 +267,10 @@ class EnhancedCurriculumRunner:
                                 
                                 # Verify capacity matching
                                 print(f"\nCapacity verification for {experiment_type} (size {size}):")
-                                print(f"Target capacity: {target_capacity}")
+                                if experiment_type.startswith('match_'):
+                                    print(f"Target capacity: {target_capacity}")
+                                else:  # 'same_size'
+                                    print("All topologies use the same node count (no capacity matching)")
                                 
                                 # Test each topology
                                 topologies_to_test = [
@@ -276,14 +288,18 @@ class EnhancedCurriculumRunner:
                                         total_params = sum(
                                             metrics.get(k, 0) for k in metrics if k.startswith('num_')
                                         )
-                                        divergence = abs(total_params - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
-                                        status = "✅" if divergence <= 5.0 else "⚠️"
-                                        print(f"  {topology_name}: size={actual_size}, params={total_params}, divergence={divergence:.2f}% {status}")
                                         
-                                        # Validate that capacity matching is working
-                                        if divergence > 10.0:  # More lenient threshold for training
-                                            print(f"    ⚠️  WARNING: Large capacity divergence detected during training!")
-                                            print(f"    Expected: {target_capacity}, Actual: {total_params}")
+                                        if experiment_type.startswith('match_'):
+                                            divergence = abs(total_params - target_capacity) / target_capacity * 100 if target_capacity > 0 else float('inf')
+                                            status = "✅" if divergence <= 5.0 else "⚠️"
+                                            print(f"  {topology_name}: size={actual_size}, params={total_params}, divergence={divergence:.2f}% {status}")
+                                            
+                                            # Validate that capacity matching is working
+                                            if divergence > 10.0:  # More lenient threshold for training
+                                                print(f"    ⚠️  WARNING: Large capacity divergence detected during training!")
+                                                print(f"    Expected: {target_capacity}, Actual: {total_params}")
+                                        else:  # 'same_size'
+                                            print(f"  {topology_name}: size={actual_size}, params={total_params} (same_size experiment)")
                                 
                                 # Run task sequence for each topology
                                 topologies_to_run = [
@@ -379,53 +395,104 @@ class EnhancedCurriculumRunner:
     def _train_task_with_logging(self, networks, input_nodes, output_nodes,
                                env, task_config, task, size, seed,
                                strategy, topology, network_type):
-        """Train networks on a specific task with comprehensive logging."""
+        """Train networks on a specific task with comprehensive logging and adaptive duration."""
         print(f"Training on {task} with {topology} topology")
         
         # Initialize learning curve tracking
         learning_curve = []
-        episodes_per_task = self.config['episodes_per_task']
+        max_episodes = self.config['episodes_per_task']
         
-        # Simulate training with episode-by-episode logging
-        for episode in range(episodes_per_task):
+        # Adaptive training parameters
+        convergence_window = self.config.get('convergence_window', 50)  # Episodes to check for convergence
+        convergence_threshold = self.config.get('convergence_threshold', 0.02)  # Performance stability threshold
+        min_episodes = self.config.get('min_episodes', 5000)  # Minimum episodes before early stopping
+        patience = self.config.get('convergence_patience', 3)  # How many times to check before stopping
+        
+        convergence_count = 0
+        last_convergence_check = 0
+        
+        # Simulate training with episode-by-episode logging and adaptive duration
+        for episode in range(max_episodes):
             # Simulate episode training
             time.sleep(0.001)  # Simulate training time
             
             # Simulate episode reward (replace with actual training)
             if task == 'cartpole':
                 # CartPole: reward increases over time, max ~200
-                base_reward = 20 + (episode / episodes_per_task) * 180
+                base_reward = 20 + (episode / max_episodes) * 180
                 noise = np.random.normal(0, 5)
                 episode_reward = max(0, base_reward + noise)
             elif task == 'mountain_car':
                 # MountainCar: starts at -200, improves to ~-100
-                base_reward = -200 + (episode / episodes_per_task) * 100
+                base_reward = -200 + (episode / max_episodes) * 100
                 noise = np.random.normal(0, 10)
                 episode_reward = base_reward + noise
             else:  # acrobot
                 # Acrobot: starts at -200, improves to ~-100
-                base_reward = -200 + (episode / episodes_per_task) * 100
+                base_reward = -200 + (episode / max_episodes) * 100
                 noise = np.random.normal(0, 10)
                 episode_reward = base_reward + noise
             
             learning_curve.append(episode_reward)
             
+            # Check for convergence (adaptive training duration)
+            if (episode >= min_episodes and 
+                episode >= last_convergence_check + convergence_window and
+                len(learning_curve) >= convergence_window):
+                
+                # Calculate performance stability in recent window
+                recent_window = learning_curve[-convergence_window:]
+                recent_std = np.std(recent_window)
+                recent_mean = np.mean(recent_window)
+                
+                # Check if performance has stabilized
+                if recent_std < convergence_threshold * abs(recent_mean):
+                    convergence_count += 1
+                    if convergence_count >= patience:
+                        print(f"🔄 Early stopping at episode {episode} - Performance converged")
+                        print(f"   Final std: {recent_std:.3f}, Mean: {recent_mean:.1f}")
+                        break
+                else:
+                    convergence_count = 0  # Reset if not converged
+                
+                last_convergence_check = episode
+            
             # Log every 50 episodes
             if episode % 50 == 0:
-                logger.info(f"Episode {episode}/{episodes_per_task}: {task} - {topology} - Reward: {episode_reward:.1f}")
+                logger.info(f"Episode {episode}/{max_episodes}: {task} - {topology} - Reward: {episode_reward:.1f}")
+        
+        # Calculate training metrics
+        final_episode = len(learning_curve)
+        final_reward = learning_curve[-1] if learning_curve else 0
+        mean_reward = np.mean(learning_curve) if learning_curve else 0
+        std_reward = np.std(learning_curve) if learning_curve else 0
+        
+        # Calculate learning dynamics
+        if len(learning_curve) > 1:
+            learning_rate = (learning_curve[-1] - learning_curve[0]) / len(learning_curve)
+            improvement_rate = np.mean(np.diff(learning_curve[-convergence_window:])) if len(learning_curve) >= convergence_window else 0
+        else:
+            learning_rate = 0
+            improvement_rate = 0
         
         # Update network metrics
         for layer_idx, network in enumerate(networks):
             metrics = network.get_network_metrics()
             logger.info(f"Layer {layer_idx} - Training metrics: {metrics}")
         
-        # Save training metrics under task_metrics
+        # Save enhanced training metrics
         task_metrics = {
             'training_metrics': metrics,
-            'total_episodes': episodes_per_task,
-            'final_episode_reward': learning_curve[-1] if learning_curve else 0,
-            'mean_episode_reward': np.mean(learning_curve) if learning_curve else 0,
-            'std_episode_reward': np.std(learning_curve) if learning_curve else 0
+            'total_episodes': final_episode,
+            'max_episodes': max_episodes,
+            'final_episode_reward': final_reward,
+            'mean_episode_reward': mean_reward,
+            'std_episode_reward': std_reward,
+            'learning_rate': learning_rate,
+            'improvement_rate': improvement_rate,
+            'convergence_episode': final_episode if convergence_count >= patience else max_episodes,
+            'early_stopped': convergence_count >= patience,
+            'convergence_std': recent_std if len(learning_curve) >= convergence_window else std_reward
         }
         
         return task_metrics, learning_curve
@@ -669,6 +736,10 @@ class EnhancedCurriculumRunner:
             
             for task, curve in learning_curves.items():
                 if curve:
+                    # Convert numpy array to list if needed
+                    if hasattr(curve, 'tolist'):
+                        curve = curve.tolist()
+                    
                     episodes = list(range(1, len(curve) + 1))
                     ax.plot(episodes, curve, label=task, linewidth=2, alpha=0.8)
             

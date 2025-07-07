@@ -135,7 +135,7 @@ def verify_capacity_matching(config, divergence_threshold=5.0):
                                     else:
                                         # For match_* experiments, use incremental adjustment logic
                                         reference_topology = exp_type[len('match_'):]
-                                        target_capacity = calculator.get_budget(exp_type, topology, size, network_type, num_layers)
+                                        target_capacity = calculator.get_budget(exp_type, reference_topology, size, network_type, num_layers)
                                         
                                         # For the reference topology, use the baseline size
                                         if topology == reference_topology:
@@ -144,7 +144,7 @@ def verify_capacity_matching(config, divergence_threshold=5.0):
                                             print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
                                             print(f"      Size: {matching_size} nodes (reference, no adjustment)")
                                         else:
-                                            # Use incremental adjustment to find matching size
+                                            # Use incremental adjustment to find matching size directly
                                             matching_size = calculator.calculate_matching_size(
                                                 topology, target_capacity, network_type, num_layers
                                             )
@@ -152,8 +152,7 @@ def verify_capacity_matching(config, divergence_threshold=5.0):
                                             print(f"      Target: {target_capacity:,} parameters (from {reference_topology})")
                                             print(f"      Size adjustment: {size} → {matching_size} nodes (incremental adjustment)")
                                         
-                                        # Create network using the matching size
-                                        # Use 'same_size' to avoid recursive matching lookup
+                                        # Create network using the matching size with 'same_size' to avoid recursive matching
                                         network = calculator.create_network(
                                             topology=topology,
                                             size=matching_size,

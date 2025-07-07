@@ -127,34 +127,29 @@ class ParameterBudgetCalculator:
         for experiment_type in self.experiment_types:
             budgets[experiment_type] = {}
             
-            for topology in self.topologies:
-                budgets[experiment_type][topology] = {}
-                
-                for size in self.config['network_sizes']:
-                    # For capacity matching experiments, we need to compute budgets for each network type and layer count
-                    if experiment_type.startswith('match_'):
-                        # Create a nested structure to store budgets for different network types and layer counts
+            if experiment_type.startswith('match_'):
+                reference_topology = experiment_type[len('match_'):]
+                for topology in self.topologies:
+                    budgets[experiment_type][topology] = {}
+                    for size in self.config['network_sizes']:
                         budgets[experiment_type][topology][size] = {}
-                        
                         for network_type in self.config['network_types']:
                             budgets[experiment_type][topology][size][network_type] = {}
-                            
                             for num_layers in self.config['num_layers']:
-                                # Get target capacity only - don't pre-calculate matching size
-                                target_capacity = self._compute_budget(
-                                    experiment_type, topology, size, network_type, num_layers
+                                # Always use reference topology's capacity as target
+                                target_capacity = self._get_reference_capacity(
+                                    reference_topology, size, network_type, num_layers
                                 )
-                                
-                                # Store only target capacity - matching size will be calculated on-demand
                                 budgets[experiment_type][topology][size][network_type][num_layers] = {
                                     'target_capacity': target_capacity
                                 }
-                    else:
-                        # For non-matching experiments, use the original structure
+            else:
+                for topology in self.topologies:
+                    budgets[experiment_type][topology] = {}
+                    for size in self.config['network_sizes']:
                         budgets[experiment_type][topology][size] = self._compute_budget(
                             experiment_type, topology, size
                         )
-        
         return budgets
     
     def _pre_calculate_matching_size(self, topology: str, target_capacity: int, network_type: str = 'ffn', num_layers: int = 1) -> int:
@@ -412,7 +407,6 @@ class ParameterBudgetCalculator:
                 continue
         
         # Final local optimality check: test a wider range around best_size
-        # Test best_size-3, best_size-2, best_size-1, best_size, best_size+1, best_size+2, best_size+3
         candidate_sizes = [best_size - 5, best_size - 4, best_size - 3, best_size - 2, best_size - 1, best_size, best_size + 1, best_size + 2, best_size + 3, best_size + 4, best_size + 5]
         optimal_size = best_size
         optimal_divergence = best_divergence
@@ -687,36 +681,24 @@ class ParameterBudgetCalculator:
     def _compute_budget(self, experiment_type: str, topology: str, size: int, network_type: str = None, num_layers: int = None) -> int:
         """Compute the parameter budget for a specific experiment type, topology, and size."""
         if experiment_type == 'same_size':
-            # For same_size, we don't enforce a specific budget - just use the actual capacity
-            # that this topology naturally has at this size
             if network_type is None:
                 network_type = self.config['network_types'][0] if self.config['network_types'] else 'ffn'
             if num_layers is None:
                 num_layers = self.config['num_layers'][0] if self.config['num_layers'] else 1
-            
-            # Get the actual parameter count for this topology at this size
             actual_capacity = self._get_reference_capacity(topology, size, network_type, num_layers)
             return actual_capacity
-        
-        # For capacity matching experiments, get actual reference capacity
         if experiment_type.startswith('match_'):
-            # Extract reference topology from experiment type
+            # Always use reference topology's capacity as target
             reference_topology = experiment_type[len('match_'):]
-            
-            # Use provided network type and layer count, or defaults from config
             if network_type is None:
                 network_type = self.config['network_types'][0] if self.config['network_types'] else 'ffn'
             if num_layers is None:
                 num_layers = self.config['num_layers'][0] if self.config['num_layers'] else 1
-            
             target_capacity = self._get_reference_capacity(
                 reference_topology, size, network_type, num_layers
             )
-            
             return target_capacity
-        
         else:
-            # Fallback: use base capacity scaled by size
             target_capacity = self.base_capacities[topology]
             scale_factor = size / self.base_size
             return int(target_capacity * scale_factor)
