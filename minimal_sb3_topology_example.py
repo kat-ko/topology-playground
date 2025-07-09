@@ -17,7 +17,7 @@ from src.utils.parameter_budget import ParameterBudgetCalculator
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3 import PPO
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from src.networks.ffn_custom_sb3 import FeedForwardNetwork
+from src.networks.ffn_custom_sb3 import PyTorchFeedForwardNetwork
 
 class TopologyFeaturesExtractor(BaseFeaturesExtractor):
     """Minimal features extractor using topology networks, always pads obs to 6 and returns 3 outputs."""
@@ -31,26 +31,19 @@ class TopologyFeaturesExtractor(BaseFeaturesExtractor):
             observations = observations.unsqueeze(0)
         batch_size = observations.shape[0]
         # print(f"[DEBUG] Features extractor: input shape = {observations.shape}")
-        features = []
-        for i in range(batch_size):
-            obs = observations[i].cpu().numpy().flatten()  # Flatten to 1D
-            # print(f"[DEBUG] Features extractor: obs[{i}] shape = {obs.shape}")
-            # Pad obs to 6
-            obs_padded = np.zeros(6, dtype=np.float32)
-            obs_padded[:len(obs)] = obs
-            # print(f"[DEBUG] Features extractor: obs_padded[{i}] shape = {obs_padded.shape}")
-            # Prepare input dict for 6 input nodes
-            inputs = {j: obs_padded[j] for j in range(6)}
-            with torch.no_grad():
-                outputs = self.topology_network.forward(inputs)
-            # print(f"[DEBUG] Features extractor: network outputs[{i}] = {outputs}")
-            # Always get 3 outputs (ordered by output_nodes)
-            output_values = [outputs[node] for node in sorted(self.topology_network.output_nodes)[:3]]
-            # print(f"[DEBUG] Features extractor: output_values[{i}] = {output_values}")
-            features.append(output_values)
-        features = np.stack(features).astype(np.float32)
+        
+        # Pad observations to 6 dimensions if needed
+        if observations.shape[1] < 6:
+            padding = torch.zeros(observations.shape[0], 6 - observations.shape[1], device=observations.device)
+            observations = torch.cat([observations, padding], dim=1)
+        elif observations.shape[1] > 6:
+            observations = observations[:, :6]
+        
+        # Use PyTorch network directly with tensor inputs
+        with torch.no_grad():
+            features = self.topology_network(observations)
         # print(f"[DEBUG] Features extractor: final features shape = {features.shape}")
-        return torch.from_numpy(features)
+        return features
 
 class TopologyPolicy(ActorCriticPolicy):
     """Custom policy using two separate topology networks for actor and critic."""
@@ -201,7 +194,7 @@ def create_topology_network(topology_type='small_world', size=20, seed=42):
     from src.topologies.modular import ModularTopology
     from src.topologies.hybrid import HybridTopology
     from src.topologies.fully_connected import FullyConnectedTopology
-    from src.networks.ffn_custom_sb3 import FeedForwardNetwork
+    from src.networks.ffn_custom_sb3 import PyTorchFeedForwardNetwork
     import numpy as np
     
     num_input_nodes = 6
@@ -262,7 +255,7 @@ def create_topology_network(topology_type='small_world', size=20, seed=42):
         'batch_size': 32
     }
     
-    network = FeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
+    network = PyTorchFeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
     return network
 
 def test_minimal_sb3_integration():
@@ -294,22 +287,22 @@ def test_minimal_sb3_integration():
     test_obs = env.reset()[0]
     print(f"Test observation: {test_obs}")
     
-    # Test actor network
-    inputs = {}
-    for j, node in enumerate(actor_network.input_nodes):
-        inputs[node] = test_obs[j] if j < len(test_obs) else 0.0
+    # Test actor network with tensor input
+    test_obs_tensor = torch.tensor([test_obs], dtype=torch.float32)
+    # Pad to 6 dimensions if needed
+    if test_obs_tensor.shape[1] < 6:
+        padding = torch.zeros(test_obs_tensor.shape[0], 6 - test_obs_tensor.shape[1])
+        test_obs_tensor = torch.cat([test_obs_tensor, padding], dim=1)
+    elif test_obs_tensor.shape[1] > 6:
+        test_obs_tensor = test_obs_tensor[:, :6]
     
     with torch.no_grad():
-        actor_outputs = actor_network.forward(inputs)
+        actor_outputs = actor_network(test_obs_tensor)
     print(f"Actor outputs: {actor_outputs}")
     
-    # Test critic network
-    inputs = {}
-    for j, node in enumerate(critic_network.input_nodes):
-        inputs[node] = test_obs[j] if j < len(test_obs) else 0.0
-    
+    # Test critic network with tensor input
     with torch.no_grad():
-        critic_outputs = critic_network.forward(inputs)
+        critic_outputs = critic_network(test_obs_tensor)
     print(f"Critic outputs: {critic_outputs}")
     
     # 4. Create custom policy

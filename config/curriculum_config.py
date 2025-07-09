@@ -38,9 +38,9 @@ class CurriculumConfig:
     network_types: List[str] = field(default_factory=lambda: ['ffn', 'rnn'])
     
     # Training parameters
-    episodes_per_task: int = 1000
+    episodes_per_task: int = 2000  # Increased from 1000 for better learning
     evaluation_episodes: int = 100
-    max_env_steps_per_task: int = 50000  # Maximum environment steps per task
+    max_env_steps_per_task: int = 100000  # Increased from 50000 for proper CartPole solving
     
     # Task memory and difficulty parameters
     task_memory_size: int = 6  # Number of tasks to remember (2 per task type)
@@ -116,25 +116,30 @@ class CurriculumConfig:
     # RL-specific parameters
     rl_params: Dict[str, Any] = field(default_factory=lambda: {
         'ppo': {
-            'learning_rate': 0.0003,
+            'learning_rate': 0.0002,  # Balanced learning rate for stability and learning
             'gamma': 0.99,
-            'clip_ratio': 0.2,
+            'clip_ratio': 0.15,  # Balanced clip range for learning
             'batch_size': 64,
-            'max_episode_steps': 200
+            'max_episode_steps': 500,  # Increased for CartPole (solves at 475+ steps)
+            'n_epochs': 4,  # Reduced from 10 to prevent overfitting
+            'entropy_coef': 0.02,  # Increased for better exploration
+            'n_steps': 1024,  # Reduced from 2048 for more frequent updates
+            'gae_lambda': 0.95
         },
         'a2c': {
-            'learning_rate': 0.0007,
+            'learning_rate': 0.0005,  # Balanced learning rate
             'gamma': 0.99,
             'batch_size': 64,
-            'max_episode_steps': 200
+            'max_episode_steps': 500,
+            'entropy_coef': 0.02
         },
         'sac': {
-            'learning_rate': 0.0003,
+            'learning_rate': 0.0002,  # Balanced learning rate
             'gamma': 0.99,
             'buffer_size': 10000,
             'batch_size': 64,
             'tau': 0.005,
-            'max_episode_steps': 200
+            'max_episode_steps': 500
         }
     })
     

@@ -84,13 +84,13 @@ def test_ppo_training():
     model = PPO(
         policy=make_topology_policy,
         env=env,
-        learning_rate=3e-4,
-        n_steps=2048,
+        learning_rate=1e-4,  # Lowered from 3e-4 for stability
+        n_steps=1024,  # Reduced from 2048 for more frequent updates
         batch_size=64,
-        n_epochs=10,
+        n_epochs=4,  # Reduced from 10 to prevent overfitting
         gamma=0.99,
         gae_lambda=0.95,
-        clip_range=0.2,
+        clip_range=0.1,  # Reduced from 0.2 for more conservative updates
         clip_range_vf=None,
         normalize_advantage=True,
         ent_coef=0.01,

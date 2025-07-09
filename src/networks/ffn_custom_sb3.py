@@ -41,12 +41,12 @@ class PyTorchFeedForwardNetwork(nn.Module):
             
             # Xavier initialization: std = sqrt(2.0 / (fan_in + fan_out))
             if num_incoming > 0:
-                weight_std = np.sqrt(2.0 / num_incoming)
+                weight_std = np.sqrt(2.0 / num_incoming) * 2.0  # Scale up by 2x
             else:
-                weight_std = 0.1  # Default for nodes with no incoming edges
+                weight_std = 0.2  # Default for nodes with no incoming edges
             
-            # Create bias parameter
-            self.node_biases[str(node)] = nn.Parameter(torch.randn(1) * 0.01)
+            # Create bias parameter with larger initialization
+            self.node_biases[str(node)] = nn.Parameter(torch.randn(1) * 0.1)
             
             # Create weight parameters for incoming edges
             for neighbor in self.topology.predecessors(node):
@@ -95,7 +95,11 @@ class PyTorchFeedForwardNetwork(nn.Module):
         for node in output_nodes:
             outputs.append(activations[node])
         
-        return torch.cat(outputs, dim=1)
+        # Scale up outputs for better RL performance
+        output_tensor = torch.cat(outputs, dim=1)
+        scaled_output = output_tensor * 5.0  # Scale up by 5x
+        
+        return scaled_output
 
 class FeedForwardNetwork(BaseNetwork):
     """Feed-forward neural network implementation (custom for SB3 integration)."""

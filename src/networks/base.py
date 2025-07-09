@@ -196,7 +196,11 @@ class BaseNetwork(ABC):
             else:
                 metrics['eigenvector_centrality'] = 0.0
         
-        return metrics 
+        return metrics
+    
+    def parameters(self):
+        """Return empty list since base networks don't use PyTorch parameters."""
+        return []
     
     def _validate_runtime_edges(self) -> Tuple[bool, str]:
         """

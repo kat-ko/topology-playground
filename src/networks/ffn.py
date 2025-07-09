@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 import networkx as nx
 import numpy as np
 from .base import BaseNetwork
+import torch
 
 class FeedForwardNetwork(BaseNetwork):
     """Feed-forward neural network implementation."""
@@ -17,6 +18,10 @@ class FeedForwardNetwork(BaseNetwork):
         
         # Store node ordering for forward pass
         self._node_order = list(nx.topological_sort(self.topology))
+    
+    def parameters(self):
+        """Return empty list since this network doesn't use PyTorch parameters."""
+        return []
     
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for FFN."""
@@ -59,7 +64,7 @@ class FeedForwardNetwork(BaseNetwork):
                 # Get active predecessors
                 active_predecessors = [
                     neighbor for neighbor in self.topology.predecessors(layer)
-                    if activations[neighbor] != 0
+                    if torch.any(activations[neighbor] != 0)
                 ]
                 
                 # Update active edges
@@ -71,14 +76,14 @@ class FeedForwardNetwork(BaseNetwork):
                     raise ValueError(f"Runtime topology violation: {error_msg}")
                 
                 # Sum weighted inputs from predecessors
-                weighted_sum = self.node_states[layer]['bias']
+                batch_size = next(iter(activations.values())).shape[0]
+                bias = self.node_states[layer]['bias']
+                weighted_sum = torch.full((batch_size,), bias, dtype=torch.float32, device=next(iter(activations.values())).device)
                 for neighbor in self.topology.predecessors(layer):
-                    weighted_sum += (
-                        activations[neighbor] * 
-                        self.node_states[layer]['weights'][neighbor]
-                    )
+                    weight = torch.tensor(self.node_states[layer]['weights'][neighbor], dtype=torch.float32, device=activations[neighbor].device)
+                    weighted_sum += activations[neighbor] * weight
                 # Apply activation function (ReLU)
-                activations[layer] = max(0, weighted_sum)
+                activations[layer] = torch.relu(weighted_sum)
         
         # Return output node activations
         return {node: activations[node] for node in self.output_nodes}
