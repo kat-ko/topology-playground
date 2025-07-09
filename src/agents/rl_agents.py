@@ -28,12 +28,13 @@ class PPOAgent:
             "MlpPolicy",
             env=None,  # Will be set in run_curriculum
             learning_rate=config['rl_params']['ppo']['learning_rate'],
-            n_steps=2048,
+            n_steps=config['rl_params']['ppo']['n_steps'],
             batch_size=config['rl_params']['ppo']['batch_size'],
-            n_epochs=10,
+            n_epochs=config['rl_params']['ppo']['n_epochs'],
             gamma=config['rl_params']['ppo']['gamma'],
-            gae_lambda=0.95,
+            gae_lambda=config['rl_params']['ppo']['gae_lambda'],
             clip_range=config['rl_params']['ppo']['clip_ratio'],
+            ent_coef=config['rl_params']['ppo']['entropy_coef'],
             verbose=0
         )
     
