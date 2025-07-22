@@ -50,8 +50,17 @@ class FeedForwardNetwork(BaseNetwork):
         # Clear active edges at start of forward pass
         self._clear_active_edges()
         
-        # Initialize activations
-        activations = {node: 0.0 for node in self.topology.nodes()}
+        # Initialize activations with tensors
+        # Get batch size from first input tensor
+        first_input = next(iter(inputs.values()))
+        if torch.is_tensor(first_input):
+            batch_size = first_input.shape[0]
+            device = first_input.device
+        else:
+            batch_size = 1
+            device = torch.device('cpu')
+        
+        activations = {node: torch.zeros(batch_size, device=device) for node in self.topology.nodes()}
         
         # Set input node activations
         for node, value in inputs.items():
@@ -76,9 +85,8 @@ class FeedForwardNetwork(BaseNetwork):
                     raise ValueError(f"Runtime topology violation: {error_msg}")
                 
                 # Sum weighted inputs from predecessors
-                batch_size = next(iter(activations.values())).shape[0]
                 bias = self.node_states[layer]['bias']
-                weighted_sum = torch.full((batch_size,), bias, dtype=torch.float32, device=next(iter(activations.values())).device)
+                weighted_sum = torch.full((batch_size,), bias, dtype=torch.float32, device=device)
                 for neighbor in self.topology.predecessors(layer):
                     weight = torch.tensor(self.node_states[layer]['weights'][neighbor], dtype=torch.float32, device=activations[neighbor].device)
                     weighted_sum += activations[neighbor] * weight
