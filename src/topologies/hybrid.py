@@ -9,8 +9,7 @@ from ..core.base import BasePlugin
 @PluginRegistry.register('topologies', 'hybrid')
 class HybridTopology(BaseTopology, BasePlugin):
     def __init__(self, size: int, num_modules: int, k: int, p: float, 
-                 inter_module_prob: float, num_layers: int = 1,
-                 inter_layer_prob: float = 0.1, seed: int = None):
+                 inter_module_prob: float, seed: int = None):
         """
         Initialize a hybrid topology that combines small-world and modular properties.
         
@@ -20,8 +19,6 @@ class HybridTopology(BaseTopology, BasePlugin):
             k: Number of nearest neighbors for small-world connections within modules
             p: Probability of rewiring for small-world connections
             inter_module_prob: Probability of connections between modules
-            num_layers: Number of layers in the network (default: 1)
-            inter_layer_prob: Probability of connections between layers (default: 0.1)
             seed: Random seed for reproducibility
         """
         super().__init__(n_in=0, n_hidden=size, n_out=0)  # Initialize base class
@@ -30,8 +27,6 @@ class HybridTopology(BaseTopology, BasePlugin):
         self.k = k
         self.p = p
         self.inter_module_prob = inter_module_prob
-        self.num_layers = num_layers
-        self.inter_layer_prob = inter_layer_prob
         self.seed = seed
         self.rng = np.random.RandomState(seed)
         
@@ -41,10 +36,6 @@ class HybridTopology(BaseTopology, BasePlugin):
         
         # Initialize module assignments
         self.module_assignments = self._assign_modules()
-        
-        # Store layer graphs and inter-layer connections
-        self.layers: List[nx.DiGraph] = []
-        self.inter_layer_connections: Dict[tuple, nx.DiGraph] = {}
     
     def _assign_modules(self) -> Dict[int, int]:
         """Assign nodes to modules."""
@@ -89,8 +80,8 @@ class HybridTopology(BaseTopology, BasePlugin):
         
         return G
     
-    def _create_layer(self, layer_idx: int) -> nx.DiGraph:
-        """Create a single layer of the network as a directed acyclic graph."""
+    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
+        """Generate the hybrid network topology as a single connected graph."""
         G = nx.DiGraph()
         G.add_nodes_from(range(self.size))
         
@@ -116,46 +107,6 @@ class HybridTopology(BaseTopology, BasePlugin):
         
         return G
     
-    def _create_inter_layer_connections(self, layer1: int, layer2: int) -> nx.DiGraph:
-        """Create directed acyclic connections between two layers."""
-        G = nx.DiGraph()
-        G.add_nodes_from(range(self.size))
-        
-        # For inter-layer connections in a feedforward network,
-        # layer1 nodes should only connect to layer2 nodes
-        if layer1 < layer2:
-            for node1 in range(self.size):
-                for node2 in range(self.size):
-                    if self.rng.random() < self.inter_layer_prob:
-                        G.add_edge(node1, node2)
-        else:
-            for node2 in range(self.size):
-                for node1 in range(self.size):
-                    if self.rng.random() < self.inter_layer_prob:
-                        G.add_edge(node2, node1)
-        
-        return G
-    
-    def generate(self, num_layers: int = 1) -> Union[nx.DiGraph, List[nx.DiGraph]]:
-        """Generate the hybrid network topology."""
-        self.num_layers = num_layers
-        self.layers = []
-        self.inter_layer_connections = {}
-        
-        # Generate each layer
-        for i in range(num_layers):
-            self.layers.append(self._create_layer(i))
-        
-        # Generate inter-layer connections
-        for i in range(num_layers):
-            for j in range(i + 1, num_layers):
-                self.inter_layer_connections[(i, j)] = self._create_inter_layer_connections(i, j)
-        
-        # Return single graph or list of graphs based on num_layers
-        if num_layers == 1:
-            return self.layers[0]
-        return self.layers
-    
     def get_parameters(self) -> Dict[str, Any]:
         """Get the topology parameters."""
         return {
@@ -164,8 +115,6 @@ class HybridTopology(BaseTopology, BasePlugin):
             'k': self.k,
             'p': self.p,
             'inter_module_prob': self.inter_module_prob,
-            'num_layers': self.num_layers,
-            'inter_layer_prob': self.inter_layer_prob,
             'seed': self.seed
         }
     
@@ -173,18 +122,9 @@ class HybridTopology(BaseTopology, BasePlugin):
         """Get the module assignments for each node."""
         return self.module_assignments
     
-    def get_layer_connections(self, layer1: int, layer2: int) -> Optional[nx.DiGraph]:
-        """Get the inter-layer connections between two layers."""
-        if layer1 > layer2:
-            layer1, layer2 = layer2, layer1
-        return self.inter_layer_connections.get((layer1, layer2))
-    
-    def get_layer_metrics(self, layer: int) -> Dict[str, Any]:
-        """Get metrics specific to a particular layer."""
-        if layer >= len(self.layers):
-            raise ValueError(f"Layer {layer} does not exist")
-        
-        G = self.layers[layer]
+    def get_network_metrics(self) -> Dict[str, Any]:
+        """Get metrics for the entire network."""
+        G = self.generate()
         
         # Convert to undirected for metrics that don't support directed graphs
         G_undirected = G.to_undirected() if G.is_directed() else G
@@ -197,6 +137,20 @@ class HybridTopology(BaseTopology, BasePlugin):
             'avg_shortest_path': nx.average_shortest_path_length(G_undirected)
         }
     
+    def get_layer_connections(self, layer1: int, layer2: int) -> Optional[nx.Graph]:
+        """Get the inter-layer connections between two layers.
+        
+        Note: This topology doesn't use layers, so this method returns None.
+        """
+        return None
+    
+    def get_layer_metrics(self, layer: int) -> Dict[str, Any]:
+        """Get metrics specific to a particular layer.
+        
+        Note: This topology doesn't use layers, so this method returns network-wide metrics.
+        """
+        return self.get_network_metrics()
+    
     def generate_adjacency_mask(self) -> torch.Tensor:
         """
         Generate the adjacency mask for the network.
@@ -204,23 +158,11 @@ class HybridTopology(BaseTopology, BasePlugin):
         Returns:
             Binary adjacency mask tensor
         """
-        # Generate the network if not already generated
-        if not self.layers:
-            self.generate(self.num_layers)
+        # Generate the network
+        G = self.generate()
         
-        # Create adjacency matrix for the first layer
-        adj_matrix = nx.to_numpy_array(self.layers[0])
-        
-        # Add inter-layer connections if multiple layers
-        if self.num_layers > 1:
-            for i in range(self.num_layers):
-                for j in range(i + 1, self.num_layers):
-                    inter_layer_adj = nx.to_numpy_array(self.inter_layer_connections[(i, j)])
-                    # Add inter-layer connections to the adjacency matrix
-                    adj_matrix = np.block([
-                        [adj_matrix, inter_layer_adj],
-                        [inter_layer_adj.T, np.zeros((self.size, self.size))]
-                    ])
+        # Create adjacency matrix
+        adj_matrix = nx.to_numpy_array(G)
         
         # Convert to PyTorch tensor
         mask = torch.from_numpy(adj_matrix).float()

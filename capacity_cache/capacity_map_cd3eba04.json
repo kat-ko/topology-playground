@@ -1,0 +1,50 @@
+{
+  "small_world_ffn_2": {
+    "config_hash": "cd3eba04",
+    "measurements": [],
+    "created_time": "2025-07-22T21:11:45.242958",
+    "size_range": [
+      50,
+      500
+    ],
+    "size_step": 10,
+    "fine_step": 2,
+    "max_divergence": 5.0
+  },
+  "modular_ffn_2": {
+    "config_hash": "cd3eba04",
+    "measurements": [],
+    "created_time": "2025-07-22T21:11:45.501526",
+    "size_range": [
+      50,
+      500
+    ],
+    "size_step": 10,
+    "fine_step": 2,
+    "max_divergence": 5.0
+  },
+  "hybrid_ffn_2": {
+    "config_hash": "cd3eba04",
+    "measurements": [],
+    "created_time": "2025-07-22T21:11:45.742389",
+    "size_range": [
+      50,
+      500
+    ],
+    "size_step": 10,
+    "fine_step": 2,
+    "max_divergence": 5.0
+  },
+  "fully_connected_ffn_2": {
+    "config_hash": "cd3eba04",
+    "measurements": [],
+    "created_time": "2025-07-22T21:11:46.168486",
+    "size_range": [
+      50,
+      500
+    ],
+    "size_step": 10,
+    "fine_step": 2,
+    "max_divergence": 5.0
+  }
+}

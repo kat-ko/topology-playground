@@ -1,0 +1,836 @@
+{
+  "topology_type": "small_world",
+  "network_type": "critic",
+  "num_layers": 2,
+  "total_nodes": 64,
+  "nodes_per_layer": 32,
+  "total_connections": 118,
+  "connections": [
+    {
+      "source_node": 2,
+      "target_node": 13,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 2,
+      "target_node": 21,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 4,
+      "target_node": 6,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 5,
+      "target_node": 6,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 5,
+      "target_node": 7,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 6,
+      "target_node": 8,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 6,
+      "target_node": 27,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 7,
+      "target_node": 8,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 7,
+      "target_node": 32,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 8,
+      "target_node": 24,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 8,
+      "target_node": 50,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 9,
+      "target_node": 11,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 9,
+      "target_node": 56,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 10,
+      "target_node": 11,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 10,
+      "target_node": 12,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 11,
+      "target_node": 12,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 11,
+      "target_node": 13,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 12,
+      "target_node": 13,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 12,
+      "target_node": 14,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 13,
+      "target_node": 15,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 13,
+      "target_node": 38,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 14,
+      "target_node": 15,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 14,
+      "target_node": 16,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 15,
+      "target_node": 22,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 15,
+      "target_node": 35,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 16,
+      "target_node": 17,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 16,
+      "target_node": 18,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 17,
+      "target_node": 34,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 17,
+      "target_node": 57,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 18,
+      "target_node": 19,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 18,
+      "target_node": 20,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 19,
+      "target_node": 23,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 19,
+      "target_node": 37,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 20,
+      "target_node": 21,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 20,
+      "target_node": 22,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 21,
+      "target_node": 22,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 21,
+      "target_node": 23,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 22,
+      "target_node": 23,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 22,
+      "target_node": 45,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 23,
+      "target_node": 24,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 23,
+      "target_node": 25,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 24,
+      "target_node": 25,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 24,
+      "target_node": 26,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 25,
+      "target_node": 26,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 25,
+      "target_node": 27,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 26,
+      "target_node": 27,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 26,
+      "target_node": 28,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 27,
+      "target_node": 29,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 27,
+      "target_node": 56,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 28,
+      "target_node": 30,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 28,
+      "target_node": 35,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 29,
+      "target_node": 30,
+      "source_layer": 0,
+      "target_layer": 0,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 29,
+      "target_node": 40,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 30,
+      "target_node": 32,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 30,
+      "target_node": 38,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 31,
+      "target_node": 32,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 31,
+      "target_node": 38,
+      "source_layer": 0,
+      "target_layer": 1,
+      "connection_type": "inter_layer"
+    },
+    {
+      "source_node": 32,
+      "target_node": 33,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 32,
+      "target_node": 34,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 33,
+      "target_node": 34,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 33,
+      "target_node": 35,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 34,
+      "target_node": 36,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 34,
+      "target_node": 57,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 35,
+      "target_node": 36,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 35,
+      "target_node": 37,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 36,
+      "target_node": 37,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 36,
+      "target_node": 38,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 37,
+      "target_node": 38,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 37,
+      "target_node": 51,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 38,
+      "target_node": 39,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 38,
+      "target_node": 40,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 39,
+      "target_node": 41,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 39,
+      "target_node": 53,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 40,
+      "target_node": 41,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 40,
+      "target_node": 42,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 41,
+      "target_node": 48,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 41,
+      "target_node": 54,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 42,
+      "target_node": 43,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 42,
+      "target_node": 44,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 43,
+      "target_node": 44,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 43,
+      "target_node": 50,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 44,
+      "target_node": 45,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 44,
+      "target_node": 46,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 45,
+      "target_node": 47,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 45,
+      "target_node": 52,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 46,
+      "target_node": 47,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 46,
+      "target_node": 52,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 47,
+      "target_node": 48,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 47,
+      "target_node": 51,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 48,
+      "target_node": 49,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 48,
+      "target_node": 50,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 49,
+      "target_node": 50,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 49,
+      "target_node": 51,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 50,
+      "target_node": 51,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 50,
+      "target_node": 59,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 51,
+      "target_node": 52,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 51,
+      "target_node": 60,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 52,
+      "target_node": 53,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 52,
+      "target_node": 63,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 53,
+      "target_node": 54,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 53,
+      "target_node": 56,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 54,
+      "target_node": 56,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 54,
+      "target_node": 62,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 55,
+      "target_node": 56,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 55,
+      "target_node": 57,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 56,
+      "target_node": 57,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 56,
+      "target_node": 58,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 57,
+      "target_node": 58,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 57,
+      "target_node": 59,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 58,
+      "target_node": 60,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 58,
+      "target_node": 61,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 59,
+      "target_node": 60,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 59,
+      "target_node": 61,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 60,
+      "target_node": 61,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 60,
+      "target_node": 63,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 61,
+      "target_node": 62,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 61,
+      "target_node": 63,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    },
+    {
+      "source_node": 62,
+      "target_node": 63,
+      "source_layer": 1,
+      "target_layer": 1,
+      "connection_type": "intra_layer"
+    }
+  ]
+}
