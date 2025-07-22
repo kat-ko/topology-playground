@@ -221,12 +221,59 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         self._debug_network_structure()
     
     def _create_topology_network(self, network_type):
-        """Create topology network for actor or critic."""
-        # Total nodes: input + hidden + output
-        total_size = self.universal_input_dim + self.hidden_size + self.universal_output_dim
+        """Create topology network for actor or critic with capacity matching."""
+        # Initialize capacity matching if enabled
+        if self.config and self.config.get('use_capacity_matching', False):
+            print(f"     🔧 Creating {network_type} topology ({self.topology_type}) with CAPACITY MATCHING")
+            
+            # Simple capacity matching approach
+            reference_topology = self.config.get('capacity_matching_reference', 'small_world')
+            base_size = self.config['network_sizes'][0]
+            
+            # Calculate target capacity based on small_world at base size
+            # This is a simplified approach - in practice you'd use the full capacity mapping system
+            if reference_topology == 'small_world':
+                # Estimate small_world capacity: ~0.135 * size^1.92
+                target_capacity = int(0.135 * base_size**1.92)
+            else:
+                target_capacity = 1000  # Default fallback
+            
+            print(f"       • Reference topology: {reference_topology}")
+            print(f"       • Target capacity: {target_capacity:,} parameters")
+            
+            # Calculate matching size for this topology using empirical formulas
+            if self.topology_type != reference_topology:
+                if self.topology_type == 'modular':
+                    # Modular: ~2.8 * size * (size/num_modules)
+                    num_modules = self.config.get('modular_params', {}).get('num_modules', 4)
+                    # Use a more conservative estimate for modular
+                    matching_size = int((target_capacity / 2.8)**0.5)
+                elif self.topology_type == 'hybrid':
+                    # Hybrid: ~1.6 * size * (size/num_modules)
+                    num_modules = self.config.get('hybrid_params', {}).get('num_modules', 4)
+                    # Use a more conservative estimate for hybrid
+                    matching_size = int((target_capacity / 1.6)**0.5)
+                elif self.topology_type == 'fully_connected':
+                    # Fully connected: ~2.05 * size^2
+                    matching_size = int((target_capacity / 2.05)**0.5)
+                else:
+                    matching_size = base_size
+                
+                # Ensure minimum viable size
+                min_size = max(30, self.universal_input_dim + self.hidden_size + self.universal_output_dim)
+                matching_size = max(matching_size, min_size)
+                
+                print(f"       • Matching size for {self.topology_type}: {matching_size} nodes")
+                total_size = matching_size
+            else:
+                total_size = base_size
+                print(f"       • Using base size: {base_size} nodes")
+        else:
+            # Use original fixed size approach
+            total_size = self.universal_input_dim + self.hidden_size + self.universal_output_dim
+            print(f"     🔧 Creating {network_type} topology ({self.topology_type}) with FIXED SIZE")
+            print(f"       • Total size: {total_size} nodes")
         
-        print(f"     🔧 Creating {network_type} topology ({self.topology_type})")
-        print(f"       • Total size: {total_size} nodes")
         print(f"       • Input nodes: {self.universal_input_dim}")
         print(f"       • Hidden nodes: {self.hidden_size}")
         print(f"       • Output nodes: {self.universal_output_dim}")
@@ -235,39 +282,34 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         if self.topology_type == 'fully_connected':
             topology = FullyConnectedTopology(
                 size=total_size,
-                num_layers=self.num_layers,
-                inter_layer_prob=1.0,
-                intra_layer_prob=1.0,
+                num_layers=self.num_layers,  # Only FC uses num_layers
                 seed=42
             )
+            print(f"       • FC layers: {self.num_layers}")
+            layer_info = topology.get_layer_info()
+            print(f"       • Layer sizes: {layer_info['layer_sizes']}")
         elif self.topology_type == 'small_world':
             topology = SmallWorldTopology(
-                size=total_size,
-                k=4,
-                p=0.1,
-                num_layers=self.num_layers,
-                inter_layer_prob=0.1,
+                size=total_size,  # Remove num_layers
+                k=self.config.get('small_world_params', {}).get('k', 4),
+                p=self.config.get('small_world_params', {}).get('p', 0.3),
                 seed=42
             )
         elif self.topology_type == 'modular':
             topology = ModularTopology(
-                size=total_size,
-                num_modules=4,
-                inter_module_prob=0.1,
-                intra_module_prob=0.3,
-                num_layers=self.num_layers,
-                inter_layer_prob=0.1,
+                size=total_size,  # Remove num_layers
+                num_modules=self.config.get('modular_params', {}).get('num_modules', 4),
+                inter_module_prob=self.config.get('modular_params', {}).get('inter_module_prob', 0.2),
+                intra_module_prob=self.config.get('modular_params', {}).get('intra_module_prob', 0.8),
                 seed=42
             )
         elif self.topology_type == 'hybrid':
             topology = HybridTopology(
-                size=total_size,
-                num_modules=4,
-                k=4,
-                p=0.1,
-                inter_module_prob=0.1,
-                num_layers=self.num_layers,
-                inter_layer_prob=0.1,
+                size=total_size,  # Remove num_layers
+                num_modules=self.config.get('hybrid_params', {}).get('num_modules', 4),
+                k=self.config.get('hybrid_params', {}).get('k', 4),
+                p=self.config.get('hybrid_params', {}).get('p', 0.3),
+                inter_module_prob=self.config.get('hybrid_params', {}).get('inter_module_prob', 0.2),
                 seed=42
             )
         else:
@@ -277,14 +319,8 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         print(f"       • Generating graph...")
         graph = topology.generate()
         
-        # Handle case where generate() returns a list of graphs
-        if isinstance(graph, list):
-            print(f"       • Generated {len(graph)} graphs (multi-layer)")
-            # For now, use the first graph - in a real implementation you'd want to combine them
-            graph = graph[0]
-            print(f"       • Using first graph with {len(graph.edges())} edges")
-        else:
-            print(f"       • Graph generated with {len(graph.edges())} edges")
+        # All topologies now return a single graph
+        print(f"       • Graph generated with {len(graph.edges())} edges")
         
         # Define input/output nodes
         input_nodes = list(range(self.universal_input_dim))
@@ -295,13 +331,21 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         print(f"       • Output nodes: {output_nodes}")
         
         # Create network
-        network_params = {
+        network_params = self.config.get('network_params', {}).get('ffn', {
             'learning_rate': 0.001,
             'activation': 'tanh'
-        }
+        })
         
         network = FeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
         print(f"       • Network created successfully")
+        
+        # Log capacity matching results
+        if self.config and self.config.get('use_capacity_matching', False):
+            actual_params = self._get_topology_params(network)
+            print(f"       • Actual parameters: {actual_params:,}")
+            if self.topology_type != reference_topology:
+                divergence = abs(actual_params - target_capacity) / target_capacity * 100
+                print(f"       • Capacity divergence: {divergence:.2f}%")
         
         return network
     
@@ -309,19 +353,22 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         """Get number of parameters in topology network."""
         total_params = 0
         try:
-            for param in topology_network.parameters():
-                total_params += param.numel()
-        except:
-            # If parameters() doesn't work, try to get parameters differently
-            try:
-                for module in topology_network.modules():
-                    if hasattr(module, 'weight'):
-                        total_params += module.weight.numel()
-                    if hasattr(module, 'bias') and module.bias is not None:
-                        total_params += module.bias.numel()
-            except:
-                # If all else fails, return 0
-                total_params = 0
+            # For FeedForwardNetwork, count weights and biases from node_states
+            if hasattr(topology_network, 'node_states'):
+                for node, state in topology_network.node_states.items():
+                    # Count bias
+                    if 'bias' in state:
+                        total_params += 1
+                    # Count weights
+                    if 'weights' in state:
+                        total_params += len(state['weights'])
+            else:
+                # Fallback to PyTorch parameters
+                for param in topology_network.parameters():
+                    total_params += param.numel()
+        except Exception as e:
+            print(f"       ⚠️  Error counting parameters: {e}")
+            total_params = 0
         return total_params
     
     def _debug_network_structure(self):
@@ -624,9 +671,12 @@ def create_network_visualization(topology_network, topology_type, num_layers):
         pos = nx.spring_layout(G, k=1, iterations=50)
         
         # Color nodes by layer (if multi-layer)
-        if num_layers > 1:
+        # Handle num_layers as list or int
+        actual_layers = num_layers[0] if isinstance(num_layers, list) else num_layers
+        
+        if actual_layers > 1:
             node_colors = []
-            nodes_per_layer = len(G.nodes()) // num_layers
+            nodes_per_layer = len(G.nodes()) // actual_layers
             for node in G.nodes():
                 layer = node // nodes_per_layer
                 node_colors.append(layer)
@@ -745,17 +795,19 @@ def create_layer_analysis_visualization(topology_network, topology_type, num_lay
         
         # Calculate layer information
         total_nodes = len(G.nodes())
-        nodes_per_layer = total_nodes // num_layers if num_layers > 1 else total_nodes
+        # Handle num_layers as list or int
+        actual_layers = num_layers[0] if isinstance(num_layers, list) else num_layers
+        nodes_per_layer = total_nodes // actual_layers if actual_layers > 1 else total_nodes
         
         # Create figure with multiple subplots
         fig = plt.figure(figsize=(20, 12))
         
         # 1. Layer connectivity matrix
         ax1 = plt.subplot(2, 3, 1)
-        layer_connectivity = np.zeros((num_layers, num_layers))
+        layer_connectivity = np.zeros((actual_layers, actual_layers))
         
-        for i in range(num_layers):
-            for j in range(num_layers):
+        for i in range(actual_layers):
+            for j in range(actual_layers):
                 layer_i_start = i * nodes_per_layer
                 layer_i_end = layer_i_start + nodes_per_layer
                 layer_j_start = j * nodes_per_layer
@@ -789,7 +841,7 @@ def create_layer_analysis_visualization(topology_network, topology_type, num_lay
         layer_degrees = []
         layer_labels = []
         
-        for layer in range(num_layers):
+        for layer in range(actual_layers):
             layer_start = layer * nodes_per_layer
             layer_end = layer_start + nodes_per_layer
             layer_nodes = list(range(layer_start, layer_end))
@@ -806,7 +858,7 @@ def create_layer_analysis_visualization(topology_network, topology_type, num_lay
         ax4 = plt.subplot(2, 3, 4)
         clustering_by_layer = []
         
-        for layer in range(num_layers):
+        for layer in range(actual_layers):
             layer_start = layer * nodes_per_layer
             layer_end = layer_start + nodes_per_layer
             layer_nodes = list(range(layer_start, layer_end))
@@ -819,12 +871,12 @@ def create_layer_analysis_visualization(topology_network, topology_type, num_lay
                 clustering = 0
             clustering_by_layer.append(clustering)
         
-        ax4.bar(range(num_layers), clustering_by_layer, color='lightgreen')
+        ax4.bar(range(actual_layers), clustering_by_layer, color='lightgreen')
         ax4.set_title('Average Clustering by Layer')
         ax4.set_xlabel('Layer')
         ax4.set_ylabel('Clustering Coefficient')
-        ax4.set_xticks(range(num_layers))
-        ax4.set_xticklabels([f'Layer {i}' for i in range(num_layers)])
+        ax4.set_xticks(range(actual_layers))
+        ax4.set_xticklabels([f'Layer {i}' for i in range(actual_layers)])
         ax4.grid(True, alpha=0.3)
         
         # 5. Network metrics summary
@@ -976,7 +1028,9 @@ def create_simple_connection_list(topology_network, topology_type, network_type,
         
         # Calculate layer information
         total_nodes = len(G.nodes())
-        nodes_per_layer = total_nodes // num_layers if num_layers > 1 else total_nodes
+        # Handle num_layers as list or int
+        actual_layers = num_layers[0] if isinstance(num_layers, list) else num_layers
+        nodes_per_layer = total_nodes // actual_layers if actual_layers > 1 else total_nodes
         
         # Create simple connection list
         connections = []
@@ -985,8 +1039,8 @@ def create_simple_connection_list(topology_network, topology_type, network_type,
             source, target = edge
             
             # Determine source and target layers
-            source_layer = source // nodes_per_layer if num_layers > 1 else 0
-            target_layer = target // nodes_per_layer if num_layers > 1 else 0
+            source_layer = source // nodes_per_layer if actual_layers > 1 else 0
+            target_layer = target // nodes_per_layer if actual_layers > 1 else 0
             
             connection = {
                 'source_node': int(source),
@@ -1003,7 +1057,7 @@ def create_simple_connection_list(topology_network, topology_type, network_type,
         return {
             'topology_type': topology_type,
             'network_type': network_type,
-            'num_layers': num_layers,
+            'num_layers': actual_layers,
             'total_nodes': total_nodes,
             'nodes_per_layer': nodes_per_layer,
             'total_connections': len(connections),
@@ -1166,13 +1220,13 @@ def make_env(env_name):
     return _make_env
 
 def create_debug_config():
-    """Create configuration for debug test."""
+    """Create configuration for debug test with capacity matching."""
     config = {
         # ============================================================================
         # EXPERIMENT PARAMETERS
         # ============================================================================
         'tasks': ['CartPole-v1'],  # Only one task for debugging
-        'topologies': ['small_world', 'modular', 'hybrid', 'fully_connected'],
+        'topologies': ['small_world', 'modular', 'hybrid', 'fully_connected_2layers', 'fully_connected_3layers'],
         'total_timesteps': 10000,  # Short for debugging
         'n_eval_episodes': 10,     # Few episodes for debugging
         
@@ -1198,6 +1252,56 @@ def create_debug_config():
             'clip_range': 0.2,
             'ent_coef': 0.01,
             'max_grad_norm': 0.5
+        },
+        
+        # ============================================================================
+        # CAPACITY MATCHING PARAMETERS
+        # ============================================================================
+        'use_capacity_matching': True,
+        'capacity_matching_reference': 'small_world',  # Use small_world as reference
+        'network_sizes': [64],  # Base network size
+        'network_types': ['ffn'],
+        'num_layers': [2],  # List of layer configurations
+        'num_io_nodes': 4,  # Number of input/output nodes
+        'experiment_types': ['same_size', 'match_small_world', 'match_fully_connected'],  # Capacity matching experiment type
+        
+        # Topology-specific parameters
+        'small_world_params': {
+            'k': 4,
+            'p': 0.3,
+            'inter_layer_prob': 0.5
+        },
+        'modular_params': {
+            'num_modules': 4,
+            'inter_module_prob': 0.2,
+            'intra_module_prob': 0.8,
+            'inter_layer_prob': 0.5
+        },
+        'hybrid_params': {
+            'num_modules': 4,
+            'k': 4,
+            'p': 0.3,
+            'inter_module_prob': 0.2,
+            'inter_layer_prob': 0.5
+        },
+        'fully_connected_params': {
+            'inter_layer_prob': 1.0,
+            'intra_layer_prob': 1.0
+        },
+        
+        # Network parameters
+        'network_params': {
+            'ffn': {
+                'activation': 'relu',
+                'dropout': 0.0
+            }
+        },
+        
+        # Parameter budget configuration
+        'parameter_budget': {
+            'enabled': True,
+            'budget_type': 'weights',  # 'weights' or 'edges'
+            'padding_strategy': 'random'  # 'random' or 'zero'
         }
     }
     return config
@@ -1215,7 +1319,7 @@ def debug_topology_policy(policy_class, topology_type, config, num_layers=2):
     try:
         wandb_run = wandb.init(
             entity="katko-it-universitetet-i-k-benhavn",
-            project="topology-smoke-test",  # Use existing project
+            project="cross-task",  # Use existing project
             name=run_name,
             config={
                 "topology_type": topology_type,
@@ -1557,14 +1661,27 @@ def main():
         print(f"🔍 DEBUGGING TOPOLOGY: {topology.upper()}")
         print(f"{'='*80}")
         
+        # Determine number of layers based on topology type
+        if topology == 'fully_connected_2layers':
+            actual_topology = 'fully_connected'
+            num_layers = 2
+        elif topology == 'fully_connected_3layers':
+            actual_topology = 'fully_connected'
+            num_layers = 3
+        else:
+            actual_topology = topology
+            num_layers = config['num_layers']  # Default for non-FC topologies
+        
         # Debug the topology policy
         result = debug_topology_policy(
             DebugTopologyPolicy,
-            topology,
+            actual_topology,
             config,
-            num_layers=config['num_layers']
+            num_layers=num_layers
         )
         
+        # Update the result to reflect the original topology name for display
+        result['topology_type'] = topology
         all_results.append(result)
     
     # Create results DataFrame
