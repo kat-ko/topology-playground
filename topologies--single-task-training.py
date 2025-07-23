@@ -1535,17 +1535,20 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
         test_env = DummyVecEnv([make_env(test_task)])
         
         try:
-            mean_reward, std_reward = evaluate_model(model, test_env, n_eval_episodes=config['n_eval_episodes'])
-            cross_task_results[test_task] = {
-                'mean_reward': mean_reward,
-                'std_reward': std_reward
-            }
-            print(f"     ✅ {test_task}: {mean_reward:.2f} ± {std_reward:.2f}")
+            # Use enhanced evaluation function for comprehensive metrics
+            eval_results = evaluate_model_enhanced(model, test_env, test_task, n_eval_episodes=config['n_eval_episodes'])
+            cross_task_results[test_task] = eval_results
+            print(f"     ✅ {test_task}: {eval_results['mean_reward']:.2f} ± {eval_results['std_reward']:.2f} (success: {eval_results['success_rate']:.1%}, length: {eval_results['mean_length']:.1f} ± {eval_results['std_length']:.1f})")
         except Exception as e:
             print(f"     ❌ {test_task}: Error - {str(e)}")
             cross_task_results[test_task] = {
                 'mean_reward': 0.0,
-                'std_reward': 0.0
+                'std_reward': 0.0,
+                'mean_length': 0.0,
+                'std_length': 0.0,
+                'success_rate': 0.0,
+                'episode_rewards': [],
+                'episode_lengths': []
             }
         finally:
             test_env.close()
@@ -1614,6 +1617,11 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
                 "testing/std_reward": results['std_reward'],
                 "testing/n_eval_episodes": config['n_eval_episodes'],
                 
+                # Enhanced metrics (Phase 1)
+                "testing/mean_length": results['mean_length'],
+                "testing/std_length": results['std_length'],
+                "testing/success_rate": results['success_rate'],
+                
                 # Transfer learning metrics
                 "transfer/transfer_ratio": transfer_ratio,
                 "transfer/relative_performance": transfer_ratio * 100,  # Percentage
@@ -1649,6 +1657,9 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             testing_summary_table.add_data("Test Task", test_task, "Task being tested")
             testing_summary_table.add_data("Mean Reward", f"{results['mean_reward']:.2f}", "Average reward on test task")
             testing_summary_table.add_data("Std Reward", f"{results['std_reward']:.2f}", "Standard deviation of rewards")
+            testing_summary_table.add_data("Mean Episode Length", f"{results['mean_length']:.1f}", "Average steps per episode")
+            testing_summary_table.add_data("Std Episode Length", f"{results['std_length']:.1f}", "Standard deviation of episode lengths")
+            testing_summary_table.add_data("Success Rate", f"{results['success_rate']:.1%}", "Percentage of successful episodes")
             testing_summary_table.add_data("Transfer Ratio", f"{transfer_ratio:.3f}", "Performance ratio vs training task")
             testing_summary_table.add_data("Normalized Performance", f"{normalized_performance:.3f}", "Task-relative performance (0-1)")
             testing_summary_table.add_data("Is Training Task", "Yes" if is_training_task else "No", "Whether this is the training task")
@@ -1684,6 +1695,9 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     for test_task, results in cross_task_results.items():
         result[f'{test_task}_mean_reward'] = results['mean_reward']
         result[f'{test_task}_std_reward'] = results['std_reward']
+        result[f'{test_task}_mean_length'] = results['mean_length']
+        result[f'{test_task}_std_length'] = results['std_length']
+        result[f'{test_task}_success_rate'] = results['success_rate']
     
     return result
 
@@ -1727,6 +1741,99 @@ def evaluate_model(model, env, n_eval_episodes=3):
     std_reward = np.std(rewards)
     
     return mean_reward, std_reward
+
+def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
+    """
+    Enhanced evaluation function that tracks episode lengths and success rates.
+    
+    Args:
+        model: The trained model to evaluate
+        env: The environment to evaluate on
+        task_name: Name of the task (e.g., 'CartPole-v1', 'MountainCar-v0', 'Acrobot-v1')
+        n_eval_episodes: Number of episodes to evaluate
+    
+    Returns:
+        Dictionary with comprehensive evaluation metrics
+    """
+    rewards = []
+    episode_lengths = []
+    
+    # Use tqdm for progress bar
+    for episode in tqdm(range(n_eval_episodes), desc="Evaluating", leave=False):
+        obs = env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]  # Handle (obs, info) format
+        
+        done = False
+        truncated = False
+        episode_reward = 0
+        step_count = 0
+        
+        while not (done or truncated):
+            action, _ = model.predict(obs, deterministic=True)
+            step_result = env.step(action)
+            
+            # Handle both old and new gym step return formats
+            if len(step_result) == 4:
+                obs, reward, done, info = step_result
+                truncated = False
+            else:
+                obs, reward, done, truncated, info = step_result
+            
+            episode_reward += reward[0] if hasattr(reward, '__len__') else reward
+            step_count += 1
+            
+            # Safety check to prevent infinite loops
+            if step_count > 500:
+                print(f"      ⚠️  Episode {episode} exceeded 500 steps, terminating")
+                break
+        
+        rewards.append(episode_reward)
+        episode_lengths.append(step_count)
+    
+    # Calculate basic statistics
+    mean_reward = np.mean(rewards)
+    std_reward = np.std(rewards)
+    mean_length = np.mean(episode_lengths)
+    std_length = np.std(episode_lengths)
+    
+    # Calculate success rate based on task-specific criteria
+    success_rate = calculate_success_rate(rewards, episode_lengths, task_name)
+    
+    return {
+        'mean_reward': mean_reward,
+        'std_reward': std_reward,
+        'mean_length': mean_length,
+        'std_length': std_length,
+        'success_rate': success_rate,
+        'episode_rewards': rewards,
+        'episode_lengths': episode_lengths
+    }
+
+def calculate_success_rate(rewards, episode_lengths, task_name):
+    """
+    Calculate success rate based on task-specific criteria.
+    
+    Args:
+        rewards: List of episode rewards
+        episode_lengths: List of episode lengths
+        task_name: Name of the task
+    
+    Returns:
+        Success rate as a float between 0 and 1
+    """
+    if task_name == 'CartPole-v1':
+        # Success: episode length >= 200 (CartPole solved)
+        return np.mean([length >= 200 for length in episode_lengths])
+    elif task_name == 'MountainCar-v0':
+        # Success: reached goal position (reward > -200)
+        return np.mean([reward > -200 for reward in rewards])
+    elif task_name == 'Acrobot-v1':
+        # Success: swung up to vertical (reward > -100)
+        return np.mean([reward > -100 for reward in rewards])
+    else:
+        # Default: no success criteria defined
+        return 0.0
 
 def verify_capacity_matching_debug(config):
     """Verify capacity matching implementation using the same pattern as working scripts."""
@@ -2126,9 +2233,9 @@ def main():
         print(f"\n📈 Cross-Task Results by Topology:")
         for _, row in df.iterrows():
             print(f"   • {row['topology_type']} (trained on {row['train_task']}):")
-            print(f"     - CartPole-v1: {row.get('CartPole-v1_mean_reward', 'N/A'):.2f} ± {row.get('CartPole-v1_std_reward', 'N/A'):.2f}")
-            print(f"     - MountainCar-v0: {row.get('MountainCar-v0_mean_reward', 'N/A'):.2f} ± {row.get('MountainCar-v0_std_reward', 'N/A'):.2f}")
-            print(f"     - Acrobot-v1: {row.get('Acrobot-v1_mean_reward', 'N/A'):.2f} ± {row.get('Acrobot-v1_std_reward', 'N/A'):.2f}")
+            print(f"     - CartPole-v1: {row.get('CartPole-v1_mean_reward', 'N/A'):.2f} ± {row.get('CartPole-v1_std_reward', 'N/A'):.2f} (success: {row.get('CartPole-v1_success_rate', 'N/A'):.1%}, length: {row.get('CartPole-v1_mean_length', 'N/A'):.1f})")
+            print(f"     - MountainCar-v0: {row.get('MountainCar-v0_mean_reward', 'N/A'):.2f} ± {row.get('MountainCar-v0_std_reward', 'N/A'):.2f} (success: {row.get('MountainCar-v0_success_rate', 'N/A'):.1%}, length: {row.get('MountainCar-v0_mean_length', 'N/A'):.1f})")
+            print(f"     - Acrobot-v1: {row.get('Acrobot-v1_mean_reward', 'N/A'):.2f} ± {row.get('Acrobot-v1_std_reward', 'N/A'):.2f} (success: {row.get('Acrobot-v1_success_rate', 'N/A'):.1%}, length: {row.get('Acrobot-v1_mean_length', 'N/A'):.1f})")
             print(f"     - Architecture: {row['num_layers']} layers, {row['network_size']} nodes, {row['total_params']:,} params")
         
         print(f"\n🔍 Cross-Task Analysis:")

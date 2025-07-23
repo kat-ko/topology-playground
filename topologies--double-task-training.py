@@ -506,17 +506,20 @@ class EnhancedDebugCallback(BaseCallback):
                     total_norm = total_norm ** (1. / 2)
                     metrics["train/gradient_norm"] = total_norm
                 
-                # Add network-specific metrics if available
-                if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'actor_topology'):
-                    actor_params = self.model.policy._get_topology_params(self.model.policy.actor_topology)
-                    critic_params = self.model.policy._get_topology_params(self.model.policy.critic_topology)
-                    metrics.update({
-                        "network/actor_parameters": actor_params,
-                        "network/critic_parameters": critic_params,
-                        "network/total_parameters": actor_params + critic_params,
-                    })
-                
-                self.wandb_run.log(metrics, step=self.num_timesteps)
+                                    # Add network-specific metrics if available
+                    if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'actor_topology'):
+                        actor_params = self.model.policy._get_topology_params(self.model.policy.actor_topology)
+                        critic_params = self.model.policy._get_topology_params(self.model.policy.critic_topology)
+                        metrics.update({
+                            "network/actor_parameters": actor_params,
+                            "network/critic_parameters": critic_params,
+                            "network/total_parameters": actor_params + critic_params,
+                        })
+                    
+                    # Only log if this is the current step to avoid step ordering issues in double-task training
+                    # This prevents logging historical data from previous training phases
+                    if self.step_count % self.log_freq == 0:
+                        self.wandb_run.log(metrics, step=self.num_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging training metrics: {e}")
     
@@ -556,6 +559,7 @@ class EnhancedDebugCallback(BaseCallback):
                     for p in percentiles:
                         metrics[f"rollout/reward_p{p}"] = np.percentile(episode_rewards, p)
                     
+                    # Log rollout metrics at current step (rollout_end is called at current step)
                     self.wandb_run.log(metrics, step=self.num_timesteps)
                     
                     # Store for final summary
@@ -1380,9 +1384,9 @@ def create_debug_config():
     """
     pass  # Function removed - no longer used
 
-def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden_size=None, train_task=None):
+def double_task_training(policy_class, topology_type, config, num_layers=2, hidden_size=None, train_task_1=None, train_task_2=None):
     """
-    Cross-task testing: Train on one task, then evaluate on all tasks.
+    Double-task training: Train on task_1, then task_2, then evaluate on all tasks.
     
     Args:
         policy_class: The policy class to use
@@ -1390,17 +1394,18 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
         config: Configuration dictionary
         num_layers: Number of layers for the topology
         hidden_size: Hidden size for the network
-        train_task: Task to train on (e.g., 'CartPole-v1')
+        train_task_1: First task to train on (e.g., 'CartPole-v1')
+        train_task_2: Second task to train on (e.g., 'Acrobot-v1')
     
     Returns:
         Dictionary with training and cross-task evaluation results
     """
     print(f"\n{'='*80}")
-    print(f"🔄 CROSS-TASK TESTING: {topology_type.upper()} TOPOLOGY")
+    print(f"🔄 DOUBLE-TASK TRAINING: {topology_type.upper()} TOPOLOGY")
     print(f"{'='*80}")
     
-    # Create environment for training task
-    train_env = DummyVecEnv([make_env(train_task)])
+    # Create environment for first training task
+    train_env_1 = DummyVecEnv([make_env(train_task_1)])
     
     # Use provided hidden_size or fall back to config
     actual_hidden_size = hidden_size if hidden_size is not None else config['hidden_size']
@@ -1419,9 +1424,9 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     ppo_params = config['ppo_params']
     model = PPO(
         SpecificPolicyClass,
-        train_env,
+        train_env_1,
         verbose=1,
-        tensorboard_log=f"./logs/cross_task_{topology_type}/",
+        tensorboard_log=f"./logs/double_task_{topology_type}/",
         **ppo_params
     )
     
@@ -1431,63 +1436,131 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     critic_params = policy._get_topology_params(policy.critic_topology)
     total_params = actor_params + critic_params
     
-    # Create descriptive run name with topology, layers, size, parameters, and training task
-    run_name = f"{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_{train_task}"
+    # Create descriptive run name for training
+    training_run_name = f"training_{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_{train_task_1}_then_{train_task_2}"
     
-    # Initialize wandb run for this topology (individual run for proper naming)
+    # Initialize wandb run for training (separate from testing)
     try:
-        wandb_run = wandb.init(
+        training_wandb_run = wandb.init(
             entity="katko-it-universitetet-i-k-benhavn",
-            project="topologies--single-task-training",  # Cross-task testing project
-            name=run_name,
+            project="topologies--double-task-training",  # Double-task training project
+            name=training_run_name,
             config={
+                "run_type": "training",
                 "topology_type": topology_type,
                 "num_layers": num_layers,
                 "hidden_size": actual_hidden_size,
                 "total_params": total_params,
                 "actor_params": actor_params,
                 "critic_params": critic_params,
-                "total_timesteps": config['total_timesteps'],
-                "n_eval_episodes": config['n_eval_episodes'],
-                "train_task": train_task,
-                "test_tasks": config['tasks'],
+                "total_timesteps": config['total_timesteps'] * 2,  # Total for both tasks
+                "train_task_1": train_task_1,
+                "train_task_2": train_task_2,
                 "ppo_params": config['ppo_params'],
                 "universal_input_dim": config['universal_input_dim'],
                 "universal_output_dim": config['universal_output_dim'],
                 "universal_action_dim": config['universal_action_dim'],
-                "experiment_type": "cross_task_testing",
+                "experiment_type": "double_task_training",
             },
-            tags=[topology_type, f"layers_{num_layers}", f"size_{actual_hidden_size}", f"params_{total_params}", train_task, "cross_task"],
+            tags=[topology_type, f"layers_{num_layers}", f"size_{actual_hidden_size}", f"params_{total_params}", train_task_1, train_task_2, "training"],
             reinit=True
         )
-        topology_wandb_enabled = True
+        training_wandb_enabled = True
     except Exception as e:
-        print(f"   ⚠️  WandB logging disabled for {topology_type}: {e}")
-        wandb_run = None
-        topology_wandb_enabled = False
+        print(f"   ⚠️  Training WandB logging disabled for {topology_type}: {e}")
+        training_wandb_run = None
+        training_wandb_enabled = False
     
-    print(f"📋 Cross-Task Configuration:")
-    print(f"   • Training Task: {train_task}")
+    print(f"📋 Double-Task Configuration:")
+    print(f"   • Training Task 1: {train_task_1}")
+    print(f"   • Training Task 2: {train_task_2}")
     print(f"   • Test Tasks: {', '.join(config['tasks'])}")
     print(f"   • Topology: {topology_type}")
     print(f"   • Hidden size: {actual_hidden_size}")
     print(f"   • Number of layers: {num_layers}")
     print(f"   • Total parameters: {total_params:,}")
-    print(f"   • Training timesteps: {config['total_timesteps']:,}")
-    print(f"   • WandB Run: {run_name}")
+    print(f"   • Training timesteps per task: {config['total_timesteps']:,}")
+    print(f"   • Total training timesteps: {config['total_timesteps'] * 2:,}")
+    print(f"   • Training WandB Run: {training_run_name}")
     
-    # Train the model on the training task
-    print(f"\n🎯 Training Phase:")
-    print(f"   • Training on {train_task}...")
+    # Phase 1: Train the model on the first task
+    print(f"\n🎯 Training Phase 1:")
+    print(f"   • Training on {train_task_1}...")
     
     # Create callback for training monitoring
-    callback = EnhancedDebugCallback(verbose=1, wandb_run=wandb_run, log_freq=100)
+    callback = EnhancedDebugCallback(verbose=1, wandb_run=training_wandb_run, log_freq=100)
     
-    # Train the model
-    start_time = time.time()
+    # Train the model on first task
+    start_time_1 = time.time()
     model.learn(total_timesteps=config['total_timesteps'], callback=callback, progress_bar=True)
-    training_time = time.time() - start_time
-    print(f"✅ Training completed in {training_time:.2f} seconds")
+    training_time_1 = time.time() - start_time_1
+    print(f"✅ Training on {train_task_1} completed in {training_time_1:.2f} seconds")
+    
+    # Evaluate performance on first task after training
+    print(f"\n📊 Evaluating performance on {train_task_1} after training...")
+    task1_performance = evaluate_model_enhanced(model, train_env_1, train_task_1, n_eval_episodes=config['n_eval_episodes'])
+    print(f"   • {train_task_1}: {task1_performance['mean_reward']:.2f} ± {task1_performance['std_reward']:.2f} (success: {task1_performance['success_rate']:.1%})")
+    
+    # Phase 2: Continue training on the second task
+    print(f"\n🎯 Training Phase 2:")
+    print(f"   • Continuing training on {train_task_2}...")
+    
+    # Create new environment for second task
+    train_env_2 = DummyVecEnv([make_env(train_task_2)])
+    model.set_env(train_env_2)
+    
+    # Continue training on second task
+    start_time_2 = time.time()
+    model.learn(total_timesteps=config['total_timesteps'], callback=callback, progress_bar=True)
+    training_time_2 = time.time() - start_time_2
+    print(f"✅ Training on {train_task_2} completed in {training_time_2:.2f} seconds")
+    
+    total_training_time = training_time_1 + training_time_2
+    print(f"✅ Total training completed in {total_training_time:.2f} seconds")
+    
+    # Log final training metrics and finish training run
+    if training_wandb_enabled and training_wandb_run is not None:
+        try:
+            # Log training summary
+            training_summary = {
+                "training/final_training_time": total_training_time,
+                "training/timesteps_per_second": (config['total_timesteps'] * 2) / total_training_time,
+                "training/topology_type": topology_type,
+                "training/num_layers": num_layers,
+                "training/train_task_1": train_task_1,
+                "training/train_task_2": train_task_2,
+                "training/network_size": actual_hidden_size,
+                "training/total_params": total_params,
+                "training/actor_params": actor_params,
+                "training/critic_params": critic_params,
+                "training/task1_performance_after_task1": task1_performance['mean_reward'],
+                "training/task1_success_rate_after_task1": task1_performance['success_rate'],
+            }
+            training_wandb_run.log(training_summary)
+            
+            # Create training summary table
+            training_summary_table = wandb.Table(columns=["Metric", "Value", "Description"])
+            training_summary_table.add_data("Topology Type", topology_type, "Network topology used")
+            training_summary_table.add_data("Number of Layers", str(num_layers), "Network depth")
+            training_summary_table.add_data("Hidden Size", str(actual_hidden_size), "Hidden units per layer")
+            training_summary_table.add_data("Total Parameters", f"{total_params:,}", "Trainable parameters")
+            training_summary_table.add_data("Training Task 1", train_task_1, "First task used for training")
+            training_summary_table.add_data("Training Task 2", train_task_2, "Second task used for training")
+            training_summary_table.add_data("Total Training Time", f"{total_training_time:.2f}s", "Total training duration")
+            training_summary_table.add_data("Timesteps/sec", f"{(config['total_timesteps'] * 2) / total_training_time:.2f}", "Training speed")
+            training_summary_table.add_data("Task 1 Performance", f"{task1_performance['mean_reward']:.2f}", "Performance on Task 1 after training")
+            training_summary_table.add_data("Task 1 Success Rate", f"{task1_performance['success_rate']:.1%}", "Success rate on Task 1 after training")
+            
+            training_wandb_run.log({"training_summary": training_summary_table})
+            
+            # Finish training run
+            training_wandb_run.finish()
+            print(f"   ✅ Training run completed: {training_run_name}")
+            
+        except Exception as e:
+            print(f"   ⚠️  Error finishing training run: {e}")
+            import traceback
+            traceback.print_exc()
     
     # Cross-task evaluation
     print(f"\n🧪 Cross-Task Evaluation Phase:")
@@ -1498,213 +1571,220 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
         test_env = DummyVecEnv([make_env(test_task)])
         
         try:
-            mean_reward, std_reward = evaluate_model(model, test_env, n_eval_episodes=config['n_eval_episodes'])
-            cross_task_results[test_task] = {
-                'mean_reward': mean_reward,
-                'std_reward': std_reward
-            }
-            print(f"     ✅ {test_task}: {mean_reward:.2f} ± {std_reward:.2f}")
+            # Use enhanced evaluation function for comprehensive metrics
+            eval_results = evaluate_model_enhanced(model, test_env, test_task, n_eval_episodes=config['n_eval_episodes'])
+            cross_task_results[test_task] = eval_results
+            print(f"     ✅ {test_task}: {eval_results['mean_reward']:.2f} ± {eval_results['std_reward']:.2f} (success: {eval_results['success_rate']:.1%}, length: {eval_results['mean_length']:.1f} ± {eval_results['std_length']:.1f})")
         except Exception as e:
             print(f"     ❌ {test_task}: Error - {str(e)}")
             cross_task_results[test_task] = {
                 'mean_reward': 0.0,
-                'std_reward': 0.0
+                'std_reward': 0.0,
+                'mean_length': 0.0,
+                'std_length': 0.0,
+                'success_rate': 0.0,
+                'episode_rewards': [],
+                'episode_lengths': []
             }
         finally:
             test_env.close()
     
-    # Log comprehensive cross-task results and transfer metrics to wandb
-    if topology_wandb_enabled and wandb_run is not None:
+    # Create separate testing runs for each task
+    print(f"\n📊 Creating separate testing runs...")
+    
+    # Calculate transfer learning metrics for reference
+    # Use the third task (not trained on) as reference for transfer metrics
+    third_task = None
+    for task in config['tasks']:
+        if task != train_task_1 and task != train_task_2:
+            third_task = task
+            break
+    
+    third_task_performance = cross_task_results.get(third_task, {'mean_reward': 0.0})
+    third_task_reward = third_task_performance['mean_reward']
+    
+    # Create individual testing runs for each task
+    for test_task, results in cross_task_results.items():
+        # Create descriptive run name for testing
+        testing_run_name = f"testing_{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_train_{train_task_1}_then_{train_task_2}_test_{test_task}"
+        
         try:
-            # ============================================================================
-            # TRAINING PERFORMANCE METRICS
-            # ============================================================================
-            training_metrics = {
-                "training/training_time": training_time,
-                "training/topology_type": topology_type,
-                "training/num_layers": num_layers,
-                "training/train_task": train_task,
-                "training/network_size": actual_hidden_size,
-                "training/total_params": total_params,
-                "training/actor_params": actor_params,
-                "training/critic_params": critic_params,
-                "training/timesteps_per_second": config['total_timesteps'] / training_time,
+            # Initialize wandb run for this specific test
+            testing_wandb_run = wandb.init(
+                entity="katko-it-universitetet-i-k-benhavn",
+                project="topologies--double-task-training",  # Double-task training project
+                name=testing_run_name,
+                config={
+                    "run_type": "testing",
+                    "topology_type": topology_type,
+                    "num_layers": num_layers,
+                    "hidden_size": actual_hidden_size,
+                    "total_params": total_params,
+                    "actor_params": actor_params,
+                    "critic_params": critic_params,
+                    "train_task_1": train_task_1,
+                    "train_task_2": train_task_2,
+                    "test_task": test_task,
+                    "n_eval_episodes": config['n_eval_episodes'],
+                    "ppo_params": config['ppo_params'],
+                    "universal_input_dim": config['universal_input_dim'],
+                    "universal_output_dim": config['universal_output_dim'],
+                    "universal_action_dim": config['universal_action_dim'],
+                    "experiment_type": "double_task_training",
+                },
+                tags=[topology_type, f"layers_{num_layers}", f"size_{actual_hidden_size}", f"params_{total_params}", train_task_1, train_task_2, test_task, "testing"],
+                reinit=True
+            )
+            
+            # Calculate transfer metrics for this specific test
+            is_training_task_1 = test_task == train_task_1
+            is_training_task_2 = test_task == train_task_2
+            is_training_task = is_training_task_1 or is_training_task_2
+            
+            # Calculate forgetting for Task 1 (if testing on Task 1)
+            if is_training_task_1:
+                forgetting_task1 = task1_performance['mean_reward'] - results['mean_reward']
+                transfer_ratio = 1.0  # No transfer ratio for training tasks
+            elif is_training_task_2:
+                transfer_ratio = 1.0  # No transfer ratio for training tasks
+            else:
+                # Transfer to third task
+                transfer_ratio = results['mean_reward'] / third_task_reward if third_task_reward != 0 else 0
+                forgetting_task1 = 0.0  # Not applicable for third task
+            
+            # Task-specific maximum rewards for normalization
+            max_rewards = {
+                'CartPole-v1': 200.0,
+                'MountainCar-v0': 0.0,  # MountainCar has negative rewards
+                'Acrobot-v1': -100.0,   # Acrobot has negative rewards
             }
-            wandb_run.log(training_metrics)
+            max_reward = max_rewards.get(test_task, 200.0)
             
-            # ============================================================================
-            # CROSS-TASK EVALUATION RESULTS
-            # ============================================================================
-            for test_task, results in cross_task_results.items():
-                wandb_run.log({
-                    f"cross_task/{test_task}/mean_reward": results['mean_reward'],
-                    f"cross_task/{test_task}/std_reward": results['std_reward'],
-                })
+            # Calculate normalized performance (0-1 scale)
+            if max_reward != 0:
+                normalized_performance = (results['mean_reward'] - max_reward) / abs(max_reward) if max_reward < 0 else results['mean_reward'] / max_reward
+            else:
+                normalized_performance = 0.0
             
-            # ============================================================================
-            # TRANSFER LEARNING METRICS
-            # ============================================================================
-            # Calculate transfer learning metrics
-            train_task_performance = cross_task_results.get(train_task, {'mean_reward': 0.0})
-            train_reward = train_task_performance['mean_reward']
-            
-            # Calculate transfer ratios (performance on other tasks vs training task)
-            transfer_metrics = {}
-            for test_task, results in cross_task_results.items():
-                if test_task != train_task:
-                    transfer_ratio = results['mean_reward'] / train_reward if train_reward != 0 else 0
-                    transfer_metrics[f"transfer/{test_task}/transfer_ratio"] = transfer_ratio
-                    transfer_metrics[f"transfer/{test_task}/absolute_performance"] = results['mean_reward']
-                    transfer_metrics[f"transfer/{test_task}/relative_performance"] = transfer_ratio * 100  # Percentage
-            
-            # Calculate overall transfer learning summary
-            other_tasks = [task for task in cross_task_results.keys() if task != train_task]
-            if other_tasks:
-                avg_transfer_ratio = np.mean([transfer_metrics[f"transfer/{task}/transfer_ratio"] for task in other_tasks])
-                avg_other_performance = np.mean([cross_task_results[task]['mean_reward'] for task in other_tasks])
+            # Log comprehensive testing metrics
+            testing_metrics = {
+                # Basic performance metrics
+                "testing/mean_reward": results['mean_reward'],
+                "testing/std_reward": results['std_reward'],
+                "testing/n_eval_episodes": config['n_eval_episodes'],
                 
-                transfer_metrics.update({
-                    "transfer/overall/avg_transfer_ratio": avg_transfer_ratio,
-                    "transfer/overall/avg_other_task_performance": avg_other_performance,
-                    "transfer/overall/transfer_efficiency": avg_transfer_ratio * 100,  # Percentage
-                    "transfer/overall/task_specialization": train_reward - avg_other_performance,  # How much better on training task
-                })
-            
-            wandb_run.log(transfer_metrics)
-            
-            # ============================================================================
-            # TASK-SPECIFIC ANALYSIS
-            # ============================================================================
-            # Task difficulty analysis
-            task_difficulty_metrics = {}
-            for test_task, results in cross_task_results.items():
-                # Normalize by task-specific maximum rewards
-                max_rewards = {
-                    'CartPole-v1': 200.0,
-                    'MountainCar-v0': 0.0,  # MountainCar has negative rewards
-                    'Acrobot-v1': -100.0,   # Acrobot has negative rewards
-                }
-                max_reward = max_rewards.get(test_task, 200.0)
+                # Enhanced metrics (Phase 1)
+                "testing/mean_length": results['mean_length'],
+                "testing/std_length": results['std_length'],
+                "testing/success_rate": results['success_rate'],
                 
-                # Calculate normalized performance (0-1 scale)
-                if max_reward != 0:
-                    normalized_performance = (results['mean_reward'] - max_reward) / abs(max_reward) if max_reward < 0 else results['mean_reward'] / max_reward
-                else:
-                    normalized_performance = 0.0
+                # Transfer learning metrics
+                "transfer/transfer_ratio": transfer_ratio,
+                "transfer/relative_performance": transfer_ratio * 100,  # Percentage
+                "transfer/is_training_task": is_training_task,
+                "transfer/is_training_task_1": is_training_task_1,
+                "transfer/is_training_task_2": is_training_task_2,
+                "transfer/third_task_performance": third_task_reward,
                 
-                task_difficulty_metrics[f"task_analysis/{test_task}/normalized_performance"] = normalized_performance
-                task_difficulty_metrics[f"task_analysis/{test_task}/raw_performance"] = results['mean_reward']
-                task_difficulty_metrics[f"task_analysis/{test_task}/max_possible"] = max_reward
-            
-            wandb_run.log(task_difficulty_metrics)
-            
-            # ============================================================================
-            # TOPOLOGY-SPECIFIC METRICS
-            # ============================================================================
-            topology_metrics = {
-                "topology/type": topology_type,
-                "topology/layers": num_layers,
-                "topology/network_size": actual_hidden_size,
-                "topology/total_parameters": total_params,
-                "topology/parameter_efficiency": total_params / actual_hidden_size,  # Params per hidden unit
-                "topology/actor_critic_ratio": actor_params / critic_params if critic_params > 0 else 0,
+                # Forgetting metrics (for Task 1)
+                "forgetting/task1_forgetting": forgetting_task1 if is_training_task_1 else 0.0,
+                "forgetting/task1_performance_after_task1": task1_performance['mean_reward'],
+                "forgetting/task1_performance_final": results['mean_reward'] if is_training_task_1 else 0.0,
+                
+                # Task-specific analysis
+                "task_analysis/normalized_performance": normalized_performance,
+                "task_analysis/raw_performance": results['mean_reward'],
+                "task_analysis/max_possible": max_reward,
+                "task_analysis/task_difficulty": test_task,
+                
+                # Network architecture
+                "network/topology_type": topology_type,
+                "network/layers": num_layers,
+                "network/size": actual_hidden_size,
+                "network/total_parameters": total_params,
+                "network/parameter_efficiency": total_params / actual_hidden_size,
+                "network/actor_critic_ratio": actor_params / critic_params if critic_params > 0 else 0,
+                
+                # Training context
+                "context/training_time": total_training_time,
+                "context/timesteps_per_second": (config['total_timesteps'] * 2) / total_training_time,
+                "context/total_training_timesteps": config['total_timesteps'] * 2,
             }
-            wandb_run.log(topology_metrics)
             
-            # ============================================================================
-            # COMPARISON TABLES AND VISUALIZATIONS
-            # ============================================================================
-            # Create comprehensive cross-task comparison table
-            comparison_table = wandb.Table(columns=[
-                "Test Task", "Mean Reward", "Std Reward", "Transfer Ratio", 
-                "Normalized Performance", "Is Training Task"
-            ])
+            testing_wandb_run.log(testing_metrics)
             
-            for test_task, results in cross_task_results.items():
-                is_training_task = test_task == train_task
-                transfer_ratio = transfer_metrics.get(f"transfer/{test_task}/transfer_ratio", 1.0) if not is_training_task else 1.0
-                normalized_perf = task_difficulty_metrics.get(f"task_analysis/{test_task}/normalized_performance", 0.0)
-                
-                comparison_table.add_data(
-                    test_task,
-                    f"{results['mean_reward']:.2f}",
-                    f"{results['std_reward']:.2f}",
-                    f"{transfer_ratio:.3f}",
-                    f"{normalized_perf:.3f}",
-                    "Yes" if is_training_task else "No"
-                )
+            # Create detailed testing summary table
+            testing_summary_table = wandb.Table(columns=["Metric", "Value", "Description"])
+            testing_summary_table.add_data("Topology Type", topology_type, "Network topology used")
+            testing_summary_table.add_data("Training Task 1", train_task_1, "First task used for training")
+            testing_summary_table.add_data("Training Task 2", train_task_2, "Second task used for training")
+            testing_summary_table.add_data("Test Task", test_task, "Task being tested")
+            testing_summary_table.add_data("Mean Reward", f"{results['mean_reward']:.2f}", "Average reward on test task")
+            testing_summary_table.add_data("Std Reward", f"{results['std_reward']:.2f}", "Standard deviation of rewards")
+            testing_summary_table.add_data("Mean Episode Length", f"{results['mean_length']:.1f}", "Average steps per episode")
+            testing_summary_table.add_data("Std Episode Length", f"{results['std_length']:.1f}", "Standard deviation of episode lengths")
+            testing_summary_table.add_data("Success Rate", f"{results['success_rate']:.1%}", "Percentage of successful episodes")
+            testing_summary_table.add_data("Transfer Ratio", f"{transfer_ratio:.3f}", "Performance ratio vs third task")
+            testing_summary_table.add_data("Normalized Performance", f"{normalized_performance:.3f}", "Task-relative performance (0-1)")
+            testing_summary_table.add_data("Is Training Task", "Yes" if is_training_task else "No", "Whether this is a training task")
+            testing_summary_table.add_data("Is Training Task 1", "Yes" if is_training_task_1 else "No", "Whether this is the first training task")
+            testing_summary_table.add_data("Is Training Task 2", "Yes" if is_training_task_2 else "No", "Whether this is the second training task")
+            if is_training_task_1:
+                testing_summary_table.add_data("Task 1 Forgetting", f"{forgetting_task1:.2f}", "Performance drop on Task 1 after Task 2 training")
+            testing_summary_table.add_data("Network Size", str(actual_hidden_size), "Hidden units in network")
+            testing_summary_table.add_data("Total Parameters", f"{total_params:,}", "Total trainable parameters")
             
-            wandb_run.log({"cross_task_comparison": comparison_table})
+            testing_wandb_run.log({"testing_summary": testing_summary_table})
             
-            # Create transfer learning summary table
-            transfer_summary_table = wandb.Table(columns=[
-                "Metric", "Value", "Description"
-            ])
-            
-            transfer_summary_table.add_data("Training Task", train_task, "Task used for training")
-            transfer_summary_table.add_data("Training Performance", f"{train_reward:.2f}", "Mean reward on training task")
-            transfer_summary_table.add_data("Avg Transfer Ratio", f"{avg_transfer_ratio:.3f}", "Average performance ratio on other tasks")
-            transfer_summary_table.add_data("Transfer Efficiency", f"{avg_transfer_ratio * 100:.1f}%", "Percentage of training performance transferred")
-            transfer_summary_table.add_data("Task Specialization", f"{train_reward - avg_other_performance:.2f}", "Performance gap between training and other tasks")
-            transfer_summary_table.add_data("Network Size", str(actual_hidden_size), "Hidden units in network")
-            transfer_summary_table.add_data("Total Parameters", f"{total_params:,}", "Total trainable parameters")
-            
-            wandb_run.log({"transfer_learning_summary": transfer_summary_table})
-            
-            # ============================================================================
-            # PERFORMANCE RANKINGS
-            # ============================================================================
-            # Rank tasks by performance for this topology
-            task_rankings = sorted(cross_task_results.items(), key=lambda x: x[1]['mean_reward'], reverse=True)
-            ranking_table = wandb.Table(columns=["Rank", "Task", "Mean Reward", "Performance"])
-            
-            for rank, (task, results) in enumerate(task_rankings, 1):
-                performance_desc = "Training Task" if task == train_task else "Transfer Task"
-                ranking_table.add_data(rank, task, f"{results['mean_reward']:.2f}", performance_desc)
-            
-            wandb_run.log({"task_performance_ranking": ranking_table})
-            
-            # ============================================================================
-            # FINAL SUMMARY METRICS
-            # ============================================================================
-            final_summary = {
-                "summary/topology": topology_type,
-                "summary/train_task": train_task,
-                "summary/best_transfer_task": max(other_tasks, key=lambda t: cross_task_results[t]['mean_reward']) if other_tasks else "N/A",
-                "summary/worst_transfer_task": min(other_tasks, key=lambda t: cross_task_results[t]['mean_reward']) if other_tasks else "N/A",
-                "summary/transfer_efficiency": avg_transfer_ratio * 100,
-                "summary/training_performance": train_reward,
-                "summary/avg_transfer_performance": avg_other_performance,
-                "summary/network_complexity": total_params,
-            }
-            wandb_run.log(final_summary)
-            
-            # Finish wandb run
-            wandb_run.finish()
+            # Finish this testing run
+            testing_wandb_run.finish()
+            print(f"   ✅ Testing run completed: {testing_run_name}")
             
         except Exception as e:
-            print(f"   ⚠️  Error logging to WandB: {e}")
+            print(f"   ⚠️  Error creating testing run for {test_task}: {e}")
             import traceback
             traceback.print_exc()
     
-    train_env.close()
+    train_env_1.close()
+    train_env_2.close()
     
     # Prepare result dictionary
     result = {
         'topology_type': topology_type,
         'num_layers': num_layers,
-        'train_task': train_task,
+        'train_task_1': train_task_1,
+        'train_task_2': train_task_2,
         'network_size': actual_hidden_size,
         'total_params': total_params,
         'actor_params': actor_params,
         'critic_params': critic_params,
-        'training_time': training_time
+        'training_time_task_1': training_time_1,
+        'training_time_task_2': training_time_2,
+        'total_training_time': total_training_time,
+        
+        # Performance after Task 1 training
+        f'{train_task_1}_after_task1_mean_reward': task1_performance['mean_reward'],
+        f'{train_task_1}_after_task1_std_reward': task1_performance['std_reward'],
+        f'{train_task_1}_after_task1_mean_length': task1_performance['mean_length'],
+        f'{train_task_1}_after_task1_std_length': task1_performance['std_length'],
+        f'{train_task_1}_after_task1_success_rate': task1_performance['success_rate'],
     }
     
-    # Add cross-task results
+    # Add final cross-task results
     for test_task, results in cross_task_results.items():
-        result[f'{test_task}_mean_reward'] = results['mean_reward']
-        result[f'{test_task}_std_reward'] = results['std_reward']
+        result[f'{test_task}_final_mean_reward'] = results['mean_reward']
+        result[f'{test_task}_final_std_reward'] = results['std_reward']
+        result[f'{test_task}_final_mean_length'] = results['mean_length']
+        result[f'{test_task}_final_std_length'] = results['std_length']
+        result[f'{test_task}_final_success_rate'] = results['success_rate']
+    
+    # Add forgetting metrics
+    if train_task_1 in cross_task_results:
+        result[f'{train_task_1}_forgetting'] = task1_performance['mean_reward'] - cross_task_results[train_task_1]['mean_reward']
+    
+    # Add transfer metrics for third task
+    if third_task and third_task in cross_task_results:
+        result[f'{third_task}_transfer_ratio'] = cross_task_results[third_task]['mean_reward'] / third_task_reward if third_task_reward != 0 else 0
     
     return result
 
@@ -1748,6 +1828,99 @@ def evaluate_model(model, env, n_eval_episodes=3):
     std_reward = np.std(rewards)
     
     return mean_reward, std_reward
+
+def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
+    """
+    Enhanced evaluation function that tracks episode lengths and success rates.
+    
+    Args:
+        model: The trained model to evaluate
+        env: The environment to evaluate on
+        task_name: Name of the task (e.g., 'CartPole-v1', 'MountainCar-v0', 'Acrobot-v1')
+        n_eval_episodes: Number of episodes to evaluate
+    
+    Returns:
+        Dictionary with comprehensive evaluation metrics
+    """
+    rewards = []
+    episode_lengths = []
+    
+    # Use tqdm for progress bar
+    for episode in tqdm(range(n_eval_episodes), desc="Evaluating", leave=False):
+        obs = env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]  # Handle (obs, info) format
+        
+        done = False
+        truncated = False
+        episode_reward = 0
+        step_count = 0
+        
+        while not (done or truncated):
+            action, _ = model.predict(obs, deterministic=True)
+            step_result = env.step(action)
+            
+            # Handle both old and new gym step return formats
+            if len(step_result) == 4:
+                obs, reward, done, info = step_result
+                truncated = False
+            else:
+                obs, reward, done, truncated, info = step_result
+            
+            episode_reward += reward[0] if hasattr(reward, '__len__') else reward
+            step_count += 1
+            
+            # Safety check to prevent infinite loops
+            if step_count > 500:
+                print(f"      ⚠️  Episode {episode} exceeded 500 steps, terminating")
+                break
+        
+        rewards.append(episode_reward)
+        episode_lengths.append(step_count)
+    
+    # Calculate basic statistics
+    mean_reward = np.mean(rewards)
+    std_reward = np.std(rewards)
+    mean_length = np.mean(episode_lengths)
+    std_length = np.std(episode_lengths)
+    
+    # Calculate success rate based on task-specific criteria
+    success_rate = calculate_success_rate(rewards, episode_lengths, task_name)
+    
+    return {
+        'mean_reward': mean_reward,
+        'std_reward': std_reward,
+        'mean_length': mean_length,
+        'std_length': std_length,
+        'success_rate': success_rate,
+        'episode_rewards': rewards,
+        'episode_lengths': episode_lengths
+    }
+
+def calculate_success_rate(rewards, episode_lengths, task_name):
+    """
+    Calculate success rate based on task-specific criteria.
+    
+    Args:
+        rewards: List of episode rewards
+        episode_lengths: List of episode lengths
+        task_name: Name of the task
+    
+    Returns:
+        Success rate as a float between 0 and 1
+    """
+    if task_name == 'CartPole-v1':
+        # Success: episode length >= 200 (CartPole solved)
+        return np.mean([length >= 200 for length in episode_lengths])
+    elif task_name == 'MountainCar-v0':
+        # Success: reached goal position (reward > -200)
+        return np.mean([reward > -200 for reward in rewards])
+    elif task_name == 'Acrobot-v1':
+        # Success: swung up to vertical (reward > -100)
+        return np.mean([reward > -100 for reward in rewards])
+    else:
+        # Default: no success criteria defined
+        return 0.0
 
 def verify_capacity_matching_debug(config):
     """Verify capacity matching implementation using the same pattern as working scripts."""
@@ -1979,7 +2152,7 @@ def verify_capacity_matching_debug(config):
 
 def main():
     """Main function to run debug test."""
-    print("🔄 Cross-Task Testing: Single Task Training with Transfer Evaluation")
+    print("🔄 Double-Task Training: Sequential Task Training with Transfer Evaluation")
     print("="*80)
     print(f"📅 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("="*80)
@@ -1998,8 +2171,20 @@ def main():
     base_topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
     experiment_types = config.get('experiment_types', ['same_size'])
     
-    print(f"\n📋 Cross-Task Testing Configuration:")
-    print(f"   • Training Tasks: {', '.join(config['tasks'])} (train on one, test on all)")
+    # Define all possible double-task training combinations
+    double_task_combinations = [
+        ('CartPole-v1', 'Acrobot-v1'),      # x, y
+        ('CartPole-v1', 'MountainCar-v0'),  # x, z
+        ('Acrobot-v1', 'MountainCar-v0'),   # y, z
+        ('Acrobot-v1', 'CartPole-v1'),      # y, x
+        ('MountainCar-v0', 'CartPole-v1'),  # z, x
+        ('MountainCar-v0', 'Acrobot-v1'),   # z, y
+    ]
+    
+    print(f"\n📋 Double-Task Training Configuration:")
+    print(f"   • Training Task Combinations: {len(double_task_combinations)} combinations")
+    for task1, task2 in double_task_combinations:
+        print(f"     - {task1} → {task2}")
     print(f"   • Base Topologies: {', '.join(base_topologies)}")
     print(f"   • Experiment Types: {', '.join(experiment_types)}")
     print(f"   • Hidden size: {config['hidden_size']}")
@@ -2007,8 +2192,9 @@ def main():
     for topology, layers in config['layer_configs'].items():
         print(f"     - {topology}: {layers} layers")
     print(f"   • Training timesteps: {config['total_timesteps']:,} per training task")
+    print(f"   • Total training timesteps: {config['total_timesteps'] * 2:,} per experiment")
     print(f"   • Evaluation episodes: {config['n_eval_episodes']} per test task")
-    print(f"   • Transfer Testing: Train on X → Test on {', '.join(config['tasks'])}")
+    print(f"   • Transfer Testing: Train on X → Y → Test on all {', '.join(config['tasks'])}")
     print(f"   • Capacity Matching: {'Enabled' if config.get('use_capacity_matching', False) else 'Disabled'}")
     print(f"   • Capacity Mapping: {'Enabled' if config.get('use_capacity_mapping', True) else 'Disabled (using incremental adjustment)'}")
     print(f"   • WandB Runs: Individual runs per topology with descriptive names")
@@ -2035,36 +2221,40 @@ def main():
                         filtered_experiments.append((topology, experiment_type, num_layers))
     
     experiment_count = 0
-    total_experiments = len(filtered_experiments)
+    total_experiments = len(filtered_experiments) * len(double_task_combinations)
     
-    print(f"\n🔬 Cross-Task Experiment Plan:")
+    print(f"\n🔬 Double-Task Experiment Plan:")
     print(f"   • Total training experiments: {total_experiments}")
     print(f"   • Transfer testing: Each trained model tested on all {len(config['tasks'])} tasks")
     print(f"   • Total evaluations: {total_experiments * len(config['tasks'])}")
-    print(f"   • Combinations to test:")
+    print(f"   • Topology combinations to test:")
     for topology, experiment_type, num_layers in filtered_experiments:
         print(f"     - {topology} + {experiment_type} ({num_layers} layers)")
+    print(f"   • Task combinations to test:")
+    for task1, task2 in double_task_combinations:
+        print(f"     - {task1} → {task2}")
     
-    # Cross-task testing: Train on one task, test on all tasks
-    for train_task in config['tasks']:
+    # Double-task training: Train on task1, then task2, test on all tasks
+    for train_task_1, train_task_2 in double_task_combinations:
         print(f"\n{'='*80}")
-        print(f"🎯 TRAINING ON: {train_task.upper()}")
+        print(f"🎯 TRAINING SEQUENCE: {train_task_1.upper()} → {train_task_2.upper()}")
         print(f"{'='*80}")
         
         for topology, experiment_type, num_layers in filtered_experiments:
             experiment_count += 1
             print(f"\n{'='*80}")
             layer_info = f" ({num_layers} layers)" if topology == 'fully_connected' else ""
-            print(f"🔍 EXPERIMENT {experiment_count}/{total_experiments * len(config['tasks'])}: {topology.upper()} + {experiment_type.upper()}{layer_info} TRAINED ON {train_task.upper()}")
+            print(f"🔍 EXPERIMENT {experiment_count}/{total_experiments}: {topology.upper()} + {experiment_type.upper()}{layer_info} TRAINED ON {train_task_1.upper()} → {train_task_2.upper()}")
             print(f"{'='*80}")
             
             # Use base topology names and handle layer variations
             actual_topology = topology  # Already using base names now
             
-            # Update config with current experiment type and task
+            # Update config with current experiment type and tasks
             current_config = config.copy()
             current_config['current_experiment_type'] = experiment_type
-            current_config['current_task'] = train_task
+            current_config['current_task_1'] = train_task_1
+            current_config['current_task_2'] = train_task_2
             
             # Show capacity matching calculations (using pre-calculated results from verification)
             print(f"🔧 Capacity Matching Analysis:")
@@ -2093,21 +2283,23 @@ def main():
                 print(f"   • No capacity matching required")
                 actual_size = base_size
             
-            # Cross-task testing: Train on one task, test on all tasks
-            result = cross_task_testing(
+            # Double-task training: Train on task1, then task2, test on all tasks
+            result = double_task_training(
                 DebugTopologyPolicy,
                 actual_topology,
                 current_config,
                 num_layers=num_layers,
                 hidden_size=actual_size,  # Pass the capacity-matched size directly
-                train_task=train_task  # Pass the training task
+                train_task_1=train_task_1,  # Pass the first training task
+                train_task_2=train_task_2   # Pass the second training task
             )
             
             # Update the result to reflect the original topology name and experiment type
             result['topology_type'] = topology
             result['experiment_type'] = experiment_type
             result['num_layers'] = num_layers
-            result['train_task'] = train_task
+            result['train_task_1'] = train_task_1
+            result['train_task_2'] = train_task_2
             all_results.append(result)
     
     # Create results DataFrame
@@ -2119,42 +2311,47 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     
     # Save DataFrame
-    df.to_csv(f"{results_dir}/cross_task_results.csv", index=False)
+    df.to_csv(f"{results_dir}/double_task_results.csv", index=False)
     
     # Save configuration
     with open(f"{results_dir}/config.json", 'w') as f:
         json.dump(config, f, indent=2, default=str)
     
-    # Individual wandb runs are handled within cross_task_testing function
+    # Individual wandb runs are handled within double_task_training function
     # No main run logging needed since each topology has its own run
     
     # Print summary
     print(f"\n{'='*80}")
-    print(f"🎉 CROSS-TASK TESTING COMPLETED")
+    print(f"🎉 DOUBLE-TASK TRAINING COMPLETED")
     print(f"{'='*80}")
     print(f"📊 Results Summary:")
     print(f"   • Total Training Experiments: {len(all_results)}")
     print(f"   • Transfer Evaluations: {len(all_results) * len(config['tasks'])}")
     print(f"   • Results saved to: {results_dir}")
-    print(f"   • CSV file: cross_task_results.csv")
+    print(f"   • CSV file: double_task_results.csv")
     print(f"   • Config file: config.json")
-    print(f"   • WandB Project: topologies--single-task-training")
-    print(f"   • Individual runs with descriptive names per topology")
+    print(f"   • WandB Project: topologies--double-task-training")
+    print(f"   • Training runs: training_[topology]_[layers]_[size]_[params]_[task1]_then_[task2]")
+    print(f"   • Testing runs: testing_[topology]_[layers]_[size]_[params]_train_[task1]_then_[task2]_test_[test_task]")
     
     # Print results
     if not df.empty:
-        print(f"\n📈 Cross-Task Results by Topology:")
+        print(f"\n📈 Double-Task Results by Topology:")
         for _, row in df.iterrows():
-            print(f"   • {row['topology_type']} (trained on {row['train_task']}):")
-            print(f"     - CartPole-v1: {row.get('CartPole-v1_mean_reward', 'N/A'):.2f} ± {row.get('CartPole-v1_std_reward', 'N/A'):.2f}")
-            print(f"     - MountainCar-v0: {row.get('MountainCar-v0_mean_reward', 'N/A'):.2f} ± {row.get('MountainCar-v0_std_reward', 'N/A'):.2f}")
-            print(f"     - Acrobot-v1: {row.get('Acrobot-v1_mean_reward', 'N/A'):.2f} ± {row.get('Acrobot-v1_std_reward', 'N/A'):.2f}")
+            print(f"   • {row['topology_type']} (trained on {row['train_task_1']} → {row['train_task_2']}):")
+            print(f"     - CartPole-v1: {row.get('CartPole-v1_final_mean_reward', 'N/A'):.2f} ± {row.get('CartPole-v1_final_std_reward', 'N/A'):.2f} (success: {row.get('CartPole-v1_final_success_rate', 'N/A'):.1%}, length: {row.get('CartPole-v1_final_mean_length', 'N/A'):.1f})")
+            print(f"     - MountainCar-v0: {row.get('MountainCar-v0_final_mean_reward', 'N/A'):.2f} ± {row.get('MountainCar-v0_final_std_reward', 'N/A'):.2f} (success: {row.get('MountainCar-v0_final_success_rate', 'N/A'):.1%}, length: {row.get('MountainCar-v0_final_mean_length', 'N/A'):.1f})")
+            print(f"     - Acrobot-v1: {row.get('Acrobot-v1_final_mean_reward', 'N/A'):.2f} ± {row.get('Acrobot-v1_final_std_reward', 'N/A'):.2f} (success: {row.get('Acrobot-v1_final_success_rate', 'N/A'):.1%}, length: {row.get('Acrobot-v1_final_mean_length', 'N/A'):.1f})")
             print(f"     - Architecture: {row['num_layers']} layers, {row['network_size']} nodes, {row['total_params']:,} params")
+            forgetting_key = f"{row['train_task_1']}_forgetting"
+            if row.get(forgetting_key, None) is not None:
+                print(f"     - Forgetting on {row['train_task_1']}: {row[forgetting_key]:.2f}")
         
-        print(f"\n🔍 Cross-Task Analysis:")
-        print(f"   • Transfer learning evaluation completed")
-        print(f"   • Each topology tested on all tasks after single-task training")
-        print(f"   • Results show transfer capabilities across different environments")
+        print(f"\n🔍 Double-Task Analysis:")
+        print(f"   • Sequential training evaluation completed")
+        print(f"   • Each topology trained on two tasks sequentially")
+        print(f"   • Results show transfer capabilities and forgetting patterns")
+        print(f"   • Forgetting metrics show performance retention on first task")
     
     print(f"\n✅ Debug test completed successfully!")
     print(f"💡 Next steps:")

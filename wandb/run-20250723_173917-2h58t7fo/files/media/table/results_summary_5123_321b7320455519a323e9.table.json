@@ -1,1 +1,0 @@
-{"columns": ["Metric", "Value"], "data": [["Topology Type", "fully_connected"], ["Number of Layers", "2"], ["Hidden Size", "64"], ["Mean Reward", "-199.20"], ["Std Reward", "119.70"], ["Training Time (s)", "12.24"], ["Timesteps/sec", "408.46"], ["Performance Score", "-16.2731"], ["Total Timesteps", "5000"]]}
