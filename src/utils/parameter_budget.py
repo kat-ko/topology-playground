@@ -455,8 +455,6 @@ class ParameterBudgetCalculator:
                     size=size,
                     k=self.config['small_world_params']['k'],
                     p=self.config['small_world_params']['p'],
-                    num_layers=num_layers,
-                    inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
                     seed=42
                 ),
                 'modular': ModularTopology(
@@ -464,8 +462,6 @@ class ParameterBudgetCalculator:
                     num_modules=self.config['modular_params']['num_modules'],
                     inter_module_prob=self.config['modular_params']['inter_module_prob'],
                     intra_module_prob=self.config['modular_params']['intra_module_prob'],
-                    num_layers=num_layers,
-                    inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                     seed=42
                 ),
                 'hybrid': HybridTopology(
@@ -474,23 +470,22 @@ class ParameterBudgetCalculator:
                     k=self.config['small_world_params']['k'],
                     p=self.config['small_world_params']['p'],
                     inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                    num_layers=num_layers,
-                    inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                     seed=42
                 ),
                 'fully_connected': FullyConnectedTopology(
                     size=size,
                     num_layers=num_layers,
-                    inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
-                    intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
                     seed=42
                 )
             }
             
             # Generate graphs
-            graphs = topo_map[topology].generate(num_layers)
-            if num_layers == 1:
-                graphs = [graphs]
+            if topology == 'fully_connected':
+                # FullyConnectedTopology.generate() always returns a single unified graph
+                graphs = [topo_map[topology].generate(num_layers)]
+            else:
+                # Non-FC topologies generate a single graph
+                graphs = [topo_map[topology].generate()]
             
             # Select input/output nodes for each layer (like training does)
             def select_nodes(graph, strategy, size, seed):
@@ -506,7 +501,10 @@ class ParameterBudgetCalculator:
             networks = []
             total_params = 0
             
-            for layer_idx in range(num_layers):
+            # For non-FC topologies, we only have one graph
+            num_graphs = len(graphs)
+            
+            for layer_idx in range(num_graphs):
                 input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, 42)
                 
                 network = network_class_map[network_type](
@@ -560,7 +558,7 @@ class ParameterBudgetCalculator:
     def _get_reference_capacity(self, reference_topology: str, size: int, network_type: str = 'ffn', num_layers: int = 1, seed: int = 42) -> int:
         """
         Get the actual parameter count of the reference topology at the given size.
-        Uses capacity mapper if available, otherwise creates the network directly.
+        Uses theoretical calculations to avoid networkx compatibility issues.
         """
         # Use capacity mapper if available
         if self.use_capacity_mapping and self.capacity_mapper is not None:
@@ -575,108 +573,19 @@ class ParameterBudgetCalculator:
                         cap = int(cap * multiplier)
                 return cap
         
-        # Fallback to creating the actual network
-        # Import here to avoid circular imports
-        from ..topologies.small_world import SmallWorldTopology
-        from ..topologies.modular import ModularTopology
-        from ..topologies.hybrid import HybridTopology
-        from ..topologies.fully_connected import FullyConnectedTopology
-        from ..networks.ffn import FeedForwardNetwork
-        from ..networks.rnn import RecurrentNetwork
-        import numpy as np
+        # Use theoretical calculations instead of creating actual networks
+        # This avoids networkx compatibility issues and is much faster
+        theoretical_capacity = self._calculate_topology_parameters(reference_topology, size)
         
-        # Network class mapping
-        network_class_map = {
-            'ffn': FeedForwardNetwork,
-            'rnn': RecurrentNetwork
-        }
-        
-        # Create the actual reference topology
-        topo_map = {
-            'small_world': SmallWorldTopology(
-                size=size,
-                k=self.config['small_world_params']['k'],
-                p=self.config['small_world_params']['p'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
-                seed=seed
-            ),
-            'modular': ModularTopology(
-                size=size,
-                num_modules=self.config['modular_params']['num_modules'],
-                inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                intra_module_prob=self.config['modular_params']['intra_module_prob'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
-                seed=seed
-            ),
-            'hybrid': HybridTopology(
-                size=size,
-                num_modules=self.config['modular_params']['num_modules'],
-                k=self.config['small_world_params']['k'],
-                p=self.config['small_world_params']['p'],
-                inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
-                seed=seed
-            ),
-            'fully_connected': FullyConnectedTopology(
-                size=size,
-                num_layers=num_layers,
-                inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
-                intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
-                seed=seed
-            )
-        }
-        
-        # Generate graphs
-        graphs = topo_map[reference_topology].generate(num_layers)
-        if num_layers == 1:
-            graphs = [graphs]
-        
-        # Select input/output nodes for each layer
-        def select_nodes(graph, strategy, size, seed):
-            rng = np.random.RandomState(seed)
-            all_nodes = list(range(size))
-            rng.shuffle(all_nodes)
-            num_io_nodes = self.config['num_io_nodes']
-            input_nodes = all_nodes[:num_io_nodes]
-            output_nodes = all_nodes[num_io_nodes:2*num_io_nodes]
-            return input_nodes, output_nodes
-        
-        # Create networks for each layer and sum their parameters
-        total_capacity = 0
-        
-        for layer_idx in range(num_layers):
-            input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, seed)
-            
-            # Create network for this layer
-            network_class = network_class_map[network_type]
-            network_params = self.config['network_params'][network_type]
-            
-            try:
-                network = network_class(graphs[layer_idx], input_nodes, output_nodes, network_params)
-                metrics = network.get_network_metrics()
-                # Count actual parameters for this layer
-                layer_capacity = sum(
-                    metrics.get(k, 0) for k in metrics if k.startswith('num_')
-                )
-                total_capacity += layer_capacity
-            except Exception as e:
-                print(f"Warning: Could not get actual reference capacity for {reference_topology} layer {layer_idx}: {e}")
-                # Fallback to calculated capacity for this layer
-                layer_capacity = self._calculate_topology_parameters(reference_topology, size) // num_layers
-                total_capacity += layer_capacity
-        
-        # Apply dynamic multiplier to the measured capacity if available
+        # Apply dynamic multiplier to the theoretical capacity if available
         if reference_topology in EMPIRICAL_SCALING_MODELS:
-            capacity_range = self._get_capacity_range(total_capacity)
+            capacity_range = self._get_capacity_range(theoretical_capacity)
             dynamic_multipliers = EMPIRICAL_SCALING_MODELS[reference_topology].get('dynamic_multipliers', {})
             if capacity_range in dynamic_multipliers:
-                multiplier = dynamic_multipliers[capacity_range](total_capacity)
-                total_capacity = int(total_capacity * multiplier)
+                multiplier = dynamic_multipliers[capacity_range](theoretical_capacity)
+                theoretical_capacity = int(theoretical_capacity * multiplier)
         
-        return total_capacity
+        return theoretical_capacity
     
     def _compute_budget(self, experiment_type: str, topology: str, size: int, network_type: str = None, num_layers: int = None) -> int:
         """Compute the parameter budget for a specific experiment type, topology, and size."""
@@ -733,8 +642,6 @@ class ParameterBudgetCalculator:
                 size=size,
                 k=self.config['small_world_params']['k'],
                 p=self.config['small_world_params']['p'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['small_world_params']['inter_layer_prob'],
                 seed=seed
             ),
             'modular': ModularTopology(
@@ -742,8 +649,6 @@ class ParameterBudgetCalculator:
                 num_modules=self.config['modular_params']['num_modules'],
                 inter_module_prob=self.config['modular_params']['inter_module_prob'],
                 intra_module_prob=self.config['modular_params']['intra_module_prob'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                 seed=seed
             ),
             'hybrid': HybridTopology(
@@ -752,23 +657,22 @@ class ParameterBudgetCalculator:
                 k=self.config['small_world_params']['k'],
                 p=self.config['small_world_params']['p'],
                 inter_module_prob=self.config['modular_params']['inter_module_prob'],
-                num_layers=num_layers,
-                inter_layer_prob=self.config['modular_params']['inter_layer_prob'],
                 seed=seed
             ),
             'fully_connected': FullyConnectedTopology(
                 size=size,
                 num_layers=num_layers,
-                inter_layer_prob=self.config['fully_connected_params']['inter_layer_prob'],
-                intra_layer_prob=self.config['fully_connected_params']['intra_layer_prob'],
                 seed=seed
             )
         }
         
         # Generate graphs
-        graphs = topo_map[topology].generate(num_layers)
-        if num_layers == 1:
-            graphs = [graphs]
+        if topology == 'fully_connected':
+            # FullyConnectedTopology.generate() always returns a single unified graph
+            graphs = [topo_map[topology].generate(num_layers)]
+        else:
+            # Non-FC topologies generate a single graph
+            graphs = [topo_map[topology].generate()]
         
         # Select input/output nodes for each layer
         def select_nodes(graph, strategy, size, seed):
@@ -784,7 +688,10 @@ class ParameterBudgetCalculator:
         networks = []
         total_params = 0
         
-        for layer_idx in range(num_layers):
+        # For non-FC topologies, we only have one graph
+        num_graphs = len(graphs)
+        
+        for layer_idx in range(num_graphs):
             input_nodes, output_nodes = select_nodes(graphs[layer_idx], 'random', size, seed)
             
             # Create network for this layer

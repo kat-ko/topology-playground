@@ -131,8 +131,6 @@ class UniversalTopologyFeaturesExtractor(BaseFeaturesExtractor):
                 size=total_size,
                 k=topology_params.get('k', 4),
                 p=topology_params.get('p', 0.3),
-                num_layers=topology_params.get('num_layers', 1),
-                inter_layer_prob=topology_params.get('inter_layer_prob', 0.1),
                 seed=topology_params.get('seed', None)
             )
         elif self.topology_name == 'modular':
@@ -141,8 +139,6 @@ class UniversalTopologyFeaturesExtractor(BaseFeaturesExtractor):
                 num_modules=topology_params.get('num_modules', 4),
                 inter_module_prob=topology_params.get('inter_module_prob', 0.1),
                 intra_module_prob=topology_params.get('intra_module_prob', 0.8),
-                num_layers=topology_params.get('num_layers', 1),
-                inter_layer_prob=topology_params.get('inter_layer_prob', 0.1),
                 seed=topology_params.get('seed', None)
             )
         elif self.topology_name == 'hybrid':
@@ -152,16 +148,12 @@ class UniversalTopologyFeaturesExtractor(BaseFeaturesExtractor):
                 k=topology_params.get('k', 4),
                 p=topology_params.get('p', 0.3),
                 inter_module_prob=topology_params.get('inter_module_prob', 0.1),
-                num_layers=topology_params.get('num_layers', 1),
-                inter_layer_prob=topology_params.get('inter_layer_prob', 0.1),
                 seed=topology_params.get('seed', None)
             )
         elif self.topology_name == 'fully_connected':
             topology = FullyConnectedTopology(
                 size=total_size,
                 num_layers=topology_params.get('num_layers', 1),
-                inter_layer_prob=topology_params.get('inter_layer_prob', 0.5),
-                intra_layer_prob=topology_params.get('intra_layer_prob', 0.8),
                 seed=topology_params.get('seed', None)
             )
         else:

@@ -26,7 +26,7 @@ class FeedForwardNetwork(BaseNetwork):
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for FFN."""
         states = {}
-        for node in self.topology.nodes():
+        for node in list(self.topology.nodes()):
             # Only initialize weights for incoming edges (predecessors)
             states[node] = {
                 'activation': 0.0,
@@ -60,7 +60,7 @@ class FeedForwardNetwork(BaseNetwork):
             batch_size = 1
             device = torch.device('cpu')
         
-        activations = {node: torch.zeros(batch_size, device=device) for node in self.topology.nodes()}
+        activations = {node: torch.zeros(batch_size, device=device) for node in list(self.topology.nodes())}
         
         # Set input node activations
         for node, value in inputs.items():

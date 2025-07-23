@@ -24,7 +24,7 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
         self.p = p
         self.seed = seed
         self.rng = np.random.RandomState(seed)
-    
+        
     def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
         """Generate the small-world network topology as a single connected graph."""
         G = nx.DiGraph()

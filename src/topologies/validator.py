@@ -18,7 +18,7 @@ class TopologyValidator:
         self.topology = topology
         self.input_nodes = set(input_nodes)
         self.output_nodes = set(output_nodes)
-        self.hidden_nodes = set(topology.nodes()) - self.input_nodes - self.output_nodes
+        self.hidden_nodes = set(list(topology.nodes())) - self.input_nodes - self.output_nodes
     
     def validate_forbidden_edges(self) -> Tuple[bool, str]:
         """
@@ -80,7 +80,7 @@ class TopologyValidator:
             Dictionary mapping node indices to their activations
         """
         # Initialize activations
-        activations = {node: 0.0 for node in self.topology.nodes()}
+        activations = {node: 0.0 for node in list(self.topology.nodes())}
         
         # Set input node activations
         for node, value in inputs.items():
@@ -116,7 +116,7 @@ class TopologyValidator:
         # For each output node, find all nodes that can reach it
         for output_node in self.output_nodes:
             # Get all nodes that can reach this output node
-            for node in self.topology.nodes():
+            for node in list(self.topology.nodes()):
                 if nx.has_path(self.topology, node, output_node):
                     influence_map[output_node].add(node)
         
