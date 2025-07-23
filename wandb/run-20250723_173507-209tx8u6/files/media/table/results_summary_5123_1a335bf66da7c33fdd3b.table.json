@@ -1,1 +1,0 @@
-{"columns": ["Metric", "Value"], "data": [["Topology Type", "small_world"], ["Number of Layers", "1"], ["Hidden Size", "64"], ["Mean Reward", "-500.00"], ["Std Reward", "0.00"], ["Training Time (s)", "12.47"], ["Timesteps/sec", "401.00"], ["Performance Score", "-40.0996"], ["Total Timesteps", "5000"]]}

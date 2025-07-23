@@ -5,7 +5,7 @@ This report analyzes the transfer learning capabilities of different neural netw
 
 **Important Note:** The analysis is separated by experiment type AND training task to ensure fair comparisons:
 - **Same Size Networks**: All topologies use the same network size (64 hidden units) but different parameter counts
-- **Matched Capacity Networks**: All topologies use similar parameter counts (~500 parameters) but different network sizes
+- **Matched Capacity Networks**: All topologies use similar parameter counts (~364-500 parameters) but different network sizes, including small_world as the baseline
 - **Training Tasks**: CartPole-v1, MountainCar-v0, and Acrobot-v1 - each analyzed separately to show how training task affects transfer learning
 
 ## 🎯 Key Questions Answered
@@ -33,7 +33,7 @@ The analysis now generates **42 separate figures** (7 analysis types × 2 experi
 
 **Experiment Types:**
 - **Same Size Networks** (64 hidden units)
-- **Matched Capacity Networks** (~500 parameters)
+- **Matched Capacity Networks** (~364-500 parameters, including small_world baseline)
 
 **Training Tasks:**
 - **CartPole-v1** (easy task, good for transfer)
@@ -124,10 +124,11 @@ The analysis now generates **42 separate figures** (7 analysis types × 2 experi
 - **Modular networks** excel despite higher parameter count
 - **Fully connected networks** struggle with transfer despite high capacity
 
-#### **Matched Capacity Networks (~500 parameters)**
-- **Network sizes vary significantly**: Fully connected (22) vs Modular (36)
+#### **Matched Capacity Networks (~364-500 parameters)**
+- **Network sizes vary significantly**: Fully connected (22) vs Modular (36) vs Small world (64)
 - **Shows topology impact on transfer at similar parameter counts**
 - **More balanced comparisons** between topologies
+- **Includes small_world as baseline** (364 parameters) that other topologies were matched to
 - **Modular networks** still perform best, suggesting topology advantage
 
 ### **Key Differences Between Experiment Types**
