@@ -2091,7 +2091,7 @@ def main():
     print(f"   • Modify num_layers in create_debug_config() to explore different layer counts")
     print(f"   • Check the detailed debug output above for topology network verification")
     print(f"   • Examine the saved results for performance comparison")
-    print(f"   • View results in WandB dashboard: https://wandb.ai/katko/topologies-smoke-test")
+    print(f"   • View results in WandB dashboard: https://wandb.ai/katko-it-universitetet-i-k-benhavn/projects")
 
 if __name__ == "__main__":
     main() 
