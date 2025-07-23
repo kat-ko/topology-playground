@@ -22,7 +22,7 @@ class BaseNetwork(ABC):
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
         self.network_params = network_params
-        self.num_nodes = len(topology.nodes())
+        self.num_nodes = len(list(topology.nodes()))
         
         # Store original topology for metrics
         self.original_topology = topology
@@ -260,7 +260,7 @@ class BaseNetwork(ABC):
         Returns:
             Tuple of (is_valid, error_message)
         """
-        for node in self.topology.nodes():
+        for node in list(self.topology.nodes()):
             # Skip validation for nodes that don't have weights
             if 'weights' not in self.node_states[node]:
                 continue

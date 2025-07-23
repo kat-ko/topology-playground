@@ -35,7 +35,7 @@ class PyTorchFeedForwardNetwork(nn.Module):
         self.node_biases = nn.ParameterDict()
         self.node_weights = nn.ParameterDict()
         
-        for node in self.topology.nodes():
+        for node in list(self.topology.nodes()):
             # Count incoming connections for Xavier initialization
             num_incoming = len(list(self.topology.predecessors(node)))
             
@@ -68,7 +68,7 @@ class PyTorchFeedForwardNetwork(nn.Module):
         
         # Initialize activations for all nodes
         activations = {node: torch.zeros(batch_size, 1, device=inputs.device) 
-                      for node in self.topology.nodes()}
+                      for node in list(self.topology.nodes())}
         
         # Set input node activations
         for i, node in enumerate(self.input_nodes):
@@ -122,7 +122,7 @@ class FeedForwardNetwork(BaseNetwork):
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for FFN with Xavier initialization."""
         states = {}
-        for node in self.topology.nodes():
+        for node in list(self.topology.nodes()):
             # Count incoming connections for Xavier initialization
             num_incoming = len(list(self.topology.predecessors(node)))
             
@@ -158,7 +158,7 @@ class FeedForwardNetwork(BaseNetwork):
         Output nodes use linear activation (no tanh) for proper logits.
         """
         self._clear_active_edges()
-        activations = {node: 0.0 for node in self.topology.nodes()}
+        activations = {node: 0.0 for node in list(self.topology.nodes())}
         
         # Set input node activations
         for node, value in inputs.items():

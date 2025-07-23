@@ -1,0 +1,1 @@
+{"columns": ["Metric", "Value"], "data": [["Topology Type", "modular"], ["Number of Layers", "1"], ["Hidden Size", "64"], ["Mean Reward", "-184.07"], ["Std Reward", "54.89"], ["Training Time (s)", "12.46"], ["Timesteps/sec", "401.14"], ["Performance Score", "-14.7673"], ["Total Timesteps", "5000"]]}

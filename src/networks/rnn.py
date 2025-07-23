@@ -9,7 +9,7 @@ class RecurrentNetwork(BaseNetwork):
     def _initialize_node_states(self) -> Dict[str, Any]:
         """Initialize node states for RNN."""
         states = {}
-        for node in self.topology.nodes():
+        for node in list(self.topology.nodes()):
             states[node] = {
                 'activation': 0.0,
                 'hidden_state': np.zeros(self.network_params.get('hidden_size', 32)),
@@ -39,10 +39,10 @@ class RecurrentNetwork(BaseNetwork):
         self._clear_active_edges()
         
         # Initialize activations and hidden states
-        activations = {node: 0.0 for node in self.topology.nodes()}
+        activations = {node: 0.0 for node in list(self.topology.nodes())}
         hidden_states = {
             node: self.node_states[node]['hidden_state'].copy()
-            for node in self.topology.nodes()
+            for node in list(self.topology.nodes())
         }
         
         # Set input node activations
@@ -54,7 +54,7 @@ class RecurrentNetwork(BaseNetwork):
         sequence_length = self.network_params.get('sequence_length', 10)
         for _ in range(sequence_length):
             # Update each node's state
-            for node in self.topology.nodes():
+            for node in list(self.topology.nodes()):
                 if node not in self.input_nodes:
                     # Get active neighbors
                     active_neighbors = [
