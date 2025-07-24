@@ -59,8 +59,14 @@ class TransferLearningAnalyzer:
                     is_forward = test_task != train_task
                     transfer_type = 'forward' if is_forward else 'same_task'
                     
+                    # Create a unique topology identifier that includes layer count for fully connected
+                    topology_id = row['topology_type']
+                    if row['topology_type'] == 'fully_connected':
+                        topology_id = f"fully_connected_{row['num_layers']}layers"
+                    
                     transfer_data.append({
                         'topology_type': row['topology_type'],
+                        'topology_id': topology_id,  # Unique identifier including layer count
                         'num_layers': row['num_layers'],
                         'train_task': train_task,
                         'test_task': test_task,
@@ -91,8 +97,8 @@ class TransferLearningAnalyzer:
         Path(save_path).mkdir(exist_ok=True)
         
         def create_heatmaps_for_experiment(transfer_df, experiment_name, filename_suffix):
-            # Get unique topologies
-            topologies = transfer_df['topology_type'].unique()
+            # Get unique topologies (including layer variants)
+            topologies = transfer_df['topology_id'].unique()
             
             # Create subplot grid
             n_topologies = len(topologies)
@@ -112,7 +118,7 @@ class TransferLearningAnalyzer:
                     break
                     
                 # Filter data for this topology
-                topology_data = transfer_df[transfer_df['topology_type'] == topology]
+                topology_data = transfer_df[transfer_df['topology_id'] == topology]
                 
                 # Create pivot table for heatmap
                 pivot_data = topology_data.pivot_table(
@@ -132,7 +138,12 @@ class TransferLearningAnalyzer:
                     ax=axes[idx],
                     cbar_kws={'label': 'Transfer Ratio'}
                 )
-                axes[idx].set_title(f'{topology.replace("_", " ").title()} - {experiment_name}')
+                # Create a nicer title that handles the layer count
+                if 'fully_connected' in topology:
+                    title = topology.replace('_', ' ').title()
+                else:
+                    title = topology.replace('_', ' ').title()
+                axes[idx].set_title(f'{title} - {experiment_name}')
                 axes[idx].set_xlabel('Test Task')
                 axes[idx].set_ylabel('Training Task')
             
@@ -162,7 +173,7 @@ class TransferLearningAnalyzer:
                 task_data = transfer_df[transfer_df['train_task'] == train_task]
                 
                 # Calculate average forward transfer for each topology
-                forward_transfer = task_data[task_data['is_forward'] == True].groupby('topology_type').agg({
+                forward_transfer = task_data[task_data['is_forward'] == True].groupby('topology_id').agg({
                     'transfer_ratio': ['mean', 'std'],
                     'test_performance': ['mean', 'std']
                 }).round(3)
@@ -243,7 +254,7 @@ class TransferLearningAnalyzer:
                 
                 # Plot: Parameter Efficiency vs Transfer Ratio
                 for topology in topologies:
-                    topology_data = forward_data[forward_data['topology_type'] == topology]
+                    topology_data = forward_data[forward_data['topology_id'] == topology]
                     ax.scatter(
                         topology_data['parameter_efficiency'], 
                         topology_data['transfer_ratio'],
@@ -280,7 +291,7 @@ class TransferLearningAnalyzer:
                 task_data = transfer_df[transfer_df['train_task'] == train_task]
                 
                 # Calculate average performance for each task across all topologies
-                task_performance = task_data.groupby(['test_task', 'topology_type']).agg({
+                task_performance = task_data.groupby(['test_task', 'topology_id']).agg({
                     'test_performance': 'mean',
                     'transfer_ratio': 'mean'
                 }).reset_index()
@@ -289,13 +300,13 @@ class TransferLearningAnalyzer:
                     print(f"No data for {experiment_name} - {train_task}")
                     continue
                 
-                topologies = task_performance['topology_type'].unique()
+                topologies = task_performance['topology_id'].unique()
                 
                 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
                 
                 # Plot 1: Task Performance by Topology
                 for topology in topologies:
-                    topology_data = task_performance[task_performance['topology_type'] == topology]
+                    topology_data = task_performance[task_performance['topology_id'] == topology]
                     ax1.plot(topology_data['test_task'], topology_data['test_performance'], 
                             marker='o', label=topology.replace('_', ' ').title(), linewidth=2, markersize=8)
                 
@@ -308,7 +319,7 @@ class TransferLearningAnalyzer:
                 
                 # Plot 2: Transfer Ratio by Task
                 for topology in topologies:
-                    topology_data = task_performance[task_performance['topology_type'] == topology]
+                    topology_data = task_performance[task_performance['topology_id'] == topology]
                     ax2.plot(topology_data['test_task'], topology_data['transfer_ratio'], 
                             marker='s', label=topology.replace('_', ' ').title(), linewidth=2, markersize=8)
                 
@@ -341,7 +352,7 @@ class TransferLearningAnalyzer:
                 task_data = transfer_df[transfer_df['train_task'] == train_task]
                 
                 # Calculate forward and backward transfer for each topology
-                forward_transfer = task_data[task_data['is_forward'] == True].groupby('topology_type')['transfer_ratio'].mean()
+                forward_transfer = task_data[task_data['is_forward'] == True].groupby('topology_id')['transfer_ratio'].mean()
                 
                 if len(forward_transfer) == 0:
                     print(f"No data for {experiment_name} - {train_task}")
@@ -355,7 +366,7 @@ class TransferLearningAnalyzer:
                 for topology in topologies:
                     # Get performance when this topology trains on this task
                     same_task_data = task_data[
-                        (task_data['topology_type'] == topology) & 
+                        (task_data['topology_id'] == topology) & 
                         (task_data['train_task'] == train_task) & 
                         (task_data['test_task'] == train_task)
                     ]
@@ -367,7 +378,7 @@ class TransferLearningAnalyzer:
                     
                     # Get average performance when other topologies train on this task
                     other_data = task_data[
-                        (task_data['topology_type'] != topology) & 
+                        (task_data['topology_id'] != topology) & 
                         (task_data['train_task'] == train_task) & 
                         (task_data['test_task'] == train_task)
                     ]
@@ -383,7 +394,7 @@ class TransferLearningAnalyzer:
                         backward_ratio = 1.0
                         
                     backward_data.append({
-                        'topology_type': topology,
+                        'topology_id': topology,
                         'train_task': train_task,
                         'backward_ratio': backward_ratio
                     })
@@ -393,7 +404,7 @@ class TransferLearningAnalyzer:
                     continue
                     
                 backward_df = pd.DataFrame(backward_data)
-                backward_transfer = backward_df.groupby('topology_type')['backward_ratio'].mean()
+                backward_transfer = backward_df.groupby('topology_id')['backward_ratio'].mean()
                 
                 # Create comparison plot
                 fig, ax = plt.subplots(figsize=(12, 8))
@@ -454,7 +465,7 @@ class TransferLearningAnalyzer:
                 # Plot: Timesteps per Second vs Transfer Ratio
                 # Calculate timesteps per second (assuming 1000 timesteps from config)
                 for topology in topologies:
-                    topology_data = forward_data[forward_data['topology_type'] == topology]
+                    topology_data = forward_data[forward_data['topology_id'] == topology]
                     topology_tps = 1000 / topology_data['training_time']
                     ax.scatter(
                         topology_tps, 
@@ -494,10 +505,10 @@ class TransferLearningAnalyzer:
                 # Calculate comprehensive statistics
                 summary_stats = []
                 
-                topologies = task_data['topology_type'].unique()
+                topologies = task_data['topology_id'].unique()
                 
                 for topology in topologies:
-                    topology_data = task_data[task_data['topology_type'] == topology]
+                    topology_data = task_data[task_data['topology_id'] == topology]
                     forward_data = topology_data[topology_data['is_forward'] == True]
                     
                     if len(forward_data) == 0:
@@ -507,8 +518,14 @@ class TransferLearningAnalyzer:
                     best_task = forward_data.loc[forward_data['transfer_ratio'].idxmax(), 'test_task']
                     worst_task = forward_data.loc[forward_data['transfer_ratio'].idxmin(), 'test_task']
                     
+                    # Create a nicer topology name for display
+                    if 'fully_connected' in topology:
+                        display_name = topology.replace('_', ' ').title()
+                    else:
+                        display_name = topology.replace('_', ' ').title()
+                    
                     stats = {
-                        'Topology': topology.replace('_', ' ').title(),
+                        'Topology': display_name,
                         'Avg Forward Transfer': forward_data['transfer_ratio'].mean(),
                         'Std Forward Transfer': forward_data['transfer_ratio'].std(),
                         'Best Transfer Task': best_task,

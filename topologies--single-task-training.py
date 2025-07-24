@@ -1241,7 +1241,7 @@ def create_debug_config():
         # EXPERIMENT PARAMETERS
         # ============================================================================
         'tasks': ['CartPole-v1', 'MountainCar-v0', 'Acrobot-v1'],  # All three tasks for sequential testing
-        'total_timesteps': 1000,  # Reasonable training time for each task
+        'total_timesteps': 200000,  # Reasonable training time for each task
         'n_eval_episodes': 15,     # Good evaluation episodes
         
         # ============================================================================
