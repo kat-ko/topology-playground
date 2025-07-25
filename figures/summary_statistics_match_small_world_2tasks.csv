@@ -1,0 +1,11 @@
+Topology,Training Task,Avg Transfer Ratio,Avg Performance,Avg Parameters,Avg Training Time (s)
+modular,Acrobot-v1,0.470 ± 0.749,-73.83,"2,416",631.8
+modular,CartPole-v1,0.000 ± 1.414,0.00,"2,416",631.6
+hybrid,Acrobot-v1,0.467 ± 0.754,-66.27,"2,418",634.8
+hybrid,CartPole-v1,0.000 ± 1.414,0.00,"2,418",618.8
+fully_connected_1layers,Acrobot-v1,0.471 ± 0.748,-77.43,"2,420",646.6
+fully_connected_1layers,CartPole-v1,0.000 ± 1.414,0.00,"2,420",626.1
+fully_connected_2layers,Acrobot-v1,0.474 ± 0.744,-84.13,"2,420",657.2
+fully_connected_2layers,CartPole-v1,0.000 ± 1.414,0.00,"2,420",623.8
+small_world,Acrobot-v1,0.470 ± 0.750,-70.30,748,540.8
+small_world,CartPole-v1,0.000 ± 1.414,0.00,748,626.2
