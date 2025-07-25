@@ -1,4 +1,5 @@
 # Ignore Python virtual environments
+.venv/
 venv/
 .env/
 ENV/
@@ -26,3 +27,4 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
+.venv/
