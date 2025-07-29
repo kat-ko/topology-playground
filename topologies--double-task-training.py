@@ -1274,7 +1274,7 @@ def create_debug_config():
         # ============================================================================
         # EXPERIMENT PARAMETERS
         # ============================================================================
-        'tasks': ['CartPole-v1', 'MountainCar-v0', 'Acrobot-v1'],  # All three tasks for sequential testing
+        'tasks': ['CartPole-v1', 'Acrobot-v1'],  # All three tasks for sequential testing
         'total_timesteps': 200000,  # Reasonable training time for each task
         'n_eval_episodes': 15,     # Good evaluation episodes
         
@@ -1297,8 +1297,8 @@ def create_debug_config():
         'universal_input_dim': 6,
         'universal_output_dim': 3,
         'universal_action_dim': 3,
-        'hidden_size': 64,  # Fixed size for debugging
-        'network_sizes': [64],  # Base network size for capacity matching
+        'hidden_size': 128,  # Fixed size for debugging
+        'network_sizes': [128],  # Base network size for capacity matching
         'network_types': ['ffn'],
         'num_io_nodes': 4,  # Number of input/output nodes
         
@@ -1351,13 +1351,13 @@ def create_debug_config():
         # ============================================================================
         'ppo_params': {
             'learning_rate': 3e-4,
-            'n_steps': 1024,
-            'batch_size': 32,
+            'n_steps': 2048,
+            'batch_size': 64,
             'n_epochs': 5,
             'gamma': 0.99,
             'gae_lambda': 0.95,
             'clip_range': 0.2,
-            'ent_coef': 0.01,
+            'ent_coef': 0.05,
             'max_grad_norm': 0.5
         },
         
@@ -2201,6 +2201,7 @@ def main():
     base_topologies = ['small_world', 'modular', 'hybrid', 'fully_connected']
     experiment_types = config.get('experiment_types', ['same_size'])
     
+    """
     # Define all possible double-task training combinations
     double_task_combinations = [
         ('CartPole-v1', 'Acrobot-v1'),      # x, y
@@ -2209,6 +2210,12 @@ def main():
         ('Acrobot-v1', 'CartPole-v1'),      # y, x
         ('MountainCar-v0', 'CartPole-v1'),  # z, x
         ('MountainCar-v0', 'Acrobot-v1'),   # z, y
+    ]
+    """
+
+    double_task_combinations = [
+         ('CartPole-v1', 'Acrobot-v1'),
+         ('Acrobot-v1', 'CartPole-v1'),
     ]
     
     print(f"\n📋 Double-Task Training Configuration:")
