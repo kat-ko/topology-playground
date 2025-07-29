@@ -1864,6 +1864,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
     Create Small World topology optimization sweep configuration.
     
     Only includes Small World specific parameters for efficient optimization.
+    Parameters refined based on network theory and biological plausibility.
     
     Args:
         program (str): The training script to run
@@ -1892,7 +1893,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             # VARIABLE ARCHITECTURE (Optimize for Small World)
             # ============================================================================
             'hidden_size': {'values': [64, 128, 256]},
-            'num_layers': {'values': [1, 2, 3]},
+            'num_layers': {'value': 1},  # Fixed: Small World always generates single graph
             'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
             'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
             
@@ -1917,10 +1918,19 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             },
             
             # ============================================================================
-            # SMALL WORLD SPECIFIC PARAMETERS (Only relevant ones!)
+            # SMALL WORLD SPECIFIC PARAMETERS (Refined bounds)
             # ============================================================================
-            'small_world_k': {'values': [2, 4, 6, 8, 10]},
-            'small_world_p': {'distribution': 'uniform', 'min': 0.1, 'max': 0.4},
+            # k (local neighborhood size): [4, 6, 8]
+            # Rationale: In Watts-Strogatz, too low (k=2) leads to near-chain networks (inefficient),
+            # while too high (k=10) approaches dense random graphs.
+            # Cortical microcircuits show ~4-8 strong local synapses per neuron (sparse but not minimal).
+            'small_world_k': {'values': [4, 6, 8]},
+            
+            # p (rewiring probability): uniform(0.05-0.25)
+            # Rationale: Empirical brain networks: p ≈ 0.05-0.2 gives small-world index > 1 (clustering high, paths short).
+            # Above p > 0.3, the graph loses its clustering and behaves random (Erdős-Rényi).
+            # Staying in low-to-mid small-world regime preserves biologically relevant balance.
+            'small_world_p': {'distribution': 'uniform', 'min': 0.05, 'max': 0.25},
             
             # ============================================================================
             # EVALUATION CONFIGURATION
@@ -1936,6 +1946,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
     Create Modular topology optimization sweep configuration.
     
     Only includes Modular specific parameters for efficient optimization.
+    Parameters refined based on network theory and biological plausibility.
     
     Args:
         program (str): The training script to run
@@ -1964,7 +1975,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             # VARIABLE ARCHITECTURE (Optimize for Modular)
             # ============================================================================
             'hidden_size': {'values': [64, 128, 256]},
-            'num_layers': {'values': [1, 2, 3]},
+            'num_layers': {'value': 1},  # Fixed: Modular always generates single graph
             'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
             'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
             
@@ -1989,11 +2000,22 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             },
             
             # ============================================================================
-            # MODULAR SPECIFIC PARAMETERS (Only relevant ones!)
+            # MODULAR SPECIFIC PARAMETERS (Refined bounds)
             # ============================================================================
-            'modular_num_modules': {'values': [2, 4, 6, 8, 10]},
-            'modular_inter_module_prob': {'distribution': 'uniform', 'min': 0.05, 'max': 0.3},
-            'modular_intra_module_prob': {'distribution': 'uniform', 'min': 0.6, 'max': 0.95},
+            # num_modules: [4, 6, 8]
+            # Rationale: Cortical networks show 4-8 mesoscopic modules in many tasks
+            # (e.g., sensory/motor areas subdivided into modules).
+            'modular_num_modules': {'values': [4, 6, 8]},
+            
+            # intra_module_prob: uniform(0.5-0.8)
+            # Rationale: Extremely high intra-module density (≥0.9) collapses modules into near cliques,
+            # eliminating sparseness. Biological cortical areas show moderate intra-area connection density (~30-50%).
+            'modular_intra_module_prob': {'distribution': 'uniform', 'min': 0.5, 'max': 0.8},
+            
+            # inter_module_prob: uniform(0.02-0.15)
+            # Rationale: Biological connectivity between modules is very sparse (e.g., ~5-15% of cortical projections).
+            # Higher values (>0.2) risk destroying modularity by creating too many cross-module links.
+            'modular_inter_module_prob': {'distribution': 'uniform', 'min': 0.02, 'max': 0.15},
             
             # ============================================================================
             # EVALUATION CONFIGURATION
@@ -2009,6 +2031,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
     Create Hybrid topology optimization sweep configuration.
     
     Only includes Hybrid specific parameters for efficient optimization.
+    Parameters refined based on network theory and biological plausibility.
     
     Args:
         program (str): The training script to run
@@ -2037,7 +2060,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             # VARIABLE ARCHITECTURE (Optimize for Hybrid)
             # ============================================================================
             'hidden_size': {'values': [64, 128, 256]},
-            'num_layers': {'values': [1, 2, 3]},
+            'num_layers': {'value': 1},  # Fixed: Hybrid always generates single graph
             'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
             'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
             
@@ -2062,12 +2085,19 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             },
             
             # ============================================================================
-            # HYBRID SPECIFIC PARAMETERS (Only relevant ones!)
+            # HYBRID SPECIFIC PARAMETERS (Refined bounds)
             # ============================================================================
-            'hybrid_num_modules': {'values': [2, 4, 6, 8, 10]},
-            'hybrid_k': {'values': [2, 4, 6, 8, 10]},
-            'hybrid_p': {'distribution': 'uniform', 'min': 0.1, 'max': 0.4},
-            'hybrid_inter_module_prob': {'distribution': 'uniform', 'min': 0.05, 'max': 0.3},
+            # num_modules: [4, 6] (to keep modules meaningful)
+            'hybrid_num_modules': {'values': [4, 6]},
+            
+            # k: [4, 6] (preserve local small-world neighborhoods within modules)
+            'hybrid_k': {'values': [4, 6]},
+            
+            # p: uniform(0.05-0.2) (avoid randomness)
+            'hybrid_p': {'distribution': 'uniform', 'min': 0.05, 'max': 0.2},
+            
+            # inter_module_prob: uniform(0.02-0.12) (strong modular integrity with sparse global bridges)
+            'hybrid_inter_module_prob': {'distribution': 'uniform', 'min': 0.02, 'max': 0.12},
             
             # ============================================================================
             # EVALUATION CONFIGURATION
