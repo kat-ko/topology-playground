@@ -19,10 +19,10 @@ def launch_comprehensive_sweep():
     
     # Create sweep configuration
     sweep_config = create_sweep_config()
+    sweep_config['name'] = 'comprehensive_topology_optimization'
     
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
-    agent_config['name'] = 'comprehensive_topology_optimization'
     
     # Initialize wandb
     wandb.login()
@@ -41,10 +41,10 @@ def launch_focused_sweep(focus_area='ppo'):
     
     # Create focused sweep configuration
     sweep_config = create_focused_sweep_config(focus_area)
+    sweep_config['name'] = f'{focus_area}_focused_optimization'
     
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
-    agent_config['name'] = f'{focus_area}_focused_optimization'
     
     # Initialize wandb
     wandb.login()
@@ -63,10 +63,10 @@ def launch_task_specific_sweep(task='CartPole-v1'):
     
     # Create task-specific sweep configuration
     sweep_config = create_task_specific_sweep_config(task)
+    sweep_config['name'] = f'{task}_optimization'
     
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
-    agent_config['name'] = f'{task}_optimization'
     
     # Initialize wandb
     wandb.login()
@@ -83,9 +83,11 @@ def launch_custom_sweep(sweep_config, name="custom_optimization"):
     """Launch a custom sweep with user-defined configuration."""
     print(f"🚀 Launching custom hyperparameter sweep: {name}...")
     
+    # Add name to sweep configuration
+    sweep_config['name'] = name
+    
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
-    agent_config['name'] = name
     
     # Initialize wandb
     wandb.login()
@@ -105,15 +107,16 @@ def main():
     
     print("\nAvailable sweep types:")
     print("1. Comprehensive sweep (all hyperparameters)")
-    print("2. PPO-focused sweep (training parameters only)")
-    print("3. Architecture-focused sweep (network structure)")
-    print("4. Topology-focused sweep (topology parameters)")
+    print("2. PPO-focused sweep (training parameters + all topologies/architectures)")
+    print("3. Architecture-focused sweep (network structure + all topologies/tasks)")
+    print("4. Topology-focused sweep (topology parameters + all architectures/tasks)")
     print("5. Task-specific sweep (CartPole-v1)")
     print("6. Task-specific sweep (Acrobot-v1)")
     print("7. Task-specific sweep (MountainCar-v0)")
-    print("8. Custom sweep")
+    print("8. Task-specific comprehensive (all tasks, topologies, architectures)")
+    print("9. Custom sweep")
     
-    choice = input("\nEnter your choice (1-8): ").strip()
+    choice = input("\nEnter your choice (1-9): ").strip()
     
     if choice == '1':
         launch_comprehensive_sweep()
@@ -130,6 +133,8 @@ def main():
     elif choice == '7':
         launch_task_specific_sweep('MountainCar-v0')
     elif choice == '8':
+        launch_focused_sweep('task_specific')
+    elif choice == '9':
         print("\nCustom sweep configuration:")
         print("You can modify the sweep configuration in wandb_sweep_config.py")
         print("or create a custom configuration here.")
