@@ -893,6 +893,22 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     print(f"   • Task 2 Learning: {learning_reward_task2:.1%}")
     print(f"   • Task Similarity (Task2/Task1 baseline): {task_similarity_reward:.1%}")
     
+    # Compute final normalized metrics across both phases
+    final_task_rewards = {
+        train_task_1: callback.task_rewards.get(train_task_1, []),
+        train_task_2: callback.task_rewards.get(train_task_2, [])
+    }
+    
+    final_normalized_metrics = None
+    if any(len(rewards) > 0 for rewards in final_task_rewards.values()):
+        final_normalized_metrics = compute_multi_task_metrics(final_task_rewards, config['total_timesteps'] * 2)  # Total steps for both phases
+        log_normalized_metrics(wandb.run, final_normalized_metrics['task_metrics'], 
+                             final_normalized_metrics['final_normalized_score'], 
+                             final_normalized_metrics['efficiency_score'], "final")
+        print_normalized_summary(final_normalized_metrics['task_metrics'], 
+                               final_normalized_metrics['final_normalized_score'], 
+                               final_normalized_metrics['efficiency_score'], "Final")
+    
     # Log comprehensive results
     if wandb.run:
         wandb.log({
@@ -951,7 +967,8 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     eval_env1_after_task2.close()
     eval_env2_after_task2.close()
     
-    return {
+    # Prepare return values
+    result = {
         'task1_baseline_rewards': rewards1_after_task1,
         'task1_final_rewards': rewards1_after_task2,
         'task2_baseline_rewards': rewards2_after_task1,
@@ -964,13 +981,23 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
         'retention_success_task1': retention_success_task1,
         'forgetting_reward_task1': forgetting_reward_task1,
         'forgetting_success_task1': forgetting_success_task1,
-        'transfer_reward_task2': learning_reward_task2,
-        'transfer_success_task2': learning_success_task2,
-        'cross_transfer_reward': task_similarity_reward,
-        'cross_transfer_success': task_similarity_success,
+        'learning_reward_task2': learning_reward_task2,
+        'learning_success_task2': learning_success_task2,
+        'task_similarity_reward': task_similarity_reward,
+        'task_similarity_success': task_similarity_success,
         'sequential_training': True,
         'simplified_mode': True
     }
+    
+    # Add normalized metrics if available
+    if final_normalized_metrics:
+        result.update({
+            'normalized_metrics': final_normalized_metrics,
+            'final_normalized_score': final_normalized_metrics['final_normalized_score'],
+            'efficiency_score': final_normalized_metrics['efficiency_score']
+        })
+    
+    return result
 
 # ============================================================================
 # SWEEP TRAINING FUNCTION

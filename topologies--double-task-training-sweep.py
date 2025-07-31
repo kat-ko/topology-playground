@@ -43,6 +43,10 @@ from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
+from src.utils.task_normalization import (
+    compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
+    get_task_thresholds, get_normalization_constants
+)
 
 # ============================================================================
 # UNIVERSAL ACTION SPACE WRAPPER
@@ -326,10 +330,19 @@ class EnhancedDebugCallback(BaseCallback):
             'entropy_losses': [],
             'learning_rates': []
         }
+        
+        # Task-specific reward tracking for normalized metrics
+        self.task_rewards = {
+            'CartPole-v1': [],
+            'Acrobot-v1': [],
+            'MountainCar-v0': []
+        }
+        self.current_task = None
     
     def set_task_phase(self, task_name, phase_number):
         """Set the current task phase for sequential training."""
         self.current_task_phase = phase_number
+        self.current_task = task_name  # Track current task for reward collection
         self.task_phases.append({
             'phase': phase_number,
             'task': task_name,
@@ -375,6 +388,13 @@ class EnhancedDebugCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         """Log metrics at the end of each rollout."""
         self.rollout_count += 1
+        
+        # Collect episodic rewards for current task
+        if self.current_task and self.current_task in self.task_rewards:
+            # Get the latest episode rewards from the rollout
+            if hasattr(self, 'episode_rewards') and self.episode_rewards:
+                latest_rewards = self.episode_rewards[-self.n_envs:] if hasattr(self, 'n_envs') else self.episode_rewards[-1:]
+                self.task_rewards[self.current_task].extend(latest_rewards)
         
         if wandb.run:
             self._log_rollout_metrics()
@@ -644,6 +664,10 @@ class EnhancedDebugCallback(BaseCallback):
         except Exception as e:
             print(f"   ⚠️  Error logging hyperparameter correlation: {e}")
 
+    def get_task_rewards(self):
+        """Get collected task rewards for normalized metrics calculation."""
+        return self.task_rewards.copy()
+
 # ============================================================================
 # CONFIGURATION AND UTILITY FUNCTIONS
 # ============================================================================
@@ -849,6 +873,21 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     print(f"   • {train_task_1} (trained): {np.mean(rewards1_after_task1):.2f} (success: {success1_after_task1:.1%})")
     print(f"   • {train_task_2} (untrained): {np.mean(rewards2_after_task1):.2f} (success: {success2_after_task1:.1%})")
     
+    # Compute normalized metrics for Phase 1
+    phase1_task_rewards = {
+        train_task_1: callback.task_rewards.get(train_task_1, []),
+        train_task_2: callback.task_rewards.get(train_task_2, [])
+    }
+    
+    if any(len(rewards) > 0 for rewards in phase1_task_rewards.values()):
+        phase1_metrics = compute_multi_task_metrics(phase1_task_rewards, config['total_timesteps'])
+        log_normalized_metrics(wandb.run, phase1_metrics['task_metrics'], 
+                             phase1_metrics['final_normalized_score'], 
+                             phase1_metrics['efficiency_score'], "phase1")
+        print_normalized_summary(phase1_metrics['task_metrics'], 
+                               phase1_metrics['final_normalized_score'], 
+                               phase1_metrics['efficiency_score'], "Phase 1")
+    
     # ============================================================================
     # PHASE 2: Train on Task 2
     # ============================================================================
@@ -876,6 +915,21 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     
     print(f"   • {train_task_1} (retention): {np.mean(rewards1_after_task2):.2f} (success: {success1_after_task2:.1%})")
     print(f"   • {train_task_2} (trained): {np.mean(rewards2_after_task2):.2f} (success: {success2_after_task2:.1%})")
+    
+    # Compute normalized metrics for Phase 2
+    phase2_task_rewards = {
+        train_task_1: callback.task_rewards.get(train_task_1, []),
+        train_task_2: callback.task_rewards.get(train_task_2, [])
+    }
+    
+    if any(len(rewards) > 0 for rewards in phase2_task_rewards.values()):
+        phase2_metrics = compute_multi_task_metrics(phase2_task_rewards, config['total_timesteps'])
+        log_normalized_metrics(wandb.run, phase2_metrics['task_metrics'], 
+                             phase2_metrics['final_normalized_score'], 
+                             phase2_metrics['efficiency_score'], "phase2")
+        print_normalized_summary(phase2_metrics['task_metrics'], 
+                               phase2_metrics['final_normalized_score'], 
+                               phase2_metrics['efficiency_score'], "Phase 2")
     
     # Test on all available tasks (including MountainCar if in full task set)
     all_tasks = ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
@@ -927,6 +981,22 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     print(f"   • Task 1 Retention: {retention_reward_task1:.1%} (forgetting: {forgetting_reward_task1:.1%})")
     print(f"   • Task 2 Learning: {learning_reward_task2:.1%}")
     print(f"   • Task Similarity (Task2/Task1 baseline): {task_similarity_reward:.1%}")
+    
+    # Compute final normalized metrics across both phases
+    final_task_rewards = {
+        train_task_1: callback.task_rewards.get(train_task_1, []),
+        train_task_2: callback.task_rewards.get(train_task_2, [])
+    }
+    
+    final_normalized_metrics = None
+    if any(len(rewards) > 0 for rewards in final_task_rewards.values()):
+        final_normalized_metrics = compute_multi_task_metrics(final_task_rewards, config['total_timesteps'] * 2)  # Total steps for both phases
+        log_normalized_metrics(wandb.run, final_normalized_metrics['task_metrics'], 
+                             final_normalized_metrics['final_normalized_score'], 
+                             final_normalized_metrics['efficiency_score'], "final")
+        print_normalized_summary(final_normalized_metrics['task_metrics'], 
+                               final_normalized_metrics['final_normalized_score'], 
+                               final_normalized_metrics['efficiency_score'], "Final")
     
     # Log comprehensive results
     if wandb.run:
@@ -1010,7 +1080,8 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
         'cross_transfer_reward': task_similarity_reward, # Changed from cross_transfer_reward
         'cross_transfer_success': task_similarity_success, # Changed from cross_transfer_success
         'cross_task_results': cross_task_results,
-        'sequential_training': True
+        'sequential_training': True,
+        'final_normalized_metrics': final_normalized_metrics
     }
 
 # ============================================================================
