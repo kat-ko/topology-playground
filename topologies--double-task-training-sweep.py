@@ -35,10 +35,9 @@ from PIL import Image
 import csv
 
 # Import topology modules
-from src.topologies.fully_connected import FullyConnectedTopology
-from src.topologies.small_world import SmallWorldTopology
-from src.topologies.modular import ModularTopology
-from src.topologies.hybrid import HybridTopology
+from src.topologies import (
+    SmallWorldTopology, ModularTopology, HybridTopology, FullyConnectedTopology
+)
 from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
@@ -694,7 +693,7 @@ def create_debug_config():
             'topology_type': 'fully_connected',
             'activation': 'relu',
             'dropout': 0.0,
-            'total_timesteps': 400000,
+            'total_timesteps': 600000,
             'n_eval_episodes': 15,
             'train_task_1': 'CartPole-v1',
             'train_task_2': 'Acrobot-v1'
@@ -1118,7 +1117,7 @@ def train_with_sweep():
                 'topology_type': 'fully_connected',
                 'train_task_1': 'CartPole-v1',
                 'train_task_2': 'Acrobot-v1',
-                'total_timesteps': 400000,
+                'total_timesteps': 600000,
                 'n_eval_episodes': 15,
                 'activation': 'relu',
                 'dropout': 0.0,

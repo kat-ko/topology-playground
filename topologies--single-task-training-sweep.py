@@ -438,7 +438,7 @@ def create_debug_config():
         # EXPERIMENT PARAMETERS
         # ============================================================================
         'tasks': ['Acrobot-v1','CartPole-v1'],  # All three tasks for sequential testing
-        'total_timesteps': 400000,  # Reasonable training time for each task
+        'total_timesteps': 600000,  # Reasonable training time for each task
         'n_eval_episodes': 15,     # Good evaluation episodes
         
         # ============================================================================
@@ -1956,7 +1956,7 @@ def create_sweep_config():
         # EXPERIMENT PARAMETERS (from wandb.config)
         # ============================================================================
         'tasks': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0'],
-        'total_timesteps': wandb.config.get('total_timesteps', 400000),
+        'total_timesteps': wandb.config.get('total_timesteps', 600000),
         'n_eval_episodes': wandb.config.get('n_eval_episodes', 15),
         
         # ============================================================================
@@ -2438,7 +2438,7 @@ def train_with_sweep():
             'num_layers': 1,
             'topology_type': 'small_world',
             'train_task': 'CartPole-v1',
-            'total_timesteps': 400000,
+            'total_timesteps': 600000,
             'n_eval_episodes': 15,
             'activation': 'relu',
             'dropout': 0.0,

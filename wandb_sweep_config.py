@@ -146,7 +146,7 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
             # TRAINING CONFIGURATION
             # ============================================================================
             'total_timesteps': {
-                'values': [400000, 700000]
+                'values': [600000, 700000]
             },
             'n_eval_episodes': {
                 'values': [15]
@@ -310,7 +310,7 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
             # TRAINING CONFIGURATION (Same as comprehensive)
             # ============================================================================
             'total_timesteps': {
-                'values': [400000, 700000]
+                'values': [600000, 700000]
             },
             'n_eval_episodes': {
                 'values': [15]
@@ -410,7 +410,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -480,7 +480,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -515,7 +515,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -558,7 +558,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -643,7 +643,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -713,7 +713,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -748,7 +748,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -791,7 +791,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -855,7 +855,7 @@ def create_task_specific_sweep_config(task='CartPole-v1', program='topologies--s
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'total_timesteps': {
-                    'values': [200000, 400000]
+                    'values': [200000, 600000]
                 },
                 # Fixed values
                 'gae_lambda': {'value': 0.95},
@@ -909,7 +909,7 @@ def create_task_specific_sweep_config(task='CartPole-v1', program='topologies--s
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'total_timesteps': {
-                    'values': [400000, 600000, 800000]
+                    'values': [600000, 600000, 800000]
                 },
                 # Fixed values
                 'gae_lambda': {'value': 0.95},
@@ -968,7 +968,7 @@ def create_task_specific_sweep_config(task='CartPole-v1', program='topologies--s
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'total_timesteps': {
-                    'values': [400000, 600000, 800000]
+                    'values': [600000, 600000, 800000]
                 },
                 # Fixed values
                 'gae_lambda': {'value': 0.95},
@@ -1175,7 +1175,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1248,7 +1248,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1286,7 +1286,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1332,7 +1332,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1423,7 +1423,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1499,7 +1499,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1540,7 +1540,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1589,7 +1589,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 400000},
+                'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1679,7 +1679,7 @@ def create_topology_comparison_sweep_config(program='topologies--topology-compar
             # ============================================================================
             # EVALUATION CONFIGURATION (Fixed for fair comparison)
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -1751,7 +1751,7 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1823,7 +1823,7 @@ def create_meta_analysis_sweep_config(program='topologies--meta-analysis-sweep.p
             # ============================================================================
             # FIXED EVALUATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1878,7 +1878,7 @@ def create_capacity_matched_comparison_sweep(program='topologies--capacity-match
             # ============================================================================
             # FIXED EVALUATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -1959,7 +1959,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2044,7 +2044,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2126,7 +2126,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2196,7 +2196,7 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2383,7 +2383,7 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2567,7 +2567,7 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2695,7 +2695,7 @@ def create_simplified_single_task_sweep_config(program='topologies--simplified-s
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2823,7 +2823,7 @@ def create_simplified_double_task_sweep_config(program='topologies--simplified-d
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2949,7 +2949,7 @@ def create_simplified_baseline_sweep_config(program='topologies--simplified-base
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 400000},
+            'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }
     }

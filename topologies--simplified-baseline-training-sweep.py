@@ -25,9 +25,10 @@ from stable_baselines3.common.policies import ActorCriticPolicy
 # Add the src directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.networks.topology_networks import (
-    SmallWorldTopology, ModularTopology, HybridTopology, FullyConnectedTopology
-)
+from src.topologies.small_world import SmallWorldTopology
+from src.topologies.modular import ModularTopology
+from src.topologies.hybrid import HybridTopology
+from src.topologies.fully_connected import FullyConnectedTopology
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
 
 # ============================================================================
@@ -731,7 +732,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simplified Baseline Training Sweep")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode")
     
-    args = parser.parse_args()
+    # Add argument to ignore unknown arguments (for WandB sweeps)
+    args, unknown = parser.parse_known_args()
     
     if args.debug:
         print("🐛 Running in debug mode...")
