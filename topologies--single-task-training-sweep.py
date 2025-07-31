@@ -38,6 +38,7 @@ from src.topologies.hybrid import HybridTopology
 from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
+from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
 
 # Import the original classes and functions from the single-task training script
 # (You'll need to copy the UniversalActionWrapper, DebugTopologyPolicy, etc. from the original file)
@@ -1611,6 +1612,12 @@ class EnhancedDebugCallback(BaseCallback):
                         "network/critic_parameters": critic_params,
                         "network/total_parameters": actor_params + critic_params,
                     })
+                    
+                    # NEW: Add enhanced graph metrics
+                    self._log_graph_metrics()
+                    self._log_depth_analysis()
+                    self._log_sample_efficiency()
+                    self._log_hyperparameter_correlation()
                 
                 self.wandb_run.log(metrics, step=self.num_timesteps)
         except Exception as e:
@@ -1765,6 +1772,177 @@ class EnhancedDebugCallback(BaseCallback):
             
         except Exception as e:
             print(f"   ⚠️  Error creating training curves: {e}")
+
+    def _calculate_skewness(self, data):
+        """Calculate skewness of data distribution."""
+        if len(data) < 3:
+            return 0.0
+        mean = np.mean(data)
+        std = np.std(data)
+        if std == 0:
+            return 0.0
+        skewness = np.mean(((data - mean) / std) ** 3)
+        return skewness
+    
+    def _log_graph_metrics(self):
+        """Log real-time graph metrics during training."""
+        try:
+            if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'actor_topology'):
+                actor_G = self.model.policy.actor_topology.topology
+                critic_G = self.model.policy.critic_topology.topology
+                
+                # Calculate graph metrics
+                actor_metrics = self._calculate_graph_metrics(actor_G, 'actor')
+                critic_metrics = self._calculate_graph_metrics(critic_G, 'critic')
+                
+                # Log with timestep correlation
+                metrics = {
+                    **actor_metrics,
+                    **critic_metrics,
+                    'graph/timestep': self.num_timesteps,
+                    'graph/topology_type': self.model.policy.topology_type
+                }
+                
+                self.wandb_run.log(metrics, step=self.num_timesteps)
+        except Exception as e:
+            print(f"   ⚠️  Error logging graph metrics: {e}")
+
+    def _calculate_graph_metrics(self, G, network_type):
+        """Calculate focused graph metrics (removed redundant ones)."""
+        try:
+            G_undirected = G.to_undirected() if G.is_directed() else G
+            
+            # Keep only high-value metrics
+            metrics = {
+                f'graph/{network_type}/density': nx.density(G),
+            }
+            
+            # Connectivity-dependent metrics
+            if nx.is_connected(G_undirected):
+                metrics.update({
+                    f'graph/{network_type}/diameter': nx.diameter(G_undirected),
+                    f'graph/{network_type}/avg_path_length': nx.average_shortest_path_length(G_undirected),
+                    f'graph/{network_type}/clustering_coefficient': nx.average_clustering(G_undirected),
+                })
+            else:
+                # Use largest connected component
+                largest_cc = max(nx.connected_components(G_undirected), key=len)
+                largest_cc_graph = G_undirected.subgraph(largest_cc)
+                metrics.update({
+                    f'graph/{network_type}/diameter': nx.diameter(largest_cc_graph),
+                    f'graph/{network_type}/avg_path_length': nx.average_shortest_path_length(largest_cc_graph),
+                    f'graph/{network_type}/clustering_coefficient': nx.average_clustering(G_undirected),
+                })
+            
+            return metrics
+        except Exception as e:
+            print(f"   ⚠️  Error calculating graph metrics for {network_type}: {e}")
+            return {}
+
+    def _log_depth_analysis(self):
+        """Log depth efficiency analysis correlating graph structure with performance."""
+        try:
+            if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'actor_topology'):
+                actor_G = self.model.policy.actor_topology.topology
+                critic_G = self.model.policy.critic_topology.topology
+                
+                # Calculate depth metrics
+                actor_depth = self._calculate_depth_metrics(actor_G, 'actor')
+                critic_depth = self._calculate_depth_metrics(critic_G, 'critic')
+                
+                # Performance correlation
+                current_reward = np.mean(self.training_metrics['episode_rewards'][-100:]) if self.training_metrics['episode_rewards'] else 0
+                
+                # Calculate efficiency ratios
+                actor_avg_path = actor_depth.get('depth/actor/avg_path_length', 1)
+                actor_density = actor_depth.get('depth/actor/density', 1)
+                
+                depth_analysis = {
+                    'depth/current_reward': current_reward,
+                    'depth/depth_efficiency': current_reward / (actor_avg_path + 1e-6),
+                    'depth/density_efficiency': current_reward / (actor_density + 1e-6),
+                }
+                
+                self.wandb_run.log(depth_analysis, step=self.num_timesteps)
+        except Exception as e:
+            print(f"   ⚠️  Error logging depth analysis: {e}")
+
+    def _calculate_depth_metrics(self, G, network_type):
+        """Calculate depth efficiency metrics only (removed redundant ones)."""
+        try:
+            G_undirected = G.to_undirected() if G.is_directed() else G
+            
+            if nx.is_connected(G_undirected):
+                avg_path_length = nx.average_shortest_path_length(G_undirected)
+                density = nx.density(G)
+                
+                return {
+                    f'depth/{network_type}/avg_path_length': avg_path_length,
+                    f'depth/{network_type}/density': density,
+                }
+            else:
+                # Use largest connected component
+                largest_cc = max(nx.connected_components(G_undirected), key=len)
+                largest_cc_graph = G_undirected.subgraph(largest_cc)
+                avg_path_length = nx.average_shortest_path_length(largest_cc_graph)
+                density = nx.density(G)
+                
+                return {
+                    f'depth/{network_type}/avg_path_length': avg_path_length,
+                    f'depth/{network_type}/density': density,
+                }
+        except Exception as e:
+            print(f"   ⚠️  Error calculating depth metrics for {network_type}: {e}")
+            return {}
+
+    def _log_sample_efficiency(self):
+        """Log focused sample efficiency metrics (removed redundant ones)."""
+        try:
+            if len(self.training_metrics['episode_rewards']) > 0:
+                # Calculate sample efficiency metrics
+                total_timesteps = self.num_timesteps
+                total_episodes = len(self.training_metrics['episode_rewards'])
+                
+                # Recent performance (last 100 episodes)
+                recent_rewards = self.training_metrics['episode_rewards'][-100:] if len(self.training_metrics['episode_rewards']) >= 100 else self.training_metrics['episode_rewards']
+                recent_mean_reward = np.mean(recent_rewards)
+                
+                # Keep only high-value sample efficiency metrics
+                efficiency_metrics = {
+                    'efficiency/reward_per_timestep': recent_mean_reward / (total_timesteps + 1e-6),
+                    'efficiency/reward_per_episode': recent_mean_reward,
+                    'efficiency/timesteps_per_episode': total_timesteps / (total_episodes + 1e-6),
+                }
+                
+                self.wandb_run.log(efficiency_metrics, step=self.num_timesteps)
+        except Exception as e:
+            print(f"   ⚠️  Error logging sample efficiency: {e}")
+
+    def _log_hyperparameter_correlation(self):
+        """Log focused hyperparameter correlation metrics (removed redundant ones)."""
+        try:
+            if hasattr(self.model, 'policy'):
+                # Get current hyperparameters
+                config = wandb.config if wandb.run else {}
+                
+                # Get graph metrics
+                if hasattr(self.model.policy, 'actor_topology'):
+                    actor_G = self.model.policy.actor_topology.topology
+                    G_undirected = actor_G.to_undirected() if actor_G.is_directed() else actor_G
+                    
+                    if nx.is_connected(G_undirected):
+                        avg_path_length = nx.average_shortest_path_length(G_undirected)
+                        diameter = nx.diameter(G_undirected)
+                        
+                        # Keep only high-value hyperparameter correlation metrics
+                        correlation_metrics = {
+                            'correlation/lr_path_length_ratio': config.get('learning_rate', 0) / (avg_path_length + 1e-6),
+                            'correlation/lr_diameter_ratio': config.get('learning_rate', 0) / (diameter + 1e-6),
+                        }
+                        
+                        self.wandb_run.log(correlation_metrics, step=self.num_timesteps)
+        except Exception as e:
+            print(f"   ⚠️  Error logging hyperparameter correlation: {e}")
 
 
 # ============================================================================
@@ -1968,7 +2146,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     try:
         training_wandb_run = wandb.init(
             entity="katko-it-universitetet-i-k-benhavn",
-            project="topologies--single-task-training",  # Cross-task testing project
+            project="topologies--single-task-training",  # Single-task training project
             name=training_run_name,
             config={
                 "run_type": "training",
@@ -2099,7 +2277,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             # Initialize wandb run for this specific test
             testing_wandb_run = wandb.init(
                 entity="katko-it-universitetet-i-k-benhavn",
-                project="topologies--single-task-training",  # Cross-task testing project
+                project="topologies--single-task-training",  # Single-task training project
                 name=testing_run_name,
                 config={
                     "run_type": "testing",
@@ -2235,10 +2413,16 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
 def train_with_sweep():
     """Main training function for wandb sweep."""
     
-    # Initialize wandb run
+    # ============================================================================
+    # PRE-CALCULATE CAPACITY MATCHING (BEFORE wandb.init)
+    # ============================================================================
+    
+    effective_hidden_size, target_capacity, args = pre_calculate_capacity_matching()
+    
+    # Initialize wandb run with the correct hidden_size
     wandb.init(
         entity="katko-it-universitetet-i-k-benhavn",
-        project="topologies--hyperparameter-optimization",
+        project="topologies--single-task-training",
         config={
             # These will be overridden by sweep parameters
             'learning_rate': 3e-4,
@@ -2250,7 +2434,7 @@ def train_with_sweep():
             'clip_range': 0.2,
             'ent_coef': 0.05,
             'max_grad_norm': 0.5,
-            'hidden_size': 128,
+            'hidden_size': effective_hidden_size,  # Use pre-calculated size
             'num_layers': 1,
             'topology_type': 'small_world',
             'train_task': 'CartPole-v1',
@@ -2268,6 +2452,8 @@ def train_with_sweep():
             'hybrid_k': 4,
             'hybrid_p': 0.3,
             'hybrid_inter_module_prob': 0.2,
+            # Capacity matching parameters
+            'target_capacity': None,  # Will be set by sweep if capacity matching is enabled
         }
     )
     
@@ -2279,6 +2465,15 @@ def train_with_sweep():
         print(f"   • Learning rate: {wandb.config.learning_rate}")
         print(f"   • Train task: {wandb.config.train_task}")
         print(f"   • Total timesteps: {wandb.config.total_timesteps}")
+        
+        # Check for capacity matching
+        target_capacity = wandb.config.get('target_capacity', None)
+        if target_capacity is not None:
+            print(f"   • Target capacity: {target_capacity:,} parameters")
+            print(f"   • Capacity matching: ENABLED")
+        else:
+            print(f"   • Capacity matching: DISABLED")
+            
     except:
         print(f"   • Using default configuration (not in sweep mode)")
     
@@ -2290,6 +2485,16 @@ def train_with_sweep():
         train_task = wandb.config.train_task
     except:
         train_task = 'CartPole-v1'  # Default fallback
+    
+    # Log capacity matching results if applicable
+    if target_capacity is not None:
+        wandb.log({
+            'capacity_matching/target_capacity': target_capacity,
+            'capacity_matching/calculated_size': effective_hidden_size,
+            'capacity_matching/original_hidden_size': args.hidden_size,
+            'capacity_matching/topology_type': args.topology_type,
+            'capacity_matching/num_layers': args.num_layers,
+        })
     
     # Run single-task training with cross-task evaluation
     try:

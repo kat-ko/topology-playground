@@ -12,11 +12,18 @@ from wandb_sweep_config import (
     create_double_task_sweep_config, create_triple_task_sweep_config,
     create_focused_double_task_sweep_config, create_focused_triple_task_sweep_config,
     create_sweep_agent_config, create_baseline_sweep_agent_config,
+    create_double_task_sweep_agent_config, create_triple_task_sweep_agent_config,
     # Individual topology optimization functions
     create_small_world_optimization_sweep_config,
     create_modular_optimization_sweep_config,
     create_hybrid_optimization_sweep_config,
     create_fully_connected_optimization_sweep_config,
+    create_fixed_network_sizes_optimization_sweep,
+    create_fixed_capacities_optimization_sweep,
+    # Simplified task training functions (CartPole + Acrobot only)
+    create_simplified_single_task_sweep_config,
+    create_simplified_double_task_sweep_config,
+    create_simplified_baseline_sweep_config,
 )
 
 def launch_comprehensive_sweep():
@@ -430,39 +437,185 @@ def launch_capacity_matched_comparison_sweep():
     return sweep_id
 
 
+def launch_fixed_network_sizes_optimization_sweep(training_type='single_task'):
+    """Launch a fixed network sizes optimization sweep."""
+    print(f"🔬 Launching {training_type} fixed network sizes optimization sweep...")
+    
+    # Create sweep config with training type
+    sweep_config = create_fixed_network_sizes_optimization_sweep(training_type)
+    
+    # Get the appropriate agent config based on training type
+    if training_type == 'baseline':
+        agent_config = create_baseline_sweep_agent_config()
+    elif training_type == 'double_task':
+        agent_config = create_double_task_sweep_agent_config()
+    elif training_type == 'triple_task':
+        agent_config = create_triple_task_sweep_agent_config()
+    elif training_type.startswith('simplified'):
+        # For simplified versions, use the appropriate agent config
+        if training_type == 'simplified_baseline':
+            agent_config = create_baseline_sweep_agent_config()
+        elif training_type == 'simplified_double_task':
+            agent_config = create_double_task_sweep_agent_config()
+        else:  # simplified_single_task
+            agent_config = create_sweep_agent_config()
+    else:  # single_task
+        agent_config = create_sweep_agent_config()
+    
+    sweep_config['name'] = f'{training_type}_fixed_network_sizes_optimization'
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    print(f"   • Network Sizes: [64, 128, 256, 512]")
+    print(f"   • Topologies: All 4 with topology-specific parameter variation")
+    print(f"   • Training Parameters: Random search optimization")
+    sweep_id = wandb.sweep(sweep_config, **agent_config)
+    print(f"✅ {training_type} fixed network sizes optimization sweep created with ID: {sweep_id}")
+    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
+    return sweep_id
+
+
+def launch_fixed_capacities_optimization_sweep(training_type='single_task'):
+    """Launch fixed capacities optimization sweep for specified training type."""
+    print(f"🚀 Launching {training_type} fixed capacities optimization sweep...")
+    
+    # Create sweep config with training type
+    sweep_config = create_fixed_capacities_optimization_sweep(training_type)
+    
+    # Get the appropriate agent config based on training type
+    if training_type == 'baseline':
+        agent_config = create_baseline_sweep_agent_config()
+    elif training_type == 'double_task':
+        agent_config = create_double_task_sweep_agent_config()
+    elif training_type == 'triple_task':
+        agent_config = create_triple_task_sweep_agent_config()
+    elif training_type.startswith('simplified'):
+        # For simplified versions, use the appropriate agent config
+        if training_type == 'simplified_baseline':
+            agent_config = create_baseline_sweep_agent_config()
+        elif training_type == 'simplified_double_task':
+            agent_config = create_double_task_sweep_agent_config()
+        else:  # simplified_single_task
+            agent_config = create_sweep_agent_config()
+    else:  # single_task
+        agent_config = create_sweep_agent_config()
+    
+    sweep_config['name'] = f'{training_type}_fixed_capacities_optimization'
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    
+    sweep_id = wandb.sweep(sweep_config, **agent_config)
+    print(f"✅ {training_type} fixed capacities optimization sweep created with ID: {sweep_id}")
+    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
+    return sweep_id
+
+
+def launch_simplified_single_task_sweep():
+    """Launch simplified single-task training sweep (CartPole + Acrobot only)."""
+    print("🚀 Launching simplified single-task training sweep (CartPole + Acrobot only)...")
+    
+    sweep_config = create_simplified_single_task_sweep_config()
+    sweep_config['name'] = 'simplified_single_task_training'
+    
+    agent_config = create_sweep_agent_config()
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    
+    sweep_id = wandb.sweep(sweep_config, **agent_config)
+    print(f"✅ Simplified single-task sweep created with ID: {sweep_id}")
+    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
+    return sweep_id
+
+
+def launch_simplified_double_task_sweep():
+    """Launch simplified double-task training sweep (CartPole + Acrobot only)."""
+    print("🚀 Launching simplified double-task training sweep (CartPole + Acrobot only)...")
+    
+    sweep_config = create_simplified_double_task_sweep_config()
+    sweep_config['name'] = 'simplified_double_task_training'
+    
+    agent_config = create_double_task_sweep_agent_config()
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    
+    sweep_id = wandb.sweep(sweep_config, **agent_config)
+    print(f"✅ Simplified double-task sweep created with ID: {sweep_id}")
+    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
+    return sweep_id
+
+
+def launch_simplified_baseline_sweep():
+    """Launch simplified baseline training sweep (CartPole + Acrobot only)."""
+    print("🚀 Launching simplified baseline training sweep (CartPole + Acrobot only)...")
+    
+    sweep_config = create_simplified_baseline_sweep_config()
+    sweep_config['name'] = 'simplified_baseline_training'
+    
+    agent_config = create_baseline_sweep_agent_config()
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    
+    sweep_id = wandb.sweep(sweep_config, **agent_config)
+    print(f"✅ Simplified baseline sweep created with ID: {sweep_id}")
+    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
+    return sweep_id
+
+
 def launch_topology_analysis_suite():
     """Launch the comprehensive topology analysis suite."""
     print("🎯 Topology Analysis Suite")
     print("==========================")
     print("1. Topology Comparison (Fair head-to-head)")
-    print("2. Small World Optimization")
-    print("3. Modular Optimization") 
-    print("4. Hybrid Optimization")
-    print("5. Fully Connected Optimization")
-    print("6. All Topology Optimizations (Sequential)")
-    print("7. Meta-Analysis (Optimized vs Optimized)")
-    print("8. Capacity-Matched Comparison")
-    print("9. Back to main menu")
+    print("2. Fixed Network Sizes Optimization")  # NEW: Your research sweep
+    print("3. Fixed Capacities Optimization")     # NEW: Your research sweep
+    print("4. Small World Optimization")
+    print("5. Modular Optimization") 
+    print("6. Hybrid Optimization")
+    print("7. Fully Connected Optimization")
+    print("8. All Topology Optimizations (Sequential)")
+    print("9. Meta-Analysis (Optimized vs Optimized)")
+    print("10. Capacity-Matched Comparison")
+    print("11. Back to main menu")
     
-    choice = input("\nEnter your choice (1-9): ")
+    choice = input("\nEnter your choice (1-11): ")
     
     if choice == "1":
         return launch_topology_comparison_sweep()
     elif choice == "2":
-        return launch_topology_optimization_sweep('small_world')
+        return launch_fixed_network_sizes_optimization_sweep()
     elif choice == "3":
-        return launch_topology_optimization_sweep('modular')
+        return launch_fixed_capacities_optimization_sweep()
     elif choice == "4":
-        return launch_topology_optimization_sweep('hybrid')
+        return launch_topology_optimization_sweep('small_world')
     elif choice == "5":
-        return launch_topology_optimization_sweep('fully_connected')
+        return launch_topology_optimization_sweep('modular')
     elif choice == "6":
-        return launch_all_topology_optimizations()
+        return launch_topology_optimization_sweep('hybrid')
     elif choice == "7":
-        return launch_meta_analysis_sweep()
+        return launch_topology_optimization_sweep('fully_connected')
     elif choice == "8":
-        return launch_capacity_matched_comparison_sweep()
+        return launch_all_topology_optimizations()
     elif choice == "9":
+        return launch_meta_analysis_sweep()
+    elif choice == "10":
+        return launch_capacity_matched_comparison_sweep()
+    elif choice == "11":
         return main()
     else:
         print("❌ Invalid choice. Please try again.")
@@ -477,22 +630,63 @@ def main():
     print("2. Baseline training (same-task evaluation only)")
     print("3. Double-task training (sequential)")
     print("4. Triple-task training (sequential)")
+    print("5. Simplified single-task training (CartPole + Acrobot only)")
+    print("6. Simplified double-task training (CartPole + Acrobot only)")
+    print("7. Simplified baseline training (CartPole + Acrobot only)")
     
-    training_type = input("\nSelect training type (1-4): ").strip()
+    training_type = input("\nSelect training type (1-7): ").strip()
+    
+    # Handle simplified training types
+    if training_type in ['5', '6', '7']:
+        print("\nAnalysis Types for Simplified Training:")
+        print("1. Simplified Training Sweep (Direct)")
+        print("2. Fixed Network Sizes Optimization (Research sweep)")
+        print("3. Fixed Capacities Optimization (Research sweep)")
+        
+        analysis_choice = input("\nSelect analysis type (1-3): ").strip()
+        
+        # Map simplified training types to their full names
+        simplified_training_map = {
+            '5': 'simplified_single_task',
+            '6': 'simplified_double_task', 
+            '7': 'simplified_baseline'
+        }
+        
+        training_type_name = simplified_training_map[training_type]
+        
+        if analysis_choice == '1':
+            # Direct simplified sweep
+            simplified_map = {
+                '5': launch_simplified_single_task_sweep,
+                '6': launch_simplified_double_task_sweep,
+                '7': launch_simplified_baseline_sweep
+            }
+            return simplified_map[training_type]()
+        elif analysis_choice == '2':
+            # Fixed network sizes research sweep
+            return launch_fixed_network_sizes_optimization_sweep(training_type_name)
+        elif analysis_choice == '3':
+            # Fixed capacities research sweep
+            return launch_fixed_capacities_optimization_sweep(training_type_name)
+        else:
+            print("❌ Invalid choice. Please try again.")
+            return main()
     
     print("\nAnalysis Types:")
     print("1. Topology Comparison (Fair head-to-head)")
     print("2. Topology Optimization (Individual tuning)")
     print("3. Meta-Analysis (Optimized vs optimized)")
     print("4. Capacity-Matched Comparison")
-    print("5. Individual Topology Optimization (Choose specific topology)")
-    print("6. Comprehensive (All parameters)")
+    print("5. Fixed Network Sizes Optimization (Research sweep)")
+    print("6. Fixed Capacities Optimization (Research sweep)")
+    print("7. Individual Topology Optimization (Choose specific topology)")
+    print("8. Comprehensive (All parameters)")
     
-    analysis_type = input("\nSelect analysis type (1-6): ").strip()
+    analysis_type = input("\nSelect analysis type (1-8): ").strip()
     
     # Map selections to actual values
     training_map = {'1': 'single_task', '2': 'baseline', '3': 'double_task', '4': 'triple_task'}
-    analysis_map = {'1': 'topology_comparison', '2': 'topology_optimization', '3': 'meta_analysis', '4': 'capacity_matched', '5': 'individual_topology_optimization', '6': 'comprehensive'}
+    analysis_map = {'1': 'topology_comparison', '2': 'topology_optimization', '3': 'meta_analysis', '4': 'capacity_matched', '5': 'fixed_network_sizes_optimization', '6': 'fixed_capacities_optimization', '7': 'individual_topology_optimization', '8': 'comprehensive'}
     
     training_type = training_map.get(training_type, 'single_task')
     analysis_type = analysis_map.get(analysis_type, 'comprehensive')
@@ -502,6 +696,13 @@ def main():
     # Handle individual topology optimization
     if analysis_type == 'individual_topology_optimization':
         return launch_individual_topology_optimization_for_training_type(training_type)
+    
+    # Handle research sweeps (fixed network sizes and capacities)
+    if analysis_type in ['fixed_network_sizes_optimization', 'fixed_capacities_optimization']:
+        if analysis_type == 'fixed_network_sizes_optimization':
+            return launch_fixed_network_sizes_optimization_sweep(training_type)
+        else:
+            return launch_fixed_capacities_optimization_sweep(training_type)
     
     # Launch appropriate sweep based on selections
     if training_type == 'single_task':
@@ -525,7 +726,7 @@ def main():
         else:
             launch_triple_task_focused_sweep(analysis_type)
     else:
-        print("❌ Invalid training type selection.")
+        print(f"❌ Invalid training type: {training_type}")
         return main()
 
 
@@ -566,7 +767,7 @@ def launch_double_task_focused_sweep(analysis_type='topology_comparison'):
     print(f"🔬 Launching double-task {analysis_type} sweep...")
     sweep_config = create_focused_double_task_sweep_config(analysis_type)
     sweep_config['name'] = f'double_task_{analysis_type}'
-    agent_config = create_sweep_agent_config()
+    agent_config = create_double_task_sweep_agent_config()
     print(f"   • Project: {agent_config['project']}")
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
@@ -582,7 +783,7 @@ def launch_triple_task_focused_sweep(analysis_type='topology_comparison'):
     print(f"🔬 Launching triple-task {analysis_type} sweep...")
     sweep_config = create_focused_triple_task_sweep_config(analysis_type)
     sweep_config['name'] = f'triple_task_{analysis_type}'
-    agent_config = create_sweep_agent_config()
+    agent_config = create_triple_task_sweep_agent_config()
     print(f"   • Project: {agent_config['project']}")
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")

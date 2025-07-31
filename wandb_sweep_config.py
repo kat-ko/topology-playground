@@ -81,7 +81,7 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
                 'values': [64, 128, 256]
             },
             'num_layers': {
-                'values': [1, 2, 3]
+                'values': [1, 2, 3]  # Only affects fully_connected; others ignore this parameter
             },
             
             # ============================================================================
@@ -146,7 +146,7 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
             # TRAINING CONFIGURATION
             # ============================================================================
             'total_timesteps': {
-                'values': [500000, 700000]
+                'values': [400000, 700000]
             },
             'n_eval_episodes': {
                 'values': [15]
@@ -245,7 +245,7 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
                 'values': [64, 128, 256]
             },
             'num_layers': {
-                'values': [1, 2, 3]
+                'values': [1, 2, 3]  # Only affects fully_connected; others ignore this parameter
             },
             
             # ============================================================================
@@ -310,7 +310,7 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
             # TRAINING CONFIGURATION (Same as comprehensive)
             # ============================================================================
             'total_timesteps': {
-                'values': [500000, 700000]
+                'values': [400000, 700000]
             },
             'n_eval_episodes': {
                 'values': [15]
@@ -410,7 +410,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -440,7 +440,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # VARIABLE ARCHITECTURE (Optimize for selected topology)
                 # ============================================================================
                 'hidden_size': {'values': [64, 128, 256]},
-                'num_layers': {'values': [1, 2, 3]},
+                'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
                 'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
                 'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
                 
@@ -480,7 +480,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -515,7 +515,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -558,7 +558,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -643,7 +643,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -673,7 +673,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # VARIABLE ARCHITECTURE (Optimize for selected topology)
                 # ============================================================================
                 'hidden_size': {'values': [64, 128, 256]},
-                'num_layers': {'values': [1, 2, 3]},
+                'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
                 'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
                 'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
                 
@@ -713,7 +713,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -748,7 +748,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -791,7 +791,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -992,7 +992,7 @@ def create_sweep_agent_config():
     """
     return {
         'entity': 'katko-it-universitetet-i-k-benhavn',
-        'project': 'topologies--hyperparameter-optimization'
+        'project': 'topologies--single-task-training'
     }
 
 def create_baseline_sweep_agent_config():
@@ -1005,6 +1005,30 @@ def create_baseline_sweep_agent_config():
     return {
         'entity': 'katko-it-universitetet-i-k-benhavn',
         'project': 'topologies--baseline-training'
+    }
+
+def create_double_task_sweep_agent_config():
+    """
+    Create configuration for the double-task sweep agent.
+    
+    Returns:
+        dict: Double-task sweep agent configuration
+    """
+    return {
+        'entity': 'katko-it-universitetet-i-k-benhavn',
+        'project': 'topologies--double-task-training'
+    }
+
+def create_triple_task_sweep_agent_config():
+    """
+    Create configuration for the triple-task sweep agent.
+    
+    Returns:
+        dict: Triple-task sweep agent configuration
+    """
+    return {
+        'entity': 'katko-it-universitetet-i-k-benhavn',
+        'project': 'topologies--triple-task-training'
     }
 
 # ============================================================================
@@ -1151,7 +1175,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1181,7 +1205,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # VARIABLE ARCHITECTURE (Optimize for selected topology)
                 # ============================================================================
                 'hidden_size': {'values': [64, 128, 256]},
-                'num_layers': {'values': [1, 2, 3]},
+                'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
                 'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
                 'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
                 
@@ -1224,7 +1248,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1262,7 +1286,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1308,7 +1332,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1399,7 +1423,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1429,7 +1453,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # VARIABLE ARCHITECTURE (Optimize for selected topology)
                 # ============================================================================
                 'hidden_size': {'values': [64, 128, 256]},
-                'num_layers': {'values': [1, 2, 3]},
+                'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
                 'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
                 'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
                 
@@ -1475,7 +1499,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1516,7 +1540,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1565,7 +1589,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # FIXED EVALUATION
                 # ============================================================================
-                'total_timesteps': {'value': 500000},
+                'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1655,7 +1679,7 @@ def create_topology_comparison_sweep_config(program='topologies--topology-compar
             # ============================================================================
             # EVALUATION CONFIGURATION (Fixed for fair comparison)
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -1700,7 +1724,7 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
             # VARIABLE ARCHITECTURE (Optimize for this topology)
             # ============================================================================
             'hidden_size': {'values': [64, 128, 256]},
-            'num_layers': {'values': [1, 2, 3]},
+            'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
             'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
             'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
             
@@ -1727,7 +1751,7 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1799,7 +1823,7 @@ def create_meta_analysis_sweep_config(program='topologies--meta-analysis-sweep.p
             # ============================================================================
             # FIXED EVALUATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1835,10 +1859,10 @@ def create_capacity_matched_comparison_sweep(program='topologies--capacity-match
             'target_capacity': {
                 'values': [1000, 5000, 10000, 50000]  # Parameter count targets
             },
-
-# ============================================================================
+            
+            # ============================================================================
             # TASK VARIATION
-# ============================================================================
+            # ============================================================================
             'train_task': {
                 'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
             },
@@ -1854,7 +1878,7 @@ def create_capacity_matched_comparison_sweep(program='topologies--capacity-match
             # ============================================================================
             # FIXED EVALUATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -1935,7 +1959,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2020,7 +2044,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2102,7 +2126,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2141,7 +2165,7 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
             # VARIABLE ARCHITECTURE (Optimize for Fully Connected)
             # ============================================================================
             'hidden_size': {'values': [64, 128, 256]},
-            'num_layers': {'values': [1, 2, 3]},
+            'num_layers': {'values': [1, 2, 3]},  # Only affects fully_connected; others ignore this parameter
             'activation': {'values': ['relu', 'tanh', 'leaky_relu']},
             'dropout': {'distribution': 'uniform', 'min': 0.0, 'max': 0.3},
             
@@ -2172,7 +2196,760 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 500000},
+            'total_timesteps': {'value': 400000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+# ============================================================================
+# ENHANCED TOPOLOGY COMPARISON SWEEP CONFIGURATIONS
+# ============================================================================
+
+def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
+    """
+    Create a fixed network sizes optimization sweep configuration.
+    
+    This sweep compares all topologies when they share the same network size.
+    Each topology uses fixed optimal parameters to enable clean grid search.
+    
+    Args:
+        training_type (str): Type of training ('single_task', 'double_task', 'triple_task', 'baseline', 
+                           'simplified_single_task', 'simplified_double_task', 'simplified_baseline')
+    
+    Returns:
+        dict: Fixed network sizes optimization sweep configuration
+    """
+    # Map training type to appropriate program
+    program_map = {
+        'single_task': 'topologies--single-task-training-sweep.py',
+        'double_task': 'topologies--double-task-training-sweep.py',
+        'triple_task': 'topologies--triple-task-training-sweep.py',
+        'baseline': 'topologies--baseline-training-sweep.py',
+        'simplified_single_task': 'topologies--simplified-single-task-training-sweep.py',
+        'simplified_double_task': 'topologies--simplified-double-task-training-sweep.py',
+        'simplified_baseline': 'topologies--simplified-baseline-training-sweep.py'
+    }
+    
+    program = program_map.get(training_type, 'topologies--single-task-training-sweep.py')
+    
+    # Determine task parameters based on training type
+    if training_type.startswith('simplified'):
+        # Simplified versions: only CartPole and Acrobot
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1']
+            }
+        }
+        if training_type == 'simplified_double_task':
+            # For double-task: all combinations (same-task combinations will be handled in training script)
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1']
+                }
+            }
+    else:
+        # Full versions: all three tasks
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            }
+        }
+        if training_type == 'double_task':
+            # For double-task: all combinations (same-task combinations will be handled in training script)
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                }
+            }
+        elif training_type == 'triple_task':
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_3': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                }
+            }
+    return {
+        'program': program,
+        'method': 'grid',  # Grid search for systematic comparison
+        'metric': {
+            'name': 'fixed_network_sizes/mean_reward',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
+            # PRIMARY VARIABLES: TOPOLOGY TYPE AND NETWORK SIZE
+            # ============================================================================
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            'hidden_size': {
+                'values': [64, 128, 256, 512]  # Multiple network sizes to test
+            },
+            
+            # ============================================================================
+            # TASK VARIATION
+            # ============================================================================
+            **task_params,
+            
+            # ============================================================================
+            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # ============================================================================
+            'learning_rate': {
+                'value': 3e-4  # Fixed: Optimal learning rate
+            },
+            'batch_size': {
+                'value': 64  # Fixed: Good balance of efficiency and stability
+            },
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
+            
+            # ============================================================================
+            # FIXED TOPOLOGY-SPECIFIC PARAMETERS (Optimal values for each topology)
+            # ============================================================================
+            # Small World parameters (fixed optimal values)
+            'small_world_k': {
+                'value': 4  # Fixed: Optimal small-world connectivity
+            },
+            'small_world_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            
+            # Modular parameters (fixed optimal values)
+            'modular_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'modular_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            'modular_intra_module_prob': {
+                'value': 0.7  # Fixed: Moderate intra-module density
+            },
+            
+            # Hybrid parameters (fixed optimal values)
+            'hybrid_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'hybrid_k': {
+                'value': 4  # Fixed: Optimal small-world within modules
+            },
+            'hybrid_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            'hybrid_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            
+            # Fully Connected parameters (fixed optimal values)
+            'num_layers': {
+                'value': 3  # Fixed: 3-layer architecture as requested
+            },
+            
+            # ============================================================================
+            # FIXED EVALUATION PARAMETERS
+            # ============================================================================
+            'total_timesteps': {'value': 400000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+
+def create_fixed_capacities_optimization_sweep(training_type='single_task'):
+    """
+    Create a fixed capacities optimization sweep configuration.
+    
+    This sweep compares all topologies when they share the same parameter count.
+    Each topology uses fixed optimal parameters to enable clean grid search.
+    
+    Args:
+        training_type (str): Type of training ('single_task', 'double_task', 'triple_task', 'baseline', 
+                           'simplified_single_task', 'simplified_double_task', 'simplified_baseline')
+    
+    Returns:
+        dict: Fixed capacities optimization sweep configuration
+    """
+    # Map training type to appropriate program
+    program_map = {
+        'single_task': 'topologies--single-task-training-sweep.py',
+        'double_task': 'topologies--double-task-training-sweep.py',
+        'triple_task': 'topologies--triple-task-training-sweep.py',
+        'baseline': 'topologies--baseline-training-sweep.py',
+        'simplified_single_task': 'topologies--simplified-single-task-training-sweep.py',
+        'simplified_double_task': 'topologies--simplified-double-task-training-sweep.py',
+        'simplified_baseline': 'topologies--simplified-baseline-training-sweep.py'
+    }
+    
+    program = program_map.get(training_type, 'topologies--single-task-training-sweep.py')
+    
+    # Determine task parameters based on training type
+    if training_type.startswith('simplified'):
+        # Simplified versions: only CartPole and Acrobot
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1']
+            }
+        }
+        if training_type == 'simplified_double_task':
+            # For double-task: all combinations (same-task combinations will be handled in training script)
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1']
+                }
+            }
+    else:
+        # Full versions: all three tasks
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            }
+        }
+        if training_type == 'double_task':
+            # For double-task: all combinations (same-task combinations will be handled in training script)
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                }
+            }
+        elif training_type == 'triple_task':
+            task_params = {
+                'train_task_1': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_2': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                },
+                'train_task_3': {
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                }
+            }
+    return {
+        'program': program,
+        'method': 'grid',  # Grid search for systematic comparison
+        'metric': {
+            'name': 'fixed_capacities/mean_reward',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
+            # PRIMARY VARIABLES: TOPOLOGY TYPE AND TARGET CAPACITY
+            # ============================================================================
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            'target_capacity': {
+                'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+            },
+            
+            # ============================================================================
+            # TASK VARIATION
+            # ============================================================================
+            **task_params,
+            
+            # ============================================================================
+            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # ============================================================================
+            'learning_rate': {
+                'value': 3e-4  # Fixed: Optimal learning rate
+            },
+            'batch_size': {
+                'value': 64  # Fixed: Good balance of efficiency and stability
+            },
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
+            
+            # ============================================================================
+            # FIXED TOPOLOGY-SPECIFIC PARAMETERS (Optimal values for each topology)
+            # ============================================================================
+            # Small World parameters (fixed optimal values)
+            'small_world_k': {
+                'value': 4  # Fixed: Optimal small-world connectivity
+            },
+            'small_world_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            
+            # Modular parameters (fixed optimal values)
+            'modular_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'modular_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            'modular_intra_module_prob': {
+                'value': 0.7  # Fixed: Moderate intra-module density
+            },
+            
+            # Hybrid parameters (fixed optimal values)
+            'hybrid_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'hybrid_k': {
+                'value': 4  # Fixed: Optimal small-world within modules
+            },
+            'hybrid_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            'hybrid_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            
+            # Fully Connected parameters (fixed optimal values)
+            'num_layers': {
+                'value': 3  # Fixed: 3-layer architecture as requested
+            },
+            
+            # ============================================================================
+            # FIXED EVALUATION PARAMETERS
+            # ============================================================================
+            'total_timesteps': {'value': 400000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+# ============================================================================
+# SIMPLIFIED TASK TRAINING SWEEP CONFIGURATIONS (CartPole + Acrobot only)
+# ============================================================================
+
+def create_simplified_single_task_sweep_config(program='topologies--simplified-single-task-training-sweep.py'):
+    """
+    Create a simplified single-task training sweep configuration.
+    
+    This sweep trains each topology on individual tasks (CartPole and Acrobot only).
+    Each topology is trained separately on each task to evaluate task-specific performance.
+    
+    Args:
+        program (str): The training script to run
+    
+    Returns:
+        dict: Simplified single-task training sweep configuration
+    """
+    return {
+        'program': program,
+        'method': 'grid',
+        'metric': {
+            'name': 'simplified_single_task/mean_reward',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
+            # PRIMARY VARIABLES: TOPOLOGY TYPE AND NETWORK SIZE
+            # ============================================================================
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            'hidden_size': {
+                'values': [64, 128, 256, 512]
+            },
+            
+            # ============================================================================
+            # SIMPLIFIED TASK VARIATION (CartPole and Acrobot only)
+            # ============================================================================
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed MountainCar-v0
+            },
+            
+            # ============================================================================
+            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # ============================================================================
+            'learning_rate': {
+                'value': 3e-4  # Fixed: Optimal learning rate
+            },
+            'batch_size': {
+                'value': 64  # Fixed: Good balance of efficiency and stability
+            },
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
+            
+            # ============================================================================
+            # FIXED TOPOLOGY-SPECIFIC PARAMETERS (Optimal values for each topology)
+            # ============================================================================
+            # Small World parameters (fixed optimal values)
+            'small_world_k': {
+                'value': 4  # Fixed: Optimal small-world connectivity
+            },
+            'small_world_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            
+            # Modular parameters (fixed optimal values)
+            'modular_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'modular_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            'modular_intra_module_prob': {
+                'value': 0.7  # Fixed: Moderate intra-module density
+            },
+            
+            # Hybrid parameters (fixed optimal values)
+            'hybrid_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'hybrid_k': {
+                'value': 4  # Fixed: Optimal small-world within modules
+            },
+            'hybrid_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            'hybrid_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            
+            # Fully Connected parameters (fixed optimal values)
+            'num_layers': {
+                'value': 3  # Fixed: 3-layer architecture as requested
+            },
+            
+            # ============================================================================
+            # FIXED EVALUATION PARAMETERS
+            # ============================================================================
+            'total_timesteps': {'value': 400000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+
+def create_simplified_double_task_sweep_config(program='topologies--simplified-double-task-training-sweep.py'):
+    """
+    Create a simplified double-task training sweep configuration.
+    
+    This sweep trains each topology sequentially on two tasks (CartPole and Acrobot only).
+    Sequential training: train on task A, then task B, then evaluate on all tasks.
+    
+    Args:
+        program (str): The training script to run
+    
+    Returns:
+        dict: Simplified double-task training sweep configuration
+    """
+    return {
+        'program': program,
+        'method': 'grid',
+        'metric': {
+            'name': 'simplified_double_task/mean_reward',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
+            # PRIMARY VARIABLES: TOPOLOGY TYPE AND NETWORK SIZE
+            # ============================================================================
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            'hidden_size': {
+                'values': [64, 128, 256, 512]
+            },
+            
+            # ============================================================================
+            # SEQUENTIAL TASK TRAINING (CartPole and Acrobot only)
+            # ============================================================================
+            'train_task_1': {
+                'values': ['CartPole-v1', 'Acrobot-v1']  # First task in sequence
+            },
+            'train_task_2': {
+                'values': ['CartPole-v1', 'Acrobot-v1']  # Second task in sequence
+            },
+            
+            # ============================================================================
+            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # ============================================================================
+            'learning_rate': {
+                'value': 3e-4  # Fixed: Optimal learning rate
+            },
+            'batch_size': {
+                'value': 64  # Fixed: Good balance of efficiency and stability
+            },
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
+            
+            # ============================================================================
+            # FIXED TOPOLOGY-SPECIFIC PARAMETERS (Optimal values for each topology)
+            # ============================================================================
+            # Small World parameters (fixed optimal values)
+            'small_world_k': {
+                'value': 4  # Fixed: Optimal small-world connectivity
+            },
+            'small_world_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            
+            # Modular parameters (fixed optimal values)
+            'modular_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'modular_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            'modular_intra_module_prob': {
+                'value': 0.7  # Fixed: Moderate intra-module density
+            },
+            
+            # Hybrid parameters (fixed optimal values)
+            'hybrid_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'hybrid_k': {
+                'value': 4  # Fixed: Optimal small-world within modules
+            },
+            'hybrid_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            'hybrid_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            
+            # Fully Connected parameters (fixed optimal values)
+            'num_layers': {
+                'value': 3  # Fixed: 3-layer architecture as requested
+            },
+            
+            # ============================================================================
+            # FIXED EVALUATION PARAMETERS
+            # ============================================================================
+            'total_timesteps': {'value': 400000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+
+
+def create_simplified_baseline_sweep_config(program='topologies--simplified-baseline-training-sweep.py'):
+    """
+    Create a simplified baseline training sweep configuration.
+    
+    This sweep trains each topology on individual tasks (CartPole and Acrobot only).
+    Baseline version with simplified task set.
+    
+    Args:
+        program (str): The training script to run
+    
+    Returns:
+        dict: Simplified baseline training sweep configuration
+    """
+    return {
+        'program': program,
+        'method': 'grid',
+        'metric': {
+            'name': 'simplified_baseline/mean_reward',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
+            # PRIMARY VARIABLES: TOPOLOGY TYPE AND NETWORK SIZE
+            # ============================================================================
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            'hidden_size': {
+                'values': [64, 128, 256, 512]
+            },
+            
+            # ============================================================================
+            # SIMPLIFIED TASK VARIATION (CartPole and Acrobot only)
+            # ============================================================================
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed MountainCar-v0
+            },
+            
+            # ============================================================================
+            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # ============================================================================
+            'learning_rate': {
+                'value': 3e-4  # Fixed: Optimal learning rate
+            },
+            'batch_size': {
+                'value': 64  # Fixed: Good balance of efficiency and stability
+            },
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
+            
+            # ============================================================================
+            # FIXED TOPOLOGY-SPECIFIC PARAMETERS (Optimal values for each topology)
+            # ============================================================================
+            # Small World parameters (fixed optimal values)
+            'small_world_k': {
+                'value': 4  # Fixed: Optimal small-world connectivity
+            },
+            'small_world_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            
+            # Modular parameters (fixed optimal values)
+            'modular_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'modular_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            'modular_intra_module_prob': {
+                'value': 0.7  # Fixed: Moderate intra-module density
+            },
+            
+            # Hybrid parameters (fixed optimal values)
+            'hybrid_num_modules': {
+                'value': 4  # Fixed: Balanced modularity
+            },
+            'hybrid_k': {
+                'value': 4  # Fixed: Optimal small-world within modules
+            },
+            'hybrid_p': {
+                'value': 0.1  # Fixed: Good small-world regime
+            },
+            'hybrid_inter_module_prob': {
+                'value': 0.05  # Fixed: Sparse inter-module connections
+            },
+            
+            # Fully Connected parameters (fixed optimal values)
+            'num_layers': {
+                'value': 3  # Fixed: 3-layer architecture as requested
+            },
+            
+            # ============================================================================
+            # FIXED EVALUATION PARAMETERS
+            # ============================================================================
+            'total_timesteps': {'value': 400000},
             'n_eval_episodes': {'value': 15},
         }
     }
