@@ -18,13 +18,13 @@ from typing import Dict, List, Tuple, Optional
 R_MIN = {
     "CartPole-v1": 0,
     "Acrobot-v1": -500,
-    "MountainCar-v0": -200  # Added for completeness
+    "LunarLander-v2": -1000  # Replace MountainCar-v0
 }
 
 R_SOLVED = {
     "CartPole-v1": 500,
     "Acrobot-v1": -80,
-    "MountainCar-v0": -110  # Added for completeness
+    "LunarLander-v2": 200  # Replace MountainCar-v0
 }
 
 # Threshold fraction for efficiency calculation

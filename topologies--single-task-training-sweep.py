@@ -68,32 +68,32 @@ class UniversalActionWrapper(gym.Wrapper):
         super().__init__(env)
         self.task_name = task_name
         
-        # Universal action space: 3 actions for all tasks
-        self.action_space = gym.spaces.Discrete(3)
+        # Universal action space: 4 actions for all tasks (LunarLander-v2 needs 4)
+        self.action_space = gym.spaces.Discrete(4)
         
-        # Universal observation space: 6 dimensions for all tasks
+        # Universal observation space: 8 dimensions for all tasks (LunarLander-v2 needs 8)
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf, 
-            shape=(6,),  # Universal 6-dimensional observation space
+            shape=(8,),  # Universal 8-dimensional observation space
             dtype=np.float32
         )
         
         # Task-specific action masks and mappings
         self.action_masks = {
-            'CartPole-v1': [True, True, False],    # Actions 0,1 valid, 2 invalid
-            'MountainCar-v0': [True, True, True],  # All 3 actions valid
-            'Acrobot-v1': [True, True, False]      # Actions 0,1 valid, 2 invalid
+            'CartPole-v1': [True, True, False, False],    # Actions 0,1 valid, 2,3 invalid
+            'Acrobot-v1': [True, True, True, False],      # Actions 0,1,2 valid, 3 invalid
+            'LunarLander-v2': [True, True, True, True]    # All 4 actions valid
         }
         
         # Action mappings for invalid actions (fallback to valid action)
         self.action_mappings = {
-            'CartPole-v1': {2: 0},      # Map action 2 to action 0
-            'MountainCar-v0': {},       # No mapping needed (all valid)
-            'Acrobot-v1': {2: 0}        # Map action 2 to action 0
+            'CartPole-v1': {2: 0, 3: 0},      # Map actions 2,3 to action 0
+            'Acrobot-v1': {3: 0},             # Map action 3 to action 0
+            'LunarLander-v2': {}              # No mapping needed (all valid)
         }
         
-        self.current_mask = self.action_masks.get(task_name, [True, True, True])
+        self.current_mask = self.action_masks.get(task_name, [True, True, True, True])
         self.current_mapping = self.action_mappings.get(task_name, {})
     
     def step(self, action):
@@ -114,7 +114,7 @@ class UniversalActionWrapper(gym.Wrapper):
         # Step the environment with mapped action
         obs, reward, done, truncated, info = self.env.step(mapped_action)
         
-        # Pad observation to universal dimensions (6)
+        # Pad observation to universal dimensions (8)
         obs = self._pad_observation(obs)
         
         # Add action masking info to info dict
@@ -125,32 +125,32 @@ class UniversalActionWrapper(gym.Wrapper):
         return obs, reward, done, truncated, info
     
     def _pad_observation(self, obs):
-        """Pad observation to universal 6-dimensional space."""
+        """Pad observation to universal 8-dimensional space."""
         obs = np.array(obs, dtype=np.float32)
         
         if len(obs.shape) == 1:
             # Single observation
-            if obs.shape[0] < 6:
+            if obs.shape[0] < 8:
                 # Pad with zeros
-                padded_obs = np.zeros(6, dtype=np.float32)
+                padded_obs = np.zeros(8, dtype=np.float32)
                 padded_obs[:obs.shape[0]] = obs
                 return padded_obs
-            elif obs.shape[0] > 6:
+            elif obs.shape[0] > 8:
                 # Truncate
-                return obs[:6]
+                return obs[:8]
             else:
                 return obs
         else:
             # Vectorized observation
             batch_size = obs.shape[0]
-            if obs.shape[1] < 6:
+            if obs.shape[1] < 8:
                 # Pad with zeros
-                padded_obs = np.zeros((batch_size, 6), dtype=np.float32)
+                padded_obs = np.zeros((batch_size, 8), dtype=np.float32)
                 padded_obs[:, :obs.shape[1]] = obs
                 return padded_obs
-            elif obs.shape[1] > 6:
+            elif obs.shape[1] > 8:
                 # Truncate
-                return obs[:, :6]
+                return obs[:, :8]
             else:
                 return obs
     
@@ -665,7 +665,7 @@ def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
     Args:
         model: The trained model to evaluate
         env: The environment to evaluate on
-        task_name: Name of the task (e.g., 'CartPole-v1', 'MountainCar-v0', 'Acrobot-v1')
+        task_name: Name of the task (e.g., 'CartPole-v1', 'LunarLander-v2', 'Acrobot-v1')
         n_eval_episodes: Number of episodes to evaluate
     
     Returns:
@@ -740,11 +740,11 @@ def calculate_success_rate(rewards, episode_lengths, task_name):
         Success rate as a float between 0 and 1
     """
     if task_name == 'CartPole-v1':
-        # Success: episode length >= 200 (CartPole solved)
-        return np.mean([length >= 200 for length in episode_lengths])
-    elif task_name == 'MountainCar-v0':
-        # Success: reached goal position (reward > -200)
-        return np.mean([reward > -200 for reward in rewards])
+        # Success: reward >= 500 (actual solved threshold) - consistent with completion
+        return np.mean([reward >= 500 for reward in rewards])
+    elif task_name == 'LunarLander-v2':  # Replace MountainCar-v0
+        # Success: reward >= 200 (actual solved threshold)
+        return np.mean([reward >= 200 for reward in rewards])
     elif task_name == 'Acrobot-v1':
         # Success: swung up to vertical (reward >= -80)
         return np.mean([reward >= -80 for reward in rewards])
@@ -2176,7 +2176,7 @@ def create_sweep_config():
         # ============================================================================
         # EXPERIMENT PARAMETERS (from wandb.config)
         # ============================================================================
-        'tasks': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0'],
+            'tasks': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'],
         'total_timesteps': wandb.config.get('total_timesteps', 600000),
         'n_eval_episodes': wandb.config.get('n_eval_episodes', 15),
         
@@ -2580,7 +2580,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             # Task-specific maximum rewards for normalization
             max_rewards = {
                 'CartPole-v1': 200.0,
-                'MountainCar-v0': 0.0,  # MountainCar has negative rewards
+                'LunarLander-v2': 0.0,  # LunarLander has positive rewards
                 'Acrobot-v1': -100.0,   # Acrobot has negative rewards
             }
             max_reward = max_rewards.get(test_task, 200.0)
@@ -2901,7 +2901,7 @@ def unified_training_function():
             'universal_output_dim': 3,
             'universal_action_dim': 3,
             # Tasks for cross-task testing
-            'tasks': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0'],
+            'tasks': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'],
             # PPO parameters
             'ppo_params': {
                 'learning_rate': 3e-4,

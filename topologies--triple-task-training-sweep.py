@@ -68,29 +68,29 @@ class UniversalActionWrapper(gym.Wrapper):
         super().__init__(env)
         self.task_name = task_name
         
-        # Universal action space: 3 actions for all tasks
-        self.action_space = gym.spaces.Discrete(3)
+        # Universal action space: 4 actions for all tasks (LunarLander-v2 needs 4)
+        self.action_space = gym.spaces.Discrete(4)
         
-        # Universal observation space: 6 dimensions for all tasks
+        # Universal observation space: 8 dimensions for all tasks (LunarLander-v2 needs 8)
         self.observation_space = gym.spaces.Box(
             low=-np.inf, 
             high=np.inf, 
-            shape=(6,),  # Universal 6-dimensional observation space
+            shape=(8,),  # Universal 8-dimensional observation space
             dtype=np.float32
         )
         
         # Task-specific action masks and mappings
         self.action_masks = {
-            'CartPole-v1': [True, True, False],    # Actions 0,1 valid, 2 invalid
-            'MountainCar-v0': [True, True, True],  # All 3 actions valid
-            'Acrobot-v1': [True, True, False]      # Actions 0,1 valid, 2 invalid
+            'CartPole-v1': [True, True, False, False],    # Actions 0,1 valid, 2,3 invalid
+            'Acrobot-v1': [True, True, True, False],      # Actions 0,1,2 valid, 3 invalid
+            'LunarLander-v2': [True, True, True, True]    # All 4 actions valid
         }
         
         # Action mappings for invalid actions (fallback to valid action)
         self.action_mappings = {
-            'CartPole-v1': {2: 0},      # Map action 2 to action 0
-            'MountainCar-v0': {},       # No mapping needed (all valid)
-            'Acrobot-v1': {2: 0}        # Map action 2 to action 0
+            'CartPole-v1': {2: 0, 3: 0},      # Map actions 2,3 to action 0
+            'Acrobot-v1': {3: 0},             # Map action 3 to action 0
+            'LunarLander-v2': {}              # No mapping needed (all valid)
         }
         
         self.current_mask = self.action_masks.get(task_name, [True, True, True])
@@ -120,20 +120,20 @@ class UniversalActionWrapper(gym.Wrapper):
         return padded_obs, reward, done, truncated, info
     
     def _pad_observation(self, obs):
-        """Pad observation to universal 6-dimensional space."""
+        """Pad observation to universal 8-dimensional space."""
         if isinstance(obs, np.ndarray):
             obs = obs.flatten()
         else:
             obs = np.array(obs).flatten()
         
-        # Pad with zeros to reach 6 dimensions
-        if len(obs) < 6:
-            padded_obs = np.zeros(6, dtype=np.float32)
+        # Pad with zeros to reach 8 dimensions
+        if len(obs) < 8:
+            padded_obs = np.zeros(8, dtype=np.float32)
             padded_obs[:len(obs)] = obs
             return padded_obs
-        elif len(obs) > 6:
-            # Truncate to 6 dimensions
-            return obs[:6].astype(np.float32)
+        elif len(obs) > 8:
+            # Truncate to 8 dimensions
+            return obs[:8].astype(np.float32)
         else:
             return obs.astype(np.float32)
     
@@ -701,7 +701,7 @@ def create_run_name(config, topology_type, training_type):
     
     # Add task information
     if training_type == 'triple_task':
-        task_order = config.get('task_order', 'Acrobot-v1_CartPole-v1_MountainCar-v0')
+        task_order = config.get('task_order', 'LunarLander-v2_Acrobot-v1_CartPole-v1')
         tasks = task_order.split('_')
         name_parts.extend(tasks)
     
@@ -720,7 +720,7 @@ def create_run_tags(config, topology_type, training_type):
     
     # Add task tags
     if training_type == 'triple_task':
-        task_order = config.get('task_order', 'CartPole-v1_Acrobot-v1_MountainCar-v0')
+        task_order = config.get('task_order', 'LunarLander-v2_CartPole-v1_Acrobot-v1')
         tasks = task_order.split('_')
         tags.extend(tasks)
     
@@ -926,7 +926,7 @@ def create_debug_config():
             'n_eval_episodes': 15,
             'train_task_1': 'CartPole-v1',
             'train_task_2': 'Acrobot-v1',
-            'train_task_3': 'MountainCar-v0'
+            'train_task_3': 'LunarLander-v2'
         }
     
     return config
@@ -1010,14 +1010,14 @@ def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
 def calculate_success_rate(rewards, episode_lengths, task_name):
     """Calculate success rate based on task-specific criteria."""
     if task_name == 'CartPole-v1':
-        # Success: episode length >= 195 (close to max of 500)
-        return np.mean([length >= 195 for length in episode_lengths])
+        # Success: reward >= 500 (actual solved threshold) - consistent with completion
+        return np.mean([reward >= 500 for reward in rewards])
     elif task_name == 'Acrobot-v1':
         # Success: reward >= -80 (actual solved threshold)
         return np.mean([reward >= -80 for reward in rewards])
-    elif task_name == 'MountainCar-v0':
-        # Success: reached the goal (reward >= -110)
-        return np.mean([reward >= -110 for reward in rewards])
+    elif task_name == 'LunarLander-v2':  # Replace MountainCar-v0
+        # Success: reward >= 200 (actual solved threshold)
+        return np.mean([reward >= 200 for reward in rewards])
     else:
         # Default: above average performance
         mean_reward = np.mean(rewards)
@@ -1239,7 +1239,7 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     print("-" * 60)
     
     # Test on all available tasks
-    all_tasks = ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+    all_tasks = ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
     phase1_results = {}
     
     print(f"🔍 Testing on {len(all_tasks)} tasks:")
@@ -1666,7 +1666,7 @@ def train_with_sweep():
                 'topology_type': 'fully_connected',
                 'train_task_1': 'CartPole-v1',
                 'train_task_2': 'Acrobot-v1',
-                'train_task_3': 'MountainCar-v0',
+                'train_task_3': 'LunarLander-v2',
                 'total_timesteps': 600000,
                 'n_eval_episodes': 15,
                 'activation': 'relu',
@@ -1727,7 +1727,7 @@ def train_with_sweep():
     num_layers = wandb.config.get('num_layers', 2)
     train_task_1 = wandb.config.get('train_task_1', 'CartPole-v1')
     train_task_2 = wandb.config.get('train_task_2', 'Acrobot-v1')
-    train_task_3 = wandb.config.get('train_task_3', 'MountainCar-v0')
+    train_task_3 = wandb.config.get('train_task_3', 'LunarLander-v2')
     
     # Run triple-task training
     results = triple_task_training(
@@ -1763,7 +1763,7 @@ def unified_training_function():
             'topology_type': 'small_world',
             'hidden_size': 128,
             'num_layers': 2,
-            'task_order': 'Acrobot-v1_CartPole-v1_MountainCar-v0',  # Start with Acrobot-v1
+            'task_order': 'LunarLander-v2_Acrobot-v1_CartPole-v1',  # Start with LunarLander-v2
             'learning_rate': 3e-4,
             'n_steps': 2048,
             'batch_size': 128,
@@ -1807,7 +1807,7 @@ def unified_training_function():
     num_layers = config.get('num_layers', 3)
     
     # Determine tasks from task_order parameter
-    task_order = config.get('task_order', 'Acrobot-v1_CartPole-v1_MountainCar-v0')  # Start with Acrobot-v1
+    task_order = config.get('task_order', 'LunarLander-v2_Acrobot-v1_CartPole-v1')  # Start with LunarLander-v2
     tasks = task_order.split('_')
     train_task_1 = tasks[0]
     train_task_2 = tasks[1]

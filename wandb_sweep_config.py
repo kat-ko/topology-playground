@@ -149,7 +149,7 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
             'task_timesteps': {
                 'CartPole-v1': {'value': 200000},  # Faster convergence
                 'Acrobot-v1': {'value': 800000},   # Slower convergence
-                'MountainCar-v0': {'value': 600000}  # Medium convergence
+                'LunarLander-v2': {'value': 500000}  # Longer training for complex task
             },
             'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {
@@ -167,7 +167,7 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
             # TASK SELECTION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
         }
     }
@@ -317,7 +317,7 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
             'task_timesteps': {
                 'CartPole-v1': {'value': 200000},  # Faster convergence
                 'Acrobot-v1': {'value': 800000},   # Slower convergence
-                'MountainCar-v0': {'value': 600000}  # Medium convergence
+                'LunarLander-v2': {'value': 500000}  # Longer training for complex task
             },
             'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {
@@ -335,7 +335,7 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
             # TASK SELECTION (Same as comprehensive)
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
         }
     }
@@ -399,7 +399,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # TASK VARIATION (To test generalization across tasks)
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -422,7 +422,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -475,7 +475,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # TASK VARIATION
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -498,7 +498,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -529,7 +529,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # TASK VARIATION
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -564,7 +564,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # TASK VARIATION
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -644,7 +644,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # TASK VARIATION (To test generalization across tasks)
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -667,7 +667,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -720,7 +720,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # TASK VARIATION
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -743,7 +743,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -774,7 +774,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # TASK VARIATION
                 # ============================================================================
                 'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -830,7 +830,7 @@ def create_task_specific_sweep_config(task='CartPole-v1', program='topologies--s
     Create task-specific sweep configurations optimized for particular environments.
     
     Args:
-        task (str): Task name ('CartPole-v1', 'Acrobot-v1', 'MountainCar-v0')
+        task (str): Task name ('CartPole-v1', 'Acrobot-v1', 'LunarLander-v2')
         program (str): The training script to run
     
     Returns:
@@ -946,8 +946,8 @@ def create_task_specific_sweep_config(task='CartPole-v1', program='topologies--s
             }
         }
     
-    elif task == 'MountainCar-v0':
-        # MountainCar-specific optimization (sparse rewards, exploration important)
+    elif task == 'LunarLander-v2':
+        # LunarLander-specific optimization (rich rewards, complex dynamics)
         return {
             'program': program,
             'method': 'bayes',
@@ -1076,10 +1076,10 @@ def create_double_task_sweep_config(program='topologies--double-task-training-sw
     # Add double-task specific parameters
     sweep_config['parameters'].update({
         'train_task_1': {
-            'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
         },
         'train_task_2': {
-            'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
         }
     })
     
@@ -1105,13 +1105,13 @@ def create_triple_task_sweep_config(program='topologies--triple-task-training-sw
     # Add triple-task specific parameters
     sweep_config['parameters'].update({
         'train_task_1': {
-            'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
         },
         'train_task_2': {
-            'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
         },
         'train_task_3': {
-            'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
         }
     })
     
@@ -1178,10 +1178,10 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION (To test transfer learning)
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1204,7 +1204,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -1257,10 +1257,10 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1283,7 +1283,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -1314,10 +1314,10 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1352,10 +1352,10 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1435,13 +1435,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION (To test advanced transfer learning)
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'third_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1464,7 +1464,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -1517,13 +1517,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'third_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1546,7 +1546,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -1577,13 +1577,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'third_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1618,13 +1618,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # TASK SEQUENCE VARIATION
                 # ============================================================================
                 'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'second_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'third_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
                 # ============================================================================
@@ -1704,7 +1704,7 @@ def create_topology_comparison_sweep_config(program='topologies--topology-compar
             # TASK VARIATION (To test generalization across tasks)
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -1732,7 +1732,7 @@ def create_topology_comparison_sweep_config(program='topologies--topology-compar
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -1800,7 +1800,7 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -1810,7 +1810,7 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
@@ -1878,7 +1878,7 @@ def create_meta_analysis_sweep_config(program='topologies--meta-analysis-sweep.p
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -1925,7 +1925,7 @@ def create_capacity_matched_comparison_sweep(program='topologies--capacity-match
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -1999,7 +1999,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -2024,7 +2024,7 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2087,7 +2087,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -2115,7 +2115,7 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2178,7 +2178,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -2203,7 +2203,7 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2265,7 +2265,7 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
             # TASK VARIATION
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             },
             
             # ============================================================================
@@ -2279,7 +2279,7 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
                 'task_timesteps': {
                     'CartPole-v1': {'value': 200000},  # Faster convergence
                     'Acrobot-v1': {'value': 800000},   # Slower convergence
-                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                    'LunarLander-v2': {'value': 500000}  # Longer training for complex task
                 },
                 'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2339,29 +2339,29 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
         # Full versions: all three tasks
         task_params = {
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             }
         }
         if training_type == 'double_task':
             # For double-task: all combinations (same-task combinations will be handled in training script)
             task_params = {
                 'train_task_1': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_2': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 }
             }
         elif training_type == 'triple_task':
             task_params = {
                 'train_task_1': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_2': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_3': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 }
             }
     return {
@@ -2472,7 +2472,7 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
             'task_timesteps': {
                 'CartPole-v1': {'value': 200000},  # Faster convergence
                 'Acrobot-v1': {'value': 800000},   # Slower convergence
-                'MountainCar-v0': {'value': 600000}  # Medium convergence
+                'LunarLander-v2': {'value': 500000}  # Longer training for complex task
             },
             'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2529,29 +2529,29 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
         # Full versions: all three tasks
         task_params = {
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             }
         }
         if training_type == 'double_task':
             # For double-task: all combinations (same-task combinations will be handled in training script)
             task_params = {
                 'train_task_1': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_2': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 }
             }
         elif training_type == 'triple_task':
             task_params = {
                 'train_task_1': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_2': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 'train_task_3': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 }
             }
     return {
@@ -2662,7 +2662,7 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
             'task_timesteps': {
                 'CartPole-v1': {'value': 200000},  # Faster convergence
                 'Acrobot-v1': {'value': 800000},   # Slower convergence
-                'MountainCar-v0': {'value': 600000}  # Medium convergence
+                'LunarLander-v2': {'value': 500000}  # Longer training for complex task
             },
             'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
@@ -2708,7 +2708,7 @@ def create_simplified_single_task_sweep_config(program='topologies--simplified-s
             # SIMPLIFIED TASK VARIATION (CartPole and Acrobot only)
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed MountainCar-v0
+                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed LunarLander-v2
             },
             
             # ============================================================================
@@ -2962,7 +2962,7 @@ def create_simplified_baseline_sweep_config(program='topologies--simplified-base
             # SIMPLIFIED TASK VARIATION (CartPole and Acrobot only)
             # ============================================================================
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed MountainCar-v0
+                'values': ['CartPole-v1', 'Acrobot-v1']  # Removed LunarLander-v2
             },
             
             # ============================================================================
@@ -3076,7 +3076,7 @@ def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
     if training_type == 'baseline' or training_type == 'single_task':
         task_params = {
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             }
         }
     elif training_type == 'double_task':
@@ -3086,11 +3086,11 @@ def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
             'task_order': {
                 'values': [
                     'CartPole-v1_Acrobot-v1',
-                    'CartPole-v1_MountainCar-v0', 
+                    'CartPole-v1_LunarLander-v2', 
                     'Acrobot-v1_CartPole-v1',
-                    'Acrobot-v1_MountainCar-v0',
-                    'MountainCar-v0_CartPole-v1',
-                    'MountainCar-v0_Acrobot-v1'
+                    'Acrobot-v1_LunarLander-v2',
+                    'LunarLander-v2_CartPole-v1',
+                    'LunarLander-v2_Acrobot-v1'
                 ]
             }
         }
@@ -3100,12 +3100,12 @@ def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
         task_params = {
             'task_order': {
                 'values': [
-                    'CartPole-v1_Acrobot-v1_MountainCar-v0',
-                    'CartPole-v1_MountainCar-v0_Acrobot-v1',
-                    'Acrobot-v1_CartPole-v1_MountainCar-v0',
-                    'Acrobot-v1_MountainCar-v0_CartPole-v1',
-                    'MountainCar-v0_CartPole-v1_Acrobot-v1',
-                    'MountainCar-v0_Acrobot-v1_CartPole-v1'
+                    'CartPole-v1_Acrobot-v1_LunarLander-v2',
+                    'CartPole-v1_LunarLander-v2_Acrobot-v1',
+                    'Acrobot-v1_CartPole-v1_LunarLander-v2',
+                    'Acrobot-v1_LunarLander-v2_CartPole-v1',
+                    'LunarLander-v2_CartPole-v1_Acrobot-v1',
+                    'LunarLander-v2_Acrobot-v1_CartPole-v1'
                 ]
             }
         }
@@ -3187,7 +3187,7 @@ def create_fixed_capacities_comparison_sweep(training_type='single_task'):
     if training_type == 'baseline' or training_type == 'single_task':
         task_params = {
             'train_task': {
-                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+                'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
             }
         }
     elif training_type == 'double_task':
@@ -3197,11 +3197,11 @@ def create_fixed_capacities_comparison_sweep(training_type='single_task'):
             'task_order': {
                 'values': [
                     'CartPole-v1_Acrobot-v1',
-                    'CartPole-v1_MountainCar-v0', 
+                    'CartPole-v1_LunarLander-v2', 
                     'Acrobot-v1_CartPole-v1',
-                    'Acrobot-v1_MountainCar-v0',
-                    'MountainCar-v0_CartPole-v1',
-                    'MountainCar-v0_Acrobot-v1'
+                    'Acrobot-v1_LunarLander-v2',
+                    'LunarLander-v2_CartPole-v1',
+                    'LunarLander-v2_Acrobot-v1'
                 ]
             }
         }
@@ -3211,12 +3211,12 @@ def create_fixed_capacities_comparison_sweep(training_type='single_task'):
         task_params = {
             'task_order': {
                 'values': [
-                    'CartPole-v1_Acrobot-v1_MountainCar-v0',
-                    'CartPole-v1_MountainCar-v0_Acrobot-v1',
-                    'Acrobot-v1_CartPole-v1_MountainCar-v0',
-                    'Acrobot-v1_MountainCar-v0_CartPole-v1',
-                    'MountainCar-v0_CartPole-v1_Acrobot-v1',
-                    'MountainCar-v0_Acrobot-v1_CartPole-v1'
+                    'CartPole-v1_Acrobot-v1_LunarLander-v2',
+                    'CartPole-v1_LunarLander-v2_Acrobot-v1',
+                    'Acrobot-v1_CartPole-v1_LunarLander-v2',
+                    'Acrobot-v1_LunarLander-v2_CartPole-v1',
+                    'LunarLander-v2_CartPole-v1_Acrobot-v1',
+                    'LunarLander-v2_Acrobot-v1_CartPole-v1'
                 ]
             }
         }

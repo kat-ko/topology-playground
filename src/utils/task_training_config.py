@@ -33,14 +33,14 @@ TASK_TRAINING_CONFIG = {
         'convergence_window': 5,  # Larger window for convergence checking (5 evaluations = 100K steps)
         'reward_threshold': -80,  # Reward threshold for convergence (actual solved threshold)
     },
-    'MountainCar-v0': {
-        'total_timesteps': 600000,  # Medium convergence - moderate complexity
-        'convergence_threshold': 0.9,  # Medium success rate threshold
-        'min_timesteps': 150000,  # Medium minimum training time
-        'max_timesteps': 900000,  # Medium maximum training time
-        'early_stopping_patience': 30000,  # Medium patience for improvement
-        'convergence_window': 4,  # Medium window for convergence checking (4 evaluations = 80K steps)
-        'reward_threshold': -110,  # Reward threshold for convergence
+    'LunarLander-v2': {  # Replace LunarLander-v2
+        'total_timesteps': 500000,  # Longer training needed for complex task
+        'convergence_threshold': 0.85,  # Medium success rate threshold
+        'min_timesteps': 200000,  # Medium minimum training time
+        'max_timesteps': 1000000,  # Increased maximum training time
+        'early_stopping_patience': 30000,  # Increased patience for improvement
+        'convergence_window': 10,  # Larger window for convergence checking (10 evaluations = 200K steps)
+        'reward_threshold': 200,  # Reward threshold for convergence (actual solved threshold)
     }
 }
 
@@ -320,7 +320,7 @@ class ConvergenceCallback(BaseCallback):
                 if recent_mean >= self.reward_threshold:
                     return True
             else:
-                # For negative thresholds (e.g., Acrobot-v1: -100, MountainCar-v0: -110)
+                # For negative thresholds (e.g., Acrobot-v1: -100, LunarLander-v2: -110)
                 if recent_mean >= self.reward_threshold:
                     return True
         

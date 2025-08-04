@@ -22,23 +22,23 @@ TOPOLOGY_COLORS = {
 TASK_COLORS = {
     'CartPole-v1': '#1f77b4',
     'Acrobot-v1': '#ff7f0e',
-    'MountainCar-v0': '#2ca02c'
+    'LunarLander-v2': '#2ca02c'
 }
 
 # Task order combinations
 DOUBLE_TASK_ORDERS = [
-    'CartPole-v1_Acrobot-v1', 'CartPole-v1_MountainCar-v0',
-    'Acrobot-v1_CartPole-v1', 'Acrobot-v1_MountainCar-v0',
-    'MountainCar-v0_CartPole-v1', 'MountainCar-v0_Acrobot-v1'
+    'CartPole-v1_Acrobot-v1', 'CartPole-v1_LunarLander-v2',
+    'Acrobot-v1_CartPole-v1', 'Acrobot-v1_LunarLander-v2',
+    'LunarLander-v2_CartPole-v1', 'LunarLander-v2_Acrobot-v1'
 ]
 
 TRIPLE_TASK_ORDERS = [
-    'CartPole-v1_Acrobot-v1_MountainCar-v0', 'CartPole-v1_MountainCar-v0_Acrobot-v1',
-    'Acrobot-v1_CartPole-v1_MountainCar-v0', 'Acrobot-v1_MountainCar-v0_CartPole-v1',
-    'MountainCar-v0_CartPole-v1_Acrobot-v1', 'MountainCar-v0_Acrobot-v1_CartPole-v1'
+    'CartPole-v1_Acrobot-v1_LunarLander-v2', 'CartPole-v1_LunarLander-v2_Acrobot-v1',
+    'Acrobot-v1_CartPole-v1_LunarLander-v2', 'Acrobot-v1_LunarLander-v2_CartPole-v1',
+    'LunarLander-v2_CartPole-v1_Acrobot-v1', 'LunarLander-v2_Acrobot-v1_CartPole-v1'
 ]
 
-ALL_TASKS = ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+ALL_TASKS = ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
 ALL_TOPOLOGIES = ['small_world', 'modular', 'hybrid', 'fully_connected']
 
 
@@ -385,6 +385,362 @@ def create_capacity_scaling_for_task_order(
     return fig
 
 
+def create_sequential_task_performance_plot(
+    sweep_results: Dict, 
+    task_sequence: str,
+    training_type: str = 'double_task'
+) -> go.Figure:
+    """
+    Create sequential performance plot showing how each task's performance evolves
+    throughout the training sequence. This is CRUCIAL for continual learning analysis.
+    
+    X-axis: Training phases (which task was trained)
+    Y-axis: Performance on a specific task
+    Multiple lines: One for each tested task
+    
+    This directly shows:
+    - Forward transfer (how training on earlier tasks helps later tasks)
+    - Backward transfer/retention (how well earlier tasks are maintained)
+    - Catastrophic forgetting (if performance on earlier tasks degrades)
+    
+    Args:
+        sweep_results: Dictionary containing results from all topologies
+        task_sequence: Task sequence string (e.g., 'CartPole-v1_Acrobot-v1')
+        training_type: Type of training ('double_task' or 'triple_task')
+    
+    Returns:
+        Plotly figure showing sequential performance evolution
+    """
+    
+    trained_tasks, num_phases = parse_task_sequence(task_sequence)
+    
+    # Create subplots: one for each topology
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=[f'{topology.replace("_", " ").title()}' for topology in ALL_TOPOLOGIES],
+        specs=[[{"secondary_y": False}, {"secondary_y": False}],
+               [{"secondary_y": False}, {"secondary_y": False}]],
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1
+    )
+    
+    # X-axis labels: training phases
+    x_labels = []
+    for i, task in enumerate(trained_tasks):
+        if i == 0:
+            x_labels.append(f"Initial\n{task}")
+        else:
+            x_labels.append(f"After {task}")
+    
+    # For each topology
+    for topology_idx, topology_type in enumerate(ALL_TOPOLOGIES):
+        row = (topology_idx // 2) + 1
+        col = (topology_idx % 2) + 1
+        
+        # Get results for this topology and task sequence
+        topology_key = f"{topology_type}/{task_sequence}"
+        
+        # For each tested task
+        for task_idx, tested_task in enumerate(ALL_TASKS):
+            performance_data = []
+            
+            # Collect performance data for each phase
+            for phase_num in range(1, num_phases + 1):
+                metric_key = f"{topology_key}/phase{phase_num}/testing/{tested_task}/mean_reward"
+                
+                if metric_key in sweep_results:
+                    performance_data.append(sweep_results[metric_key])
+                else:
+                    # If no data, use None to create gaps in the line
+                    performance_data.append(None)
+            
+            # Add line for this task
+            fig.add_trace(
+                go.Scatter(
+                    x=x_labels,
+                    y=performance_data,
+                    mode='lines+markers',
+                    name=f'{tested_task} ({topology_type})',
+                    line=dict(
+                        color=TASK_COLORS[tested_task],
+                        width=2,
+                        dash='solid' if topology_type == 'fully_connected' else 'dash' if topology_type == 'small_world' else 'dot' if topology_type == 'modular' else 'dashdot'
+                    ),
+                    marker=dict(
+                        size=8,
+                        symbol='circle' if topology_type == 'fully_connected' else 'square' if topology_type == 'small_world' else 'diamond' if topology_type == 'modular' else 'triangle-up'
+                    ),
+                    showlegend=False,  # We'll add legend separately
+                    hovertemplate=f'<b>{tested_task}</b><br>' +
+                                f'Topology: {topology_type}<br>' +
+                                f'Phase: %{{x}}<br>' +
+                                f'Performance: %{{y:.2f}}<br>' +
+                                '<extra></extra>'
+                ),
+                row=row, col=col
+            )
+    
+    # Add a separate legend
+    legend_fig = go.Figure()
+    for tested_task in ALL_TASKS:
+        legend_fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode='lines+markers',
+                name=tested_task,
+                line=dict(color=TASK_COLORS[tested_task], width=3),
+                marker=dict(size=10),
+                showlegend=True
+            )
+        )
+    
+    # Update layout
+    fig.update_layout(
+        title=f"Sequential Task Performance Evolution<br><sub>Task Sequence: {task_sequence} | Training Type: {training_type}</sub>",
+        title_x=0.5,
+        title_font_size=16,
+        height=800,
+        width=1200,
+        font=dict(size=12),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
+    )
+    
+    # Update axes for each subplot
+    for i in range(1, 3):
+        for j in range(1, 3):
+            fig.update_xaxes(
+                title_text="Training Phase",
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='lightgray',
+                row=i, col=j
+            )
+            fig.update_yaxes(
+                title_text="Mean Reward",
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='lightgray',
+                row=i, col=j
+            )
+    
+    return fig
+
+
+def create_task_specific_topology_comparison_plot(
+    sweep_results: Dict, 
+    task_sequence: str,
+    tested_task: str,
+    training_type: str = 'double_task'
+) -> go.Figure:
+    """
+    Create topology comparison plot for a specific tested task.
+    Shows how all 4 topologies perform on one specific task throughout training.
+    
+    Args:
+        sweep_results: Dictionary containing results from all topologies
+        task_sequence: Task sequence string (e.g., 'LunarLander-v2_CartPole-v1')
+        tested_task: The specific task being tested (e.g., 'CartPole-v1')
+        training_type: Type of training ('double_task' or 'triple_task')
+    
+    Returns:
+        Plotly figure showing topology comparison for one specific task
+    """
+    
+    trained_tasks, num_phases = parse_task_sequence(task_sequence)
+    
+    fig = go.Figure()
+    
+    # X-axis labels: training phases
+    x_labels = []
+    for i, task in enumerate(trained_tasks):
+        if i == 0:
+            x_labels.append(f"Initial\n{task}")
+        else:
+            x_labels.append(f"After {task}")
+    
+    # For each topology
+    for topology_type in ALL_TOPOLOGIES:
+        performance_data = []
+        
+        # Get results for this topology and task sequence
+        topology_key = f"{topology_type}/{task_sequence}"
+        
+        # Collect performance data for each phase
+        for phase_num in range(1, num_phases + 1):
+            metric_key = f"{topology_key}/phase{phase_num}/testing/{tested_task}/mean_reward"
+            
+            if metric_key in sweep_results:
+                performance_data.append(sweep_results[metric_key])
+            else:
+                performance_data.append(None)
+        
+        # Add line for this topology
+        fig.add_trace(
+            go.Scatter(
+                x=x_labels,
+                y=performance_data,
+                mode='lines+markers',
+                name=topology_type.replace('_', ' ').title(),
+                line=dict(
+                    color=TOPOLOGY_COLORS[topology_type],
+                    width=3
+                ),
+                marker=dict(
+                    size=10,
+                    symbol='circle' if topology_type == 'fully_connected' else 'square' if topology_type == 'small_world' else 'diamond' if topology_type == 'modular' else 'triangle-up'
+                ),
+                hovertemplate=f'<b>{topology_type.replace("_", " ").title()}</b><br>' +
+                            f'Task: {tested_task}<br>' +
+                            f'Phase: %{{x}}<br>' +
+                            f'Performance: %{{y:.2f}}<br>' +
+                            '<extra></extra>'
+            )
+        )
+    
+    # Update layout
+    fig.update_layout(
+        title=f"Topology Comparison: Performance on {tested_task}<br><sub>Task Sequence: {task_sequence} | Training Type: {training_type}</sub>",
+        title_x=0.5,
+        title_font_size=16,
+        height=600,
+        width=800,
+        font=dict(size=14),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis_title="Training Phase",
+        yaxis_title="Mean Reward",
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+    
+    # Update axes
+    fig.update_xaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgray'
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgray'
+    )
+    
+    return fig
+
+
+def create_single_topology_sequential_plot(
+    sweep_results: Dict, 
+    topology_type: str,
+    task_sequence: str,
+    training_type: str = 'double_task'
+) -> go.Figure:
+    """
+    Create sequential performance plot for a single topology.
+    This provides a clearer view of continual learning patterns.
+    
+    Args:
+        sweep_results: Dictionary containing results
+        topology_type: Type of topology to plot
+        task_sequence: Task sequence string
+        training_type: Type of training
+    
+    Returns:
+        Plotly figure showing sequential performance for one topology
+    """
+    
+    trained_tasks, num_phases = parse_task_sequence(task_sequence)
+    
+    fig = go.Figure()
+    
+    # X-axis labels: training phases
+    x_labels = []
+    for i, task in enumerate(trained_tasks):
+        if i == 0:
+            x_labels.append(f"Initial\n{task}")
+        else:
+            x_labels.append(f"After {task}")
+    
+    # Get results for this topology and task sequence
+    topology_key = f"{topology_type}/{task_sequence}"
+    
+    # For each tested task
+    for tested_task in ALL_TASKS:
+        performance_data = []
+        
+        # Collect performance data for each phase
+        for phase_num in range(1, num_phases + 1):
+            metric_key = f"{topology_key}/phase{phase_num}/testing/{tested_task}/mean_reward"
+            
+            if metric_key in sweep_results:
+                performance_data.append(sweep_results[metric_key])
+            else:
+                performance_data.append(None)
+        
+        # Add line for this task
+        fig.add_trace(
+            go.Scatter(
+                x=x_labels,
+                y=performance_data,
+                mode='lines+markers',
+                name=tested_task,
+                line=dict(
+                    color=TASK_COLORS[tested_task],
+                    width=3
+                ),
+                marker=dict(
+                    size=10,
+                    symbol='circle'
+                ),
+                hovertemplate=f'<b>{tested_task}</b><br>' +
+                            f'Topology: {topology_type}<br>' +
+                            f'Phase: %{{x}}<br>' +
+                            f'Performance: %{{y:.2f}}<br>' +
+                            '<extra></extra>'
+            )
+        )
+    
+    # Update layout
+    fig.update_layout(
+        title=f"Sequential Task Performance: {topology_type.replace('_', ' ').title()}<br><sub>Task Sequence: {task_sequence} | Training Type: {training_type}</sub>",
+        title_x=0.5,
+        title_font_size=16,
+        height=600,
+        width=800,
+        font=dict(size=14),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis_title="Training Phase",
+        yaxis_title="Mean Reward",
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        )
+    )
+    
+    # Update axes
+    fig.update_xaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgray'
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgray'
+    )
+    
+    return fig
+
+
 def create_task_order_effects_plot(
     sweep_results: Dict, 
     topology_type: str,
@@ -489,6 +845,23 @@ def generate_all_plots_for_sweep(sweep_results: Dict) -> Dict:
                 sweep_results, topology, task_order
             )
         
+        # Sequential performance plot (all topologies comparison)
+        plots['sequential_performance_comparison'] = create_sequential_task_performance_plot(
+            sweep_results, task_order, 'double_task'
+        )
+        
+        # Individual sequential performance plots for each topology
+        for topology in ALL_TOPOLOGIES:
+            plots[f'sequential_performance_{topology}'] = create_single_topology_sequential_plot(
+                sweep_results, topology, task_order, 'double_task'
+            )
+        
+        # Task-specific topology comparison plots (one for each tested task)
+        for tested_task in ALL_TASKS:
+            plots[f'topology_comparison_{tested_task}'] = create_task_specific_topology_comparison_plot(
+                sweep_results, task_order, tested_task, 'double_task'
+            )
+        
         all_plots[f'double_task_{task_order}'] = plots
     
     # Generate plots for each triple-task order  
@@ -515,6 +888,23 @@ def generate_all_plots_for_sweep(sweep_results: Dict) -> Dict:
         for topology in ALL_TOPOLOGIES:
             plots[f'capacity_scaling_{topology}'] = create_capacity_scaling_for_task_order(
                 sweep_results, topology, task_order
+            )
+        
+        # Sequential performance plot (all topologies comparison)
+        plots['sequential_performance_comparison'] = create_sequential_task_performance_plot(
+            sweep_results, task_order, 'triple_task'
+        )
+        
+        # Individual sequential performance plots for each topology
+        for topology in ALL_TOPOLOGIES:
+            plots[f'sequential_performance_{topology}'] = create_single_topology_sequential_plot(
+                sweep_results, topology, task_order, 'triple_task'
+            )
+        
+        # Task-specific topology comparison plots (one for each tested task)
+        for tested_task in ALL_TASKS:
+            plots[f'topology_comparison_{tested_task}'] = create_task_specific_topology_comparison_plot(
+                sweep_results, task_order, tested_task, 'triple_task'
             )
         
         all_plots[f'triple_task_{task_order}'] = plots
@@ -596,4 +986,22 @@ def log_comprehensive_plots_for_run(
     # 5. Task order effects (if multiple task sequences available)
     if sweep_results:
         task_order_plot = create_task_order_effects_plot(sweep_results, topology_type)
-        wandb_run.log({f"{topology_type}/plots/task_order_effects": task_order_plot}) 
+        wandb_run.log({f"{topology_type}/plots/task_order_effects": task_order_plot})
+    
+    # 6. Sequential performance plot (CRUCIAL for continual learning analysis)
+    if sweep_results:
+        sequential_plot = create_sequential_task_performance_plot(sweep_results, task_sequence)
+        wandb_run.log({f"{topology_type}/{task_sequence}/plots/sequential_performance": sequential_plot})
+    
+    # 7. Single topology sequential plot (clearer view for this topology)
+    if sweep_results:
+        single_topology_plot = create_single_topology_sequential_plot(sweep_results, topology_type, task_sequence)
+        wandb_run.log({f"{topology_type}/{task_sequence}/plots/sequential_performance_single": single_topology_plot})
+    
+    # 8. Task-specific topology comparison plots (one for each tested task)
+    if sweep_results:
+        for tested_task in ALL_TASKS:
+            task_comparison_plot = create_task_specific_topology_comparison_plot(
+                sweep_results, task_sequence, tested_task
+            )
+            wandb_run.log({f"{topology_type}/{task_sequence}/plots/topology_comparison_{tested_task}": task_comparison_plot}) 

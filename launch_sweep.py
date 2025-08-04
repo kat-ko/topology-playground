@@ -465,7 +465,7 @@ def launch_fixed_network_sizes_comparison_sweep(training_type='single_task'):
     size_count = 4
     
     if training_type == 'baseline' or training_type == 'single_task':
-        task_count = 3  # CartPole, Acrobot, MountainCar
+        task_count = 3  # CartPole, Acrobot, LunarLander
     elif training_type == 'double_task':
         task_count = 6  # 6 valid task combinations (no duplicates)
     elif training_type == 'triple_task':
@@ -549,7 +549,7 @@ def launch_simplified_single_task_sweep():
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
     print(f"   • Parameters: {len(sweep_config['parameters'])}")
-    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (LunarLander-v2 removed)")
     
     sweep_id = wandb.sweep(sweep_config, **agent_config)
     print(f"✅ Simplified single-task sweep created with ID: {sweep_id}")
@@ -570,7 +570,7 @@ def launch_simplified_double_task_sweep():
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
     print(f"   • Parameters: {len(sweep_config['parameters'])}")
-    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (LunarLander-v2 removed)")
     
     sweep_id = wandb.sweep(sweep_config, **agent_config)
     print(f"✅ Simplified double-task sweep created with ID: {sweep_id}")
@@ -591,7 +591,7 @@ def launch_simplified_baseline_sweep():
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
     print(f"   • Parameters: {len(sweep_config['parameters'])}")
-    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (MountainCar-v0 removed)")
+    print(f"   • Tasks: CartPole-v1, Acrobot-v1 (LunarLander-v2 removed)")
     
     sweep_id = wandb.sweep(sweep_config, **agent_config)
     print(f"✅ Simplified baseline sweep created with ID: {sweep_id}")
