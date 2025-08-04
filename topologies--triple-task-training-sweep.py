@@ -687,42 +687,104 @@ def initialize_wandb_run(config, topology_type, training_type='triple_task'):
         tags=tags
     )
 
-def create_run_name(config, topology_type, training_type):
-    """Create descriptive run name."""
+def create_run_name(config, topology_type, training_type, actual_capacity=None):
+    """Create descriptive run name with exact capacity and size information."""
     
-    # Base name
-    name_parts = [training_type, topology_type]
+    # Get topology abbreviation
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
     
-    # Add capacity or size information
+    # Get capacity and size information
     if 'target_capacity' in config:
-        name_parts.append(f"cap{config.get('target_capacity')}")
+        # Fixed capacity experiment - show target capacity and actual size
+        target_capacity = config.get('target_capacity')
+        actual_size = config.get('hidden_size', 'unknown')
+        capacity_str = f"C{target_capacity}"
+        size_str = f"S{actual_size}"
     elif 'hidden_size' in config:
-        name_parts.append(f"size{config.get('hidden_size')}")
+        # Fixed size experiment - show actual capacity and target size
+        target_size = config.get('hidden_size')
+        if actual_capacity is not None:
+            capacity_str = f"C{actual_capacity}"
+        else:
+            # Placeholder that will be updated after training
+            capacity_str = f"C{target_size * 10}"
+        size_str = f"S{target_size}"
+    else:
+        capacity_str = "Cunknown"
+        size_str = "Sunknown"
     
-    # Add task information
+    # Build task sequence
     if training_type == 'triple_task':
         task_order = config.get('task_order', 'LunarLander-v2_Acrobot-v1_CartPole-v1')
         tasks = task_order.split('_')
-        name_parts.extend(tasks)
+        # Abbreviate task names
+        task_abbrevs = []
+        for task in tasks:
+            if 'LunarLander' in task:
+                task_abbrevs.append('LL')
+            elif 'Acrobot' in task:
+                task_abbrevs.append('AC')
+            elif 'CartPole' in task:
+                task_abbrevs.append('CP')
+            elif 'MountainCar' in task:
+                task_abbrevs.append('MC')
+            else:
+                task_abbrevs.append(task)
+        task_sequence = '-'.join(task_abbrevs)
+    else:
+        task_sequence = "unknown"
+    
+    # Build name parts
+    name_parts = [topology_abbrev, capacity_str, size_str, task_sequence]
     
     return "_".join(name_parts)
 
+def update_run_name_with_actual_capacity(wandb_run, actual_capacity, topology_type, training_type):
+    """Update the run name with the actual capacity after training."""
+    if wandb_run and actual_capacity is not None:
+        new_name = create_run_name(wandb_run.config, topology_type, training_type, actual_capacity)
+        wandb_run.name = new_name
+        # Also update the actual_capacity tag
+        wandb_run.config.update({'actual_capacity': actual_capacity})
+        wandb_run.log({'actual_capacity': actual_capacity})
+
 def create_run_tags(config, topology_type, training_type):
-    """Create tags for easy filtering and organization."""
+    """Create comprehensive tags for easy filtering and organization."""
     
+    # Primary tags
     tags = [
-        training_type,
         topology_type,
-        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
-        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
-        "normalized_metrics"  # Indicate that normalized metrics are used
+        training_type,
+        "normalized_metrics"
     ]
     
-    # Add task tags
+    # Capacity and size tags
+    if 'target_capacity' in config:
+        tags.extend([
+            "fixed_capacity",
+            f"target_capacity_{config.get('target_capacity')}",
+            "capacity_matched"
+        ])
+        if 'hidden_size' in config:
+            tags.append(f"size_value_{config.get('hidden_size')}")
+    elif 'hidden_size' in config:
+        tags.extend([
+            "fixed_size", 
+            f"size_value_{config.get('hidden_size')}",
+            "size_matched"
+        ])
+    
+    # Task sequence tags
     if training_type == 'triple_task':
-        task_order = config.get('task_order', 'LunarLander-v2_CartPole-v1_Acrobot-v1')
+        task_order = config.get('task_order', 'LunarLander-v2_Acrobot-v1_CartPole-v1')
         tasks = task_order.split('_')
         tags.extend(tasks)
+        tags.append(f"task_sequence_{task_order}")
     
     return tags
 
@@ -1108,6 +1170,12 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
             'config': config
         }
     )
+    
+    # Calculate actual capacity and update run name
+    if wandb.run is not None:
+        actual_capacity = model.policy._get_topology_params(model.policy.topology_network)
+        update_run_name_with_actual_capacity(wandb.run, actual_capacity, topology_type, 'triple_task')
+        print(f"📊 Actual capacity: {actual_capacity:,} parameters")
     
     # Create callback
     callback = EnhancedDebugCallback(wandb_run=wandb.run, log_freq=1000)
