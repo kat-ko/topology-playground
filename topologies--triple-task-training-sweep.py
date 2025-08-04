@@ -4,6 +4,7 @@ Triple-Task Topology Networks with Weights & Biases Sweep Support
 
 This script is a modified version of the triple-task training script that can work with wandb sweeps
 for hyperparameter optimization. It reads hyperparameters from wandb.config and runs training accordingly.
+Includes reward scaling and task normalization for fair comparison across tasks.
 """
 
 import torch
@@ -43,6 +44,14 @@ from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
+from src.utils.task_normalization import (
+    compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
+    get_task_thresholds, get_normalization_constants, normalize_reward
+)
+from src.utils.advanced_plotting import (
+    log_comprehensive_plots_for_run, create_multi_phase_learning_curves
+)
+from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 
 # ============================================================================
 # UNIVERSAL ACTION SPACE WRAPPER
@@ -92,6 +101,10 @@ class UniversalActionWrapper(gym.Wrapper):
         Map universal action to task-specific action and step the environment.
         Pad observations to universal dimensions.
         """
+        # Convert numpy array to integer for dictionary lookup
+        if isinstance(action, np.ndarray):
+            action = int(action.item())
+        
         # Map universal action to task-specific action
         if action in self.current_mapping:
             mapped_action = self.current_mapping[action]
@@ -175,29 +188,19 @@ class DebugTopologyPolicy(ActorCriticPolicy):
             k = getattr(wandb.config, 'small_world_k', 4) if wandb.run else 4
             p = getattr(wandb.config, 'small_world_p', 0.2) if wandb.run else 0.2
             return SmallWorldTopology(
-                input_size=6,
-                hidden_size=self.hidden_size,
-                output_size=self.hidden_size,
-                num_layers=self.num_layers,
+                size=self.hidden_size,
                 k=k,
-                p=p,
-                activation=self.activation,
-                dropout=self.dropout
+                p=p
             )
         elif self.topology_type == 'modular':
             num_modules = getattr(wandb.config, 'modular_num_modules', 4) if wandb.run else 4
             inter_prob = getattr(wandb.config, 'modular_inter_module_prob', 0.1) if wandb.run else 0.1
             intra_prob = getattr(wandb.config, 'modular_intra_module_prob', 0.8) if wandb.run else 0.8
             return ModularTopology(
-                input_size=6,
-                hidden_size=self.hidden_size,
-                output_size=self.hidden_size,
-                num_layers=self.num_layers,
+                size=self.hidden_size,
                 num_modules=num_modules,
                 inter_module_prob=inter_prob,
-                intra_module_prob=intra_prob,
-                activation=self.activation,
-                dropout=self.dropout
+                intra_module_prob=intra_prob
             )
         elif self.topology_type == 'hybrid':
             num_modules = getattr(wandb.config, 'hybrid_num_modules', 4) if wandb.run else 4
@@ -205,16 +208,11 @@ class DebugTopologyPolicy(ActorCriticPolicy):
             p = getattr(wandb.config, 'hybrid_p', 0.2) if wandb.run else 0.2
             inter_prob = getattr(wandb.config, 'hybrid_inter_module_prob', 0.1) if wandb.run else 0.1
             return HybridTopology(
-                input_size=6,
-                hidden_size=self.hidden_size,
-                output_size=self.hidden_size,
-                num_layers=self.num_layers,
+                size=self.hidden_size,
                 num_modules=num_modules,
                 k=k,
                 p=p,
-                inter_module_prob=inter_prob,
-                activation=self.activation,
-                dropout=self.dropout
+                inter_module_prob=inter_prob
             )
         else:
             raise ValueError(f"Unknown topology type: {self.topology_type}")
@@ -304,6 +302,9 @@ class EnhancedDebugCallback(BaseCallback):
         self.step_count = 0
         self.rollout_count = 0
         
+        # Global step counter for wandb (continues across phases)
+        self.global_timesteps = 0
+        
         # Sequential training tracking
         self.current_task_phase = 0
         self.task_phases = []
@@ -330,12 +331,17 @@ class EnhancedDebugCallback(BaseCallback):
     def set_task_phase(self, task_name, phase_number):
         """Set the current task phase for sequential training."""
         self.current_task_phase = phase_number
+        
+        # Initialize global timesteps if this is the first phase
+        if phase_number == 0:
+            self.global_timesteps = 0
+        
         self.task_phases.append({
             'phase': phase_number,
             'task': task_name,
-            'start_timesteps': self.num_timesteps if hasattr(self, 'num_timesteps') else 0
+            'start_timesteps': self.global_timesteps
         })
-        self.phase_start_timesteps.append(self.num_timesteps if hasattr(self, 'num_timesteps') else 0)
+        self.phase_start_timesteps.append(self.global_timesteps)
         
         # Reset phase-specific metrics
         self.phase_metrics = {
@@ -351,12 +357,13 @@ class EnhancedDebugCallback(BaseCallback):
             wandb.log({
                 'sequential_training/phase_start': phase_number,
                 'sequential_training/current_task': task_name,
-                'sequential_training/total_timesteps': self.num_timesteps if hasattr(self, 'num_timesteps') else 0
-            })
+                'sequential_training/total_timesteps': self.global_timesteps
+            }, step=self.global_timesteps)
     
     def _on_step(self) -> bool:
         """Log metrics on each step."""
         self.step_count += 1
+        self.global_timesteps += 1
         
         if self.num_timesteps % self.log_freq == 0 and wandb.run:
             self._log_training_metrics()
@@ -369,7 +376,7 @@ class EnhancedDebugCallback(BaseCallback):
                 'training/mean_length': np.mean(self.episode_lengths[-100:]) if self.episode_lengths else 0,
                 'sequential_training/current_phase': self.current_task_phase,
                 'sequential_training/phase_timesteps': self.num_timesteps - (self.phase_start_timesteps[-1] if self.phase_start_timesteps else 0)
-            })
+            }, step=self.global_timesteps)
         return True
     
     def _on_rollout_end(self) -> None:
@@ -384,7 +391,7 @@ class EnhancedDebugCallback(BaseCallback):
                 'rollout/mean_reward': np.mean(self.episode_rewards[-self.n_envs:]) if self.episode_rewards else 0,
                 'rollout/mean_length': np.mean(self.episode_lengths[-self.n_envs:]) if self.episode_lengths else 0,
                 'sequential_training/phase': self.current_task_phase
-            })
+            }, step=self.global_timesteps)
     
     def _on_training_end(self) -> None:
         """Log final training summary."""
@@ -396,8 +403,8 @@ class EnhancedDebugCallback(BaseCallback):
                 wandb.log({
                     'sequential_training/total_phases': len(self.task_phases),
                     'sequential_training/final_phase': self.current_task_phase,
-                    'sequential_training/total_timesteps': self.num_timesteps
-                })
+                    'sequential_training/total_timesteps': self.global_timesteps
+                }, step=self.global_timesteps)
     
     def _log_training_metrics(self):
         """Log detailed training metrics with phase tracking."""
@@ -434,8 +441,14 @@ class EnhancedDebugCallback(BaseCallback):
                     metrics.update({
                         "network/actor_parameters": actor_params,
                         "network/critic_parameters": critic_params,
-                        "network/total_parameters": actor_params + critic_params,
                     })
+                    
+                    # Calculate total parameters if both are dictionaries with 'size' key
+                    if isinstance(actor_params, dict) and isinstance(critic_params, dict):
+                        actor_size = actor_params.get('size', 0)
+                        critic_size = critic_params.get('size', 0)
+                        total_params = actor_size + critic_size
+                        metrics["network/total_parameters"] = total_params
                     
                     # Add enhanced graph metrics
                     self._log_graph_metrics()
@@ -443,7 +456,7 @@ class EnhancedDebugCallback(BaseCallback):
                     self._log_sample_efficiency()
                     self._log_hyperparameter_correlation()
                 
-                wandb.log(metrics, step=self.num_timesteps)
+                wandb.log(metrics, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging training metrics: {e}")
     
@@ -472,7 +485,7 @@ class EnhancedDebugCallback(BaseCallback):
                         metrics[f'phase_{self.current_task_phase}/rollout_obs_std'] = obs_std
                         metrics[f'phase_{self.current_task_phase}/task'] = current_task
                     
-                    wandb.log(metrics, step=self.num_timesteps)
+                    wandb.log(metrics, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging rollout metrics: {e}")
     
@@ -511,17 +524,21 @@ class EnhancedDebugCallback(BaseCallback):
                 actor_topology = self.model.policy.actor_topology
                 critic_topology = self.model.policy.critic_topology
                 
+                # Generate graphs from topology objects
+                actor_graph = actor_topology.generate() if hasattr(actor_topology, 'generate') else None
+                critic_graph = critic_topology.generate() if hasattr(critic_topology, 'generate') else None
+                
                 # Actor metrics
-                actor_metrics = self._calculate_graph_metrics(actor_topology, 'actor')
+                actor_metrics = self._calculate_graph_metrics(actor_graph, 'actor')
                 for key, value in actor_metrics.items():
-                    wandb.log({f'graph/actor/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.num_timesteps)
-                    wandb.log({f'phase_{self.current_task_phase}/actor/{key}': value}, step=self.num_timesteps)
+                    wandb.log({f'graph/actor/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.global_timesteps)
+                    wandb.log({f'phase_{self.current_task_phase}/actor/{key}': value}, step=self.global_timesteps)
                 
                 # Critic metrics
-                critic_metrics = self._calculate_graph_metrics(critic_topology, 'critic')
+                critic_metrics = self._calculate_graph_metrics(critic_graph, 'critic')
                 for key, value in critic_metrics.items():
-                    wandb.log({f'graph/critic/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.num_timesteps)
-                    wandb.log({f'phase_{self.current_task_phase}/critic/{key}': value}, step=self.num_timesteps)
+                    wandb.log({f'graph/critic/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.global_timesteps)
+                    wandb.log({f'phase_{self.current_task_phase}/critic/{key}': value}, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging graph metrics: {e}")
     
@@ -556,17 +573,21 @@ class EnhancedDebugCallback(BaseCallback):
                 actor_topology = self.model.policy.actor_topology
                 critic_topology = self.model.policy.critic_topology
                 
+                # Generate graphs from topology objects
+                actor_graph = actor_topology.generate() if hasattr(actor_topology, 'generate') else None
+                critic_graph = critic_topology.generate() if hasattr(critic_topology, 'generate') else None
+                
                 # Actor depth analysis
-                actor_depth = self._calculate_depth_metrics(actor_topology, 'actor')
+                actor_depth = self._calculate_depth_metrics(actor_graph, 'actor')
                 for key, value in actor_depth.items():
-                    wandb.log({f'depth/actor/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.num_timesteps)
-                    wandb.log({f'phase_{self.current_task_phase}/actor_depth/{key}': value}, step=self.num_timesteps)
+                    wandb.log({f'depth/actor/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.global_timesteps)
+                    wandb.log({f'phase_{self.current_task_phase}/actor_depth/{key}': value}, step=self.global_timesteps)
                 
                 # Critic depth analysis
-                critic_depth = self._calculate_depth_metrics(critic_topology, 'critic')
+                critic_depth = self._calculate_depth_metrics(critic_graph, 'critic')
                 for key, value in critic_depth.items():
-                    wandb.log({f'depth/critic/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.num_timesteps)
-                    wandb.log({f'phase_{self.current_task_phase}/critic_depth/{key}': value}, step=self.num_timesteps)
+                    wandb.log({f'depth/critic/{key}': value, 'sequential_training/phase': self.current_task_phase}, step=self.global_timesteps)
+                    wandb.log({f'phase_{self.current_task_phase}/critic_depth/{key}': value}, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging depth analysis: {e}")
     
@@ -609,12 +630,12 @@ class EnhancedDebugCallback(BaseCallback):
                         'sample_efficiency/recent_mean_reward': np.mean(recent_rewards),
                         'sample_efficiency/efficiency_score': sample_efficiency,
                         'sequential_training/phase': self.current_task_phase
-                    }, step=self.num_timesteps)
+                    }, step=self.global_timesteps)
                     
                     wandb.log({
                         f'phase_{self.current_task_phase}/sample_efficiency/recent_mean_reward': np.mean(recent_rewards),
                         f'phase_{self.current_task_phase}/sample_efficiency/efficiency_score': sample_efficiency
-                    }, step=self.num_timesteps)
+                    }, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging sample efficiency: {e}")
     
@@ -635,14 +656,245 @@ class EnhancedDebugCallback(BaseCallback):
                             'hyperparameter_correlation/learning_rate': current_lr,
                             'hyperparameter_correlation/reward_trend': reward_trend,
                             'sequential_training/phase': self.current_task_phase
-                        }, step=self.num_timesteps)
+                        }, step=self.global_timesteps)
                         
                         wandb.log({
                             f'phase_{self.current_task_phase}/hyperparameter_correlation/learning_rate': current_lr,
                             f'phase_{self.current_task_phase}/hyperparameter_correlation/reward_trend': reward_trend
-                        }, step=self.num_timesteps)
+                        }, step=self.global_timesteps)
         except Exception as e:
             print(f"   ⚠️  Error logging hyperparameter correlation: {e}")
+
+# ============================================================================
+# IMPROVED LOGGING SYSTEM WITH REWARD SCALING
+# ============================================================================
+
+def initialize_wandb_run(config, topology_type, training_type='triple_task'):
+    """Initialize wandb with proper naming and configuration."""
+    
+    # Create descriptive run name
+    run_name = create_run_name(config, topology_type, training_type)
+    
+    # Create tags for easy filtering
+    tags = create_run_tags(config, topology_type, training_type)
+    
+    # Initialize wandb
+    wandb.init(
+        project="topology-playground",
+        entity="katko-it-universitetet-i-k-benhavn",
+        config=config,
+        name=run_name,
+        tags=tags
+    )
+
+def create_run_name(config, topology_type, training_type):
+    """Create descriptive run name."""
+    
+    # Base name
+    name_parts = [training_type, topology_type]
+    
+    # Add capacity or size information
+    if 'target_capacity' in config:
+        name_parts.append(f"cap{config.get('target_capacity')}")
+    elif 'hidden_size' in config:
+        name_parts.append(f"size{config.get('hidden_size')}")
+    
+    # Add task information
+    if training_type == 'triple_task':
+        task_order = config.get('task_order', 'Acrobot-v1_CartPole-v1_MountainCar-v0')
+        tasks = task_order.split('_')
+        name_parts.extend(tasks)
+    
+    return "_".join(name_parts)
+
+def create_run_tags(config, topology_type, training_type):
+    """Create tags for easy filtering and organization."""
+    
+    tags = [
+        training_type,
+        topology_type,
+        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
+        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
+        "normalized_metrics"  # Indicate that normalized metrics are used
+    ]
+    
+    # Add task tags
+    if training_type == 'triple_task':
+        task_order = config.get('task_order', 'CartPole-v1_Acrobot-v1_MountainCar-v0')
+        tasks = task_order.split('_')
+        tags.extend(tasks)
+    
+    return tags
+
+def log_baseline_results(wandb_run, baseline_results, topology_type):
+    """Log baseline evaluation results with hierarchical structure and normalization."""
+    
+    for task, results in baseline_results.items():
+        # Raw metrics
+        wandb_run.log({
+            f'baseline/{task}/raw/mean_reward': results['mean_reward'],
+            f'baseline/{task}/raw/success_rate': results['success_rate'],
+            f'baseline/{task}/raw/mean_length': np.mean(results['lengths']),
+            f'baseline/{task}/raw/std_reward': np.std(results['rewards']),
+            f'baseline/{task}/raw/std_length': np.std(results['lengths'])
+        })
+        
+        # Normalized metrics
+        normalized_reward = normalize_reward(results['mean_reward'], task)
+        wandb_run.log({
+            f'baseline/{task}/normalized/reward': normalized_reward,
+            f'baseline/{task}/normalized/efficiency': results.get('efficiency_score', 1.0)
+        })
+
+def log_phase_results(wandb_run, phase_results, phase_idx, topology_type, task_order=None):
+    """Log results after each training phase with topology-aware naming."""
+    
+    for task, results in phase_results.items():
+        context = results['context']
+        
+        # Topology-aware metric names for easy comparison
+        base_path = f"{topology_type}/{task_order}/{context}" if task_order else f"{topology_type}/phase{phase_idx}"
+        
+        # Raw metrics with topology context
+        wandb_run.log({
+            f'{base_path}/{task}/raw/mean_reward': results['mean_reward'],
+            f'{base_path}/{task}/raw/success_rate': results['success_rate'],
+            f'{base_path}/{task}/raw/mean_length': np.mean(results['lengths']),
+            f'{base_path}/{task}/raw/std_reward': np.std(results['rewards']),
+            f'{base_path}/{task}/raw/std_length': np.std(results['lengths'])
+        })
+        
+        # Normalized metrics with topology context
+        normalized_reward = normalize_reward(results['mean_reward'], task)
+        wandb_run.log({
+            f'{base_path}/{task}/normalized/reward': normalized_reward,
+            f'{base_path}/{task}/normalized/efficiency': results.get('efficiency_score', 1.0),
+            f'{base_path}/{task}/normalized/steps_to_threshold': results.get('steps_to_threshold', 0)
+        })
+        
+        # Legacy phase-based metrics for backward compatibility
+        wandb_run.log({
+            f'phase{phase_idx}/{task}/{context}/raw/mean_reward': results['mean_reward'],
+            f'phase{phase_idx}/{task}/{context}/raw/success_rate': results['success_rate'],
+            f'phase{phase_idx}/{task}/{context}/raw/mean_length': np.mean(results['lengths']),
+            f'phase{phase_idx}/{task}/{context}/raw/std_reward': np.std(results['rewards']),
+            f'phase{phase_idx}/{task}/{context}/raw/std_length': np.std(results['lengths']),
+            f'phase{phase_idx}/{task}/{context}/normalized/reward': normalized_reward,
+            f'phase{phase_idx}/{task}/{context}/normalized/efficiency': results.get('efficiency_score', 1.0),
+            f'phase{phase_idx}/{task}/{context}/normalized/steps_to_threshold': results.get('steps_to_threshold', 0)
+        })
+        
+        # Add task order context if provided
+        if task_order:
+            wandb_run.log({
+                f'phase{phase_idx}/task_order': task_order,
+                f'phase{phase_idx}/current_task': task,
+                f'{base_path}/task_order': task_order,
+                f'{base_path}/current_task': task
+            })
+
+def log_normalized_metrics(wandb_run, task_metrics, phase_idx, topology_type, task_order=None):
+    """Log comprehensive normalized metrics with topology context."""
+    
+    base_path = f"{topology_type}/{task_order}" if task_order else f"{topology_type}/phase{phase_idx}"
+    
+    # Task-specific normalized metrics with topology context
+    for task, metrics in task_metrics.items():
+        wandb_run.log({
+            f'{base_path}/normalized/{task}/normalized_reward': metrics['normalized_reward'],
+            f'{base_path}/normalized/{task}/steps_to_threshold': metrics['steps_to_threshold'],
+            f'{base_path}/normalized/{task}/final_reward': metrics['final_reward'],
+            f'{base_path}/normalized/{task}/rolling_mean_final': metrics['rolling_mean_final']
+        })
+    
+    # Aggregated normalized metrics with topology context
+    final_normalized_score = np.mean([metrics['normalized_reward'] for metrics in task_metrics.values()])
+    efficiency_score = np.mean([metrics['steps_to_threshold'] for metrics in task_metrics.values()])
+    
+    wandb_run.log({
+        f'{base_path}/normalized/final_normalized_score': final_normalized_score,
+        f'{base_path}/normalized/efficiency_score': efficiency_score
+    })
+    
+    # Legacy metrics for backward compatibility
+    wandb_run.log({
+        f'normalized/phase{phase_idx}/final_normalized_score': final_normalized_score,
+        f'normalized/phase{phase_idx}/efficiency_score': efficiency_score
+    })
+
+def log_transfer_metrics(wandb_run, transfer_metrics, phase_idx, topology_type, task_order=None):
+    """Log transfer learning metrics with topology context."""
+    
+    base_path = f"{topology_type}/{task_order}/transfer" if task_order else f"{topology_type}/phase{phase_idx}/transfer"
+    
+    for metric_name, value in transfer_metrics.items():
+        # Topology-aware transfer metrics
+        wandb_run.log({
+            f'{base_path}/{metric_name}': value
+        })
+        
+        # Legacy metrics for backward compatibility
+        wandb_run.log({
+            f'phase{phase_idx}/transfer/{metric_name}': value
+        })
+    
+    # Normalized transfer metrics with topology context
+    if 'forward_transfer_score' in transfer_metrics:
+        wandb_run.log({
+            f'{base_path}/normalized_forward_transfer': transfer_metrics['forward_transfer_score']
+        })
+    
+    if 'backward_transfer_score' in transfer_metrics:
+        wandb_run.log({
+            f'{base_path}/normalized_backward_transfer': transfer_metrics['backward_transfer_score']
+        })
+
+def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None):
+    """Log final comprehensive analysis with topology context."""
+    
+    base_path = f"{topology_type}/{task_order}/final" if task_order else f"{topology_type}/final"
+    
+    # Raw performance metrics with topology context
+    wandb_run.log({
+        f'{base_path}/raw/mean_reward': final_analysis['final_mean_reward'],
+        f'{base_path}/raw/success_rate': final_analysis['final_success_rate'],
+        f'{base_path}/raw/mean_length': final_analysis['final_mean_length']
+    })
+    
+    # Normalized performance metrics with topology context
+    wandb_run.log({
+        f'{base_path}/normalized/final_normalized_score': final_analysis['final_normalized_score'],
+        f'{base_path}/normalized/efficiency_score': final_analysis['efficiency_score'],
+        f'{base_path}/normalized/parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0)
+    })
+    
+    # Transfer learning summary with topology context
+    wandb_run.log({
+        f'{base_path}/transfer/normalized_forward_transfer_score': final_analysis['forward_transfer_score'],
+        f'{base_path}/transfer/normalized_backward_transfer_score': final_analysis['backward_transfer_score'],
+        f'{base_path}/transfer/normalized_total_transfer_score': final_analysis['total_transfer_score']
+    })
+    
+    # Topology-specific normalized metrics
+    wandb_run.log({
+        f'{base_path}/topology/normalized_parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        f'{base_path}/topology/normalized_learning_stability': final_analysis.get('learning_stability', 0.0)
+    })
+    
+    # Legacy metrics for backward compatibility
+    wandb_run.log({
+        'final/raw/mean_reward': final_analysis['final_mean_reward'],
+        'final/raw/success_rate': final_analysis['final_success_rate'],
+        'final/raw/mean_length': final_analysis['final_mean_length'],
+        'final/normalized/final_normalized_score': final_analysis['final_normalized_score'],
+        'final/normalized/efficiency_score': final_analysis['efficiency_score'],
+        'final/normalized/parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        'final/transfer/normalized_forward_transfer_score': final_analysis['forward_transfer_score'],
+        'final/transfer/normalized_backward_transfer_score': final_analysis['backward_transfer_score'],
+        'final/transfer/normalized_total_transfer_score': final_analysis['total_transfer_score'],
+        f'final/topology/{topology_type}/normalized_parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        f'final/topology/{topology_type}/normalized_learning_stability': final_analysis.get('learning_stability', 0.0)
+    })
 
 # ============================================================================
 # CONFIGURATION AND UTILITY FUNCTIONS
@@ -692,14 +944,39 @@ def evaluate_model(model, env, n_eval_episodes=3):
     episode_lengths = []
     
     for episode in range(n_eval_episodes):
-        obs, _ = env.reset()
+        # Handle different reset return signatures
+        reset_result = env.reset()
+        if isinstance(reset_result, tuple):
+            if len(reset_result) == 2:
+                obs, _ = reset_result
+            else:
+                obs = reset_result[0]
+        else:
+            obs = reset_result
+        
         done = False
         total_reward = 0
         episode_length = 0
         
         while not done:
             action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, _ = env.step(action)
+            
+            # Handle different step return signatures
+            step_result = env.step(action)
+            if isinstance(step_result, tuple):
+                if len(step_result) == 5:
+                    obs, reward, done, truncated, _ = step_result
+                elif len(step_result) == 4:
+                    obs, reward, done, _ = step_result
+                    truncated = False
+                else:
+                    obs, reward, done = step_result
+                    truncated = False
+            else:
+                # Handle case where step returns a single value
+                obs, reward, done = step_result, 0, True
+                truncated = False
+            
             total_reward += reward
             episode_length += 1
             done = done or truncated
@@ -713,8 +990,8 @@ def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
     """Enhanced evaluation with task-specific metrics."""
     episode_rewards, episode_lengths = evaluate_model(model, env, n_eval_episodes)
     
-    # Calculate task-specific success rate
-    success_rate = calculate_success_rate(episode_rewards, episode_lengths, task_name)
+    # Calculate both success rate and completion percentage
+    success_rate, completion_pct = calculate_success_rate_with_completion(episode_rewards, episode_lengths, task_name)
     
     # Log evaluation metrics
     if wandb.run:
@@ -723,11 +1000,12 @@ def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
             f'evaluation/{task_name}/std_reward': np.std(episode_rewards),
             f'evaluation/{task_name}/mean_length': np.mean(episode_lengths),
             f'evaluation/{task_name}/success_rate': success_rate,
+            f'evaluation/{task_name}/completion_percentage': completion_pct,
             f'evaluation/{task_name}/episode_rewards': episode_rewards,
             f'evaluation/{task_name}/episode_lengths': episode_lengths
         })
     
-    return episode_rewards, episode_lengths, success_rate
+    return episode_rewards, episode_lengths, success_rate, completion_pct
 
 def calculate_success_rate(rewards, episode_lengths, task_name):
     """Calculate success rate based on task-specific criteria."""
@@ -735,8 +1013,8 @@ def calculate_success_rate(rewards, episode_lengths, task_name):
         # Success: episode length >= 195 (close to max of 500)
         return np.mean([length >= 195 for length in episode_lengths])
     elif task_name == 'Acrobot-v1':
-        # Success: reward >= -100 (close to optimal)
-        return np.mean([reward >= -100 for reward in rewards])
+        # Success: reward >= -80 (actual solved threshold)
+        return np.mean([reward >= -80 for reward in rewards])
     elif task_name == 'MountainCar-v0':
         # Success: reached the goal (reward >= -110)
         return np.mean([reward >= -110 for reward in rewards])
@@ -745,15 +1023,28 @@ def calculate_success_rate(rewards, episode_lengths, task_name):
         mean_reward = np.mean(rewards)
         return np.mean([reward >= mean_reward for reward in rewards])
 
+
+def calculate_success_rate_with_completion(rewards, episode_lengths, task_name):
+    """Calculate both success rate and reward completion percentage."""
+    from src.utils.task_normalization import calculate_success_rate_with_completion as calc_completion
+    
+    # Calculate traditional success rate
+    success_rate = calculate_success_rate(rewards, episode_lengths, task_name)
+    
+    # Calculate completion percentage
+    success_rate_pct, completion_pct = calc_completion(rewards, task_name)
+    
+    return success_rate, completion_pct
+
 # ============================================================================
 # MAIN TRAINING FUNCTION
 # ============================================================================
 
 def triple_task_training(policy_class, topology_type, config, num_layers=2, hidden_size=None, train_task_1=None, train_task_2=None, train_task_3=None):
     """
-    Triple-task training function with sweep support.
+    Triple-task training function with intermediate testing after each phase.
     
-    Sequential training: Train on task 1, then task 2, then task 3, then evaluate on all tasks.
+    Sequential training: Train on task 1, test on all tasks, then train on task 2, test on all tasks, then train on task 3, test on all tasks.
     
     Args:
         policy_class: Policy class to use
@@ -765,12 +1056,19 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         train_task_2: Second training task
         train_task_3: Third training task
     """
+    print("=" * 80)
     print(f"🎯 TRIPLE-TASK SEQUENTIAL TRAINING: {topology_type.upper()} TOPOLOGY")
-    print(f"   • Task 1: {train_task_1}")
-    print(f"   • Task 2: {train_task_2}")
-    print(f"   • Task 3: {train_task_3}")
+    print("=" * 80)
+    print(f"📋 Configuration:")
+    print(f"   • Task Sequence: {train_task_1} → {train_task_2} → {train_task_3}")
+    print(f"   • Topology Type: {topology_type}")
     print(f"   • Hidden Size: {hidden_size}")
     print(f"   • Layers: {num_layers}")
+    print(f"   • Total Timesteps per Phase: {config['total_timesteps']:,}")
+    print(f"   • Learning Rate: {config['learning_rate']}")
+    print(f"   • Batch Size: {config['batch_size']}")
+    print(f"   • Evaluation Episodes: {config['n_eval_episodes']}")
+    print("=" * 80)
     
     # Initialize wandb if not already done
     if wandb.run is None:
@@ -780,6 +1078,9 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
             config=config,
             name=f"triple_task_{topology_type}_{train_task_1}_{train_task_2}_{train_task_3}"
         )
+    
+    # Create task order string for topology-aware logging
+    task_order = f"{train_task_1}_{train_task_2}_{train_task_3}"
     
     # Create environments for sequential training
     env1 = DummyVecEnv([make_env(train_task_1)])
@@ -811,100 +1112,523 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     # Create callback
     callback = EnhancedDebugCallback(wandb_run=wandb.run, log_freq=1000)
     
-    # SEQUENTIAL TRAINING: Train on task 1
-    print(f"🚀 Training on {train_task_1}...")
-    callback.set_task_phase(train_task_1, 1)  # Set phase 1
-    model.learn(total_timesteps=config['total_timesteps'], callback=callback)
+    # ============================================================================
+    # PHASE 1: Train on task 1
+    # ============================================================================
+    print(f"\n🚀 PHASE 1: Training on {train_task_1}")
+    print("-" * 60)
+    print(f"📊 Training Progress:")
     
-    # SEQUENTIAL TRAINING: Switch to task 2 and continue training
-    print(f"🚀 Continuing training on {train_task_2}...")
+    callback.set_task_phase(train_task_1, 1)  # Set phase 1
+    
+    # Get task-specific training configuration
+    task1_timesteps = get_task_timesteps(train_task_1, config)
+    convergence_callback = create_convergence_callback(train_task_1, config, verbose=1)  # Enable verbose output
+    
+    print(f"📋 Task-specific training: {train_task_1} for {task1_timesteps:,} timesteps")
+    
+    # Create progress bar for training
+    with tqdm(total=task1_timesteps, desc=f"Training {train_task_1}", 
+              unit="steps", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
+        
+        # Custom callback to update progress bar
+        class ProgressCallback(BaseCallback):
+            def __init__(self, pbar):
+                super().__init__()
+                self.pbar = pbar
+                self.last_update = 0
+            
+            def _on_step(self) -> bool:
+                self.pbar.update(self.num_timesteps - self.last_update)
+                self.last_update = self.num_timesteps
+                return True
+        
+        # Create a callback to monitor training rewards in real-time
+        class RewardMonitorCallback(BaseCallback):
+            def __init__(self, task_name, log_interval=10000):
+                super().__init__()
+                self.task_name = task_name
+                self.log_interval = log_interval
+                self.last_log_step = 0
+                self.episode_rewards = []
+                self.episode_lengths = []
+            
+            def _on_step(self) -> bool:
+                # Collect episode rewards from the environment
+                if hasattr(self.training_env, 'get_episode_rewards'):
+                    rewards = self.training_env.get_episode_rewards()
+                    if rewards:
+                        self.episode_rewards.extend(rewards)
+                
+                # Log rewards periodically
+                if self.num_timesteps - self.last_log_step >= self.log_interval:
+                    self.last_log_step = self.num_timesteps
+                    
+                    if self.episode_rewards:
+                        recent_rewards = self.episode_rewards[-50:]  # Last 50 episodes
+                        mean_reward = np.mean(recent_rewards)
+                        max_reward = np.max(recent_rewards)
+                        min_reward = np.min(recent_rewards)
+                        
+                        print(f"🎯 {self.task_name}: Training rewards at {self.num_timesteps:,} steps - "
+                              f"Mean: {mean_reward:.2f}, Max: {max_reward:.2f}, Min: {min_reward:.2f} "
+                              f"(Last {len(recent_rewards)} episodes)")
+                
+                return True
+        
+        # Create a callback that integrates convergence monitoring with periodic evaluation
+        class ConvergenceEvaluationCallback(BaseCallback):
+            def __init__(self, convergence_callback, model, env, task_name, eval_interval=20000):
+                super().__init__()
+                self.convergence_callback = convergence_callback
+                self.model = model
+                self.env = env
+                self.task_name = task_name
+                self.eval_interval = eval_interval
+                self.last_eval_step = 0
+            
+            def _on_step(self) -> bool:
+                # Check if we should do a quick evaluation
+                if self.num_timesteps - self.last_eval_step >= self.eval_interval:
+                    self.last_eval_step = self.num_timesteps
+                    
+                    # Quick evaluation to check convergence
+                    try:
+                        rewards, lengths, success, completion = evaluate_model_enhanced(
+                            self.model, self.env, self.task_name, 5  # Quick eval with 5 episodes
+                        )
+                        mean_reward = np.mean(rewards)
+                        
+                        # Update convergence callback with evaluation results
+                        self.convergence_callback.update_with_evaluation(mean_reward, success)
+                        
+                        # Always print evaluation results for debugging
+                        print(f"📊 {self.task_name}: Quick eval at {self.num_timesteps:,} steps - Reward: {mean_reward:.2f}, Success: {success:.1%}, Completion: {completion:.1f}%")
+                        
+                        # Check convergence status
+                        if self.convergence_callback.should_stop:
+                            print(f"🎯 {self.task_name}: Early stopping triggered!")
+                        elif self.convergence_callback.verbose > 0:
+                            print(f"📊 {self.task_name}: Quick eval - Reward: {mean_reward:.2f}, Success: {success:.1%}, Completion: {completion:.1f}%")
+                    
+                    except Exception as e:
+                        # If evaluation fails, continue training
+                        if self.convergence_callback.verbose > 0:
+                            print(f"⚠️  {self.task_name}: Evaluation failed: {e}")
+                            import traceback
+                            print(f"   Traceback: {traceback.format_exc()}")
+                
+                return True
+        
+        # Combine callbacks (convergence callback will handle early stopping)
+        combined_callback = [
+            callback, 
+            convergence_callback, 
+            RewardMonitorCallback(train_task_1, log_interval=10000),  # Monitor training rewards
+            ConvergenceEvaluationCallback(convergence_callback, model, env1, train_task_1), 
+            ProgressCallback(pbar)
+        ]
+        model.learn(total_timesteps=task1_timesteps, callback=combined_callback)
+    
+    print(f"✅ Phase 1 Training Complete!")
+    
+    # ============================================================================
+    # INTERMEDIATE TESTING: Test on all tasks after Phase 1
+    # ============================================================================
+    print(f"\n📊 PHASE 1 TESTING: Evaluating on all tasks after training on {train_task_1}")
+    print("-" * 60)
+    
+    # Test on all available tasks
+    all_tasks = ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+    phase1_results = {}
+    
+    print(f"🔍 Testing on {len(all_tasks)} tasks:")
+    for task in tqdm(all_tasks, desc="Evaluating tasks", unit="task"):
+        eval_env = make_env(task)()
+        rewards, lengths, success, completion = evaluate_model_enhanced(
+            model, eval_env, task, config['n_eval_episodes']
+        )
+        phase1_results[task] = {
+            'rewards': rewards,
+            'lengths': lengths,
+            'success_rate': success,
+            'completion_percentage': completion,
+            'mean_reward': np.mean(rewards),
+            'std_reward': np.std(rewards),
+            'mean_length': np.mean(lengths),
+            'std_length': np.std(lengths)
+        }
+        eval_env.close()
+        
+        # Print immediate results for this task
+        print(f"   • {task}: {phase1_results[task]['mean_reward']:.2f} ± {phase1_results[task]['std_reward']:.2f} "
+              f"(Success: {phase1_results[task]['success_rate']:.1%}, Completion: {phase1_results[task]['completion_percentage']:.1f}%)")
+    
+    # Log Phase 1 results with topology-aware naming
+    if wandb.run:
+        for task, results in phase1_results.items():
+            wandb.log({
+                f'{topology_type}/{task_order}/phase1/testing/{task}/mean_reward': results['mean_reward'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/std_reward': results['std_reward'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/mean_length': results['mean_length'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/std_length': results['std_length'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/success_rate': results['success_rate'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/completion_percentage': results['completion_percentage'],
+                f'{topology_type}/{task_order}/phase1/testing/{task}/n_eval_episodes': config['n_eval_episodes'],
+                
+                # Legacy metrics for backward compatibility
+                f'phase1/{task}/testing/mean_reward': results['mean_reward'],
+                f'phase1/{task}/testing/success_rate': results['success_rate'],
+                f'phase1/{task}/testing/completion_percentage': results['completion_percentage'],
+            })
+    
+    # ============================================================================
+    # PHASE 2: Train on task 2
+    # ============================================================================
+    print(f"\n🚀 PHASE 2: Training on {train_task_2} (continuing from {train_task_1})")
+    print("-" * 60)
+    print(f"📊 Training Progress:")
+    
     callback.set_task_phase(train_task_2, 2)  # Set phase 2
     model.set_env(env2)  # Switch environment for second task
-    model.learn(total_timesteps=config['total_timesteps'], callback=callback)
     
-    # SEQUENTIAL TRAINING: Switch to task 3 and continue training
-    print(f"🚀 Continuing training on {train_task_3}...")
+    # Get task-specific training configuration
+    task2_timesteps = get_task_timesteps(train_task_2, config)
+    convergence_callback = create_convergence_callback(train_task_2, config, verbose=1)  # Enable verbose output
+    
+    print(f"📋 Task-specific training: {train_task_2} for {task2_timesteps:,} timesteps")
+    
+    # Create progress bar for training
+    with tqdm(total=task2_timesteps, desc=f"Training {train_task_2}", 
+              unit="steps", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
+        
+        # Custom callback to update progress bar
+        class ProgressCallback(BaseCallback):
+            def __init__(self, pbar):
+                super().__init__()
+                self.pbar = pbar
+                self.last_update = 0
+            
+            def _on_step(self) -> bool:
+                self.pbar.update(self.num_timesteps - self.last_update)
+                self.last_update = self.num_timesteps
+                return True
+        
+        # Combine callbacks (convergence callback will handle early stopping)
+        combined_callback = [
+            callback, 
+            convergence_callback, 
+            RewardMonitorCallback(train_task_2, log_interval=10000),  # Monitor training rewards
+            ConvergenceEvaluationCallback(convergence_callback, model, env2, train_task_2), 
+            ProgressCallback(pbar)
+        ]
+        model.learn(total_timesteps=task2_timesteps, callback=combined_callback)
+    
+    print(f"✅ Phase 2 Training Complete!")
+    
+    # ============================================================================
+    # INTERMEDIATE TESTING: Test on all tasks after Phase 2
+    # ============================================================================
+    print(f"\n📊 PHASE 2 TESTING: Evaluating on all tasks after training on {train_task_2}")
+    print("-" * 60)
+    
+    # Test on all available tasks
+    phase2_results = {}
+    
+    print(f"🔍 Testing on {len(all_tasks)} tasks:")
+    for task in tqdm(all_tasks, desc="Evaluating tasks", unit="task"):
+        eval_env = make_env(task)()
+        rewards, lengths, success, completion = evaluate_model_enhanced(
+            model, eval_env, task, config['n_eval_episodes']
+        )
+        phase2_results[task] = {
+            'rewards': rewards,
+            'lengths': lengths,
+            'success_rate': success,
+            'completion_percentage': completion,
+            'mean_reward': np.mean(rewards),
+            'std_reward': np.std(rewards),
+            'mean_length': np.mean(lengths),
+            'std_length': np.std(lengths)
+        }
+        eval_env.close()
+        
+        # Print immediate results for this task
+        print(f"   • {task}: {phase2_results[task]['mean_reward']:.2f} ± {phase2_results[task]['std_reward']:.2f} "
+              f"(Success: {phase2_results[task]['success_rate']:.1%}, Completion: {phase2_results[task]['completion_percentage']:.1f}%)")
+    
+    # Log Phase 2 results with topology-aware naming
+    if wandb.run:
+        for task, results in phase2_results.items():
+            wandb.log({
+                f'{topology_type}/{task_order}/phase2/testing/{task}/mean_reward': results['mean_reward'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/std_reward': results['std_reward'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/mean_length': results['mean_length'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/std_length': results['std_length'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/success_rate': results['success_rate'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/completion_percentage': results['completion_percentage'],
+                f'{topology_type}/{task_order}/phase2/testing/{task}/n_eval_episodes': config['n_eval_episodes'],
+                
+                # Legacy metrics for backward compatibility
+                f'phase2/{task}/testing/mean_reward': results['mean_reward'],
+                f'phase2/{task}/testing/success_rate': results['success_rate'],
+                f'phase2/{task}/testing/completion_percentage': results['completion_percentage'],
+            })
+    
+    # ============================================================================
+    # PHASE 3: Train on task 3
+    # ============================================================================
+    print(f"\n🚀 PHASE 3: Training on {train_task_3} (continuing from {train_task_1} → {train_task_2})")
+    print("-" * 60)
+    print(f"📊 Training Progress:")
+    
     callback.set_task_phase(train_task_3, 3)  # Set phase 3
     model.set_env(env3)  # Switch environment for third task
-    model.learn(total_timesteps=config['total_timesteps'], callback=callback)
     
-    # EVALUATION: Test on all tasks after sequential training
-    print(f"📊 Evaluating on all tasks after sequential training...")
+    # Get task-specific training configuration
+    task3_timesteps = get_task_timesteps(train_task_3, config)
+    convergence_callback = create_convergence_callback(train_task_3, config, verbose=1)  # Enable verbose output
     
-    # Test on task 1
-    eval_env1 = make_env(train_task_1)()
-    rewards1, lengths1, success1 = evaluate_model_enhanced(
-        model, eval_env1, train_task_1, config['n_eval_episodes']
-    )
+    print(f"📋 Task-specific training: {train_task_3} for {task3_timesteps:,} timesteps")
     
-    # Test on task 2
-    eval_env2 = make_env(train_task_2)()
-    rewards2, lengths2, success2 = evaluate_model_enhanced(
-        model, eval_env2, train_task_2, config['n_eval_episodes']
-    )
-    
-    # Test on task 3
-    eval_env3 = make_env(train_task_3)()
-    rewards3, lengths3, success3 = evaluate_model_enhanced(
-        model, eval_env3, train_task_3, config['n_eval_episodes']
-    )
-    
-    # Test on all available tasks (including any tasks not used for training)
-    all_tasks = ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
-    cross_task_results = {}
-    
-    for task in all_tasks:
-        if task not in [train_task_1, train_task_2, train_task_3]:  # Only test on tasks not used for training
-            eval_env_cross = make_env(task)()
-            rewards_cross, lengths_cross, success_cross = evaluate_model_enhanced(
-                model, eval_env_cross, task, config['n_eval_episodes']
-            )
-            cross_task_results[task] = {
-                'rewards': rewards_cross,
-                'success_rate': success_cross
-            }
-            eval_env_cross.close()
-    
-    # Log combined results
-    if wandb.run:
-        wandb.log({
-            'testing/mean_reward': (np.mean(rewards1) + np.mean(rewards2) + np.mean(rewards3)) / 3,
-            'testing/task1_mean_reward': np.mean(rewards1),
-            'testing/task2_mean_reward': np.mean(rewards2),
-            'testing/task3_mean_reward': np.mean(rewards3),
-            'testing/task1_success_rate': success1,
-            'testing/task2_success_rate': success2,
-            'testing/task3_success_rate': success3,
-            'testing/overall_success_rate': (success1 + success2 + success3) / 3,
-            'training/sequential_training': True,
-            'training/task1': train_task_1,
-            'training/task2': train_task_2,
-            'training/task3': train_task_3,
-        })
+    # Create progress bar for training
+    with tqdm(total=task3_timesteps, desc=f"Training {train_task_3}", 
+              unit="steps", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
         
-        # Log cross-task results
-        for task, results in cross_task_results.items():
+        # Custom callback to update progress bar
+        class ProgressCallback(BaseCallback):
+            def __init__(self, pbar):
+                super().__init__()
+                self.pbar = pbar
+                self.last_update = 0
+            
+            def _on_step(self) -> bool:
+                self.pbar.update(self.num_timesteps - self.last_update)
+                self.last_update = self.num_timesteps
+                return True
+        
+        # Combine callbacks (convergence callback will handle early stopping)
+        combined_callback = [
+            callback, 
+            convergence_callback, 
+            RewardMonitorCallback(train_task_3, log_interval=10000),  # Monitor training rewards
+            ConvergenceEvaluationCallback(convergence_callback, model, env3, train_task_3), 
+            ProgressCallback(pbar)
+        ]
+        model.learn(total_timesteps=task3_timesteps, callback=combined_callback)
+    
+    print(f"✅ Phase 3 Training Complete!")
+    
+    # ============================================================================
+    # FINAL TESTING: Test on all tasks after Phase 3
+    # ============================================================================
+    print(f"\n📊 FINAL TESTING: Evaluating on all tasks after training on {train_task_3}")
+    print("-" * 60)
+    
+    # Test on all available tasks
+    phase3_results = {}
+    
+    print(f"🔍 Testing on {len(all_tasks)} tasks:")
+    for task in tqdm(all_tasks, desc="Evaluating tasks", unit="task"):
+        eval_env = make_env(task)()
+        rewards, lengths, success, completion = evaluate_model_enhanced(
+            model, eval_env, task, config['n_eval_episodes']
+        )
+        phase3_results[task] = {
+            'rewards': rewards,
+            'lengths': lengths,
+            'success_rate': success,
+            'completion_percentage': completion,
+            'mean_reward': np.mean(rewards),
+            'std_reward': np.std(rewards),
+            'mean_length': np.mean(lengths),
+            'std_length': np.std(lengths)
+        }
+        eval_env.close()
+        
+        # Print immediate results for this task
+        print(f"   • {task}: {phase3_results[task]['mean_reward']:.2f} ± {phase3_results[task]['std_reward']:.2f} "
+              f"(Success: {phase3_results[task]['success_rate']:.1%}, Completion: {phase3_results[task]['completion_percentage']:.1f}%)")
+    
+    # Log Phase 3 results with topology-aware naming
+    if wandb.run:
+        for task, results in phase3_results.items():
             wandb.log({
-                f'cross_task/{task}_mean_reward': np.mean(results['rewards']),
-                f'cross_task/{task}_success_rate': results['success_rate'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/mean_reward': results['mean_reward'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/std_reward': results['std_reward'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/mean_length': results['mean_length'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/std_length': results['std_length'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/success_rate': results['success_rate'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/completion_percentage': results['completion_percentage'],
+                f'{topology_type}/{task_order}/phase3/testing/{task}/n_eval_episodes': config['n_eval_episodes'],
+                
+                # Legacy metrics for backward compatibility
+                f'phase3/{task}/testing/mean_reward': results['mean_reward'],
+                f'phase3/{task}/testing/success_rate': results['success_rate'],
+                f'phase3/{task}/testing/completion_percentage': results['completion_percentage'],
             })
+    
+    # ============================================================================
+    # TRANSFER LEARNING ANALYSIS
+    # ============================================================================
+    print(f"\n🔄 TRANSFER LEARNING ANALYSIS")
+    print("-" * 60)
+    print(f"📊 Calculating transfer learning patterns...")
+    
+    # Calculate transfer learning metrics
+    transfer_metrics = {}
+    
+    # Forward transfer: How well does training on previous tasks help with current task?
+    if train_task_2 in phase1_results and train_task_2 in phase2_results:
+        task2_baseline = phase1_results[train_task_2]['mean_reward']
+        task2_after_task1 = phase2_results[train_task_2]['mean_reward']
+        forward_transfer_task2 = task2_after_task1 - task2_baseline if task2_baseline > 0 else task2_after_task1
+        transfer_metrics['forward_transfer_task2'] = forward_transfer_task2
+        print(f"   • Forward Transfer {train_task_2}: {forward_transfer_task2:+.2f} "
+              f"({task2_baseline:.2f} → {task2_after_task1:.2f})")
+    
+    if train_task_3 in phase2_results and train_task_3 in phase3_results:
+        task3_baseline = phase2_results[train_task_3]['mean_reward']
+        task3_after_task2 = phase3_results[train_task_3]['mean_reward']
+        forward_transfer_task3 = task3_after_task2 - task3_baseline if task3_baseline > 0 else task3_after_task2
+        transfer_metrics['forward_transfer_task3'] = forward_transfer_task3
+        print(f"   • Forward Transfer {train_task_3}: {forward_transfer_task3:+.2f} "
+              f"({task3_baseline:.2f} → {task3_after_task2:.2f})")
+    
+    # Backward transfer: How well does training on later tasks affect retention of earlier tasks?
+    if train_task_1 in phase1_results and train_task_1 in phase2_results:
+        task1_phase1 = phase1_results[train_task_1]['mean_reward']
+        task1_phase2 = phase2_results[train_task_1]['mean_reward']
+        retention_task1_after_task2 = task1_phase2 / task1_phase1 if task1_phase1 > 0 else 0
+        transfer_metrics['retention_task1_after_task2'] = retention_task1_after_task2
+        print(f"   • Retention {train_task_1} after {train_task_2}: {retention_task1_after_task2:.3f} "
+              f"({task1_phase1:.2f} → {task1_phase2:.2f})")
+    
+    if train_task_1 in phase2_results and train_task_1 in phase3_results:
+        task1_phase2 = phase2_results[train_task_1]['mean_reward']
+        task1_phase3 = phase3_results[train_task_1]['mean_reward']
+        retention_task1_after_task3 = task1_phase3 / task1_phase2 if task1_phase2 > 0 else 0
+        transfer_metrics['retention_task1_after_task3'] = retention_task1_after_task3
+        print(f"   • Retention {train_task_1} after {train_task_3}: {retention_task1_after_task3:.3f} "
+              f"({task1_phase2:.2f} → {task1_phase3:.2f})")
+    
+    if train_task_2 in phase2_results and train_task_2 in phase3_results:
+        task2_phase2 = phase2_results[train_task_2]['mean_reward']
+        task2_phase3 = phase3_results[train_task_2]['mean_reward']
+        retention_task2_after_task3 = task2_phase3 / task2_phase2 if task2_phase2 > 0 else 0
+        transfer_metrics['retention_task2_after_task3'] = retention_task2_after_task3
+        print(f"   • Retention {train_task_2} after {train_task_3}: {retention_task2_after_task3:.3f} "
+              f"({task2_phase2:.2f} → {task2_phase3:.2f})")
+    
+    # Log transfer learning metrics with topology context
+    if wandb.run and transfer_metrics:
+        for metric_name, value in transfer_metrics.items():
+            wandb.log({
+                f'{topology_type}/{task_order}/transfer/{metric_name}': value,
+                # Legacy metrics for backward compatibility
+                f'transfer/{metric_name}': value,
+            })
+    
+    # ============================================================================
+    # FINAL SUMMARY
+    # ============================================================================
+    print(f"\n✅ TRIPLE-TASK TRAINING COMPLETED!")
+    print("=" * 80)
+    print(f"📊 FINAL RESULTS SUMMARY:")
+    print("-" * 60)
+    
+    # Create a comprehensive results table
+    print(f"{'Task':<15} {'Phase 1':<12} {'Phase 2':<12} {'Phase 3':<12} {'Success Rate':<12}")
+    print("-" * 80)
+    
+    for task in [train_task_1, train_task_2, train_task_3]:
+        phase1_reward = phase1_results.get(task, {}).get('mean_reward', 0)
+        phase2_reward = phase2_results.get(task, {}).get('mean_reward', 0)
+        phase3_reward = phase3_results.get(task, {}).get('mean_reward', 0)
+        success_rate = phase3_results.get(task, {}).get('success_rate', 0)
+        
+        print(f"{task:<15} {phase1_reward:<12.2f} {phase2_reward:<12.2f} {phase3_reward:<12.2f} {success_rate:<12.1%}")
+    
+    print("-" * 80)
+    
+    # Print transfer learning summary
+    if transfer_metrics:
+        print(f"\n🔄 TRANSFER LEARNING SUMMARY:")
+        print("-" * 60)
+        forward_transfers = [v for k, v in transfer_metrics.items() if 'forward_transfer' in k]
+        retentions = [v for k, v in transfer_metrics.items() if 'retention' in k]
+        
+        if forward_transfers:
+            avg_forward = np.mean(forward_transfers)
+            print(f"   • Average Forward Transfer: {avg_forward:+.2f}")
+        
+        if retentions:
+            avg_retention = np.mean(retentions)
+            print(f"   • Average Retention: {avg_retention:.3f}")
+            
+            # Catastrophic forgetting check
+            if avg_retention < 0.8:
+                print(f"   ⚠️  Potential Catastrophic Forgetting detected (retention < 80%)")
+            else:
+                print(f"   ✅ Good retention maintained (> 80%)")
+    
+    # ============================================================================
+    # ADVANCED PLOTTING INTEGRATION
+    # ============================================================================
+    if wandb.run:
+        print(f"\n📊 ADVANCED PLOTTING")
+        print("-" * 60)
+        print(f"🎨 Generating comprehensive visualizations...")
+        
+        # Combine all phase results for plotting
+        all_phase_results = {}
+        for task in [train_task_1, train_task_2, train_task_3]:
+            # Phase 1 results
+            if task in phase1_results:
+                all_phase_results[f'{topology_type}/{task_order}/phase1/testing/{task}/mean_reward'] = phase1_results[task]['mean_reward']
+            # Phase 2 results
+            if task in phase2_results:
+                all_phase_results[f'{topology_type}/{task_order}/phase2/testing/{task}/mean_reward'] = phase2_results[task]['mean_reward']
+            # Phase 3 results
+            if task in phase3_results:
+                all_phase_results[f'{topology_type}/{task_order}/phase3/testing/{task}/mean_reward'] = phase3_results[task]['mean_reward']
+        
+        # Log comprehensive plots
+        log_comprehensive_plots_for_run(
+            wandb_run=wandb.run,
+            phase_results=all_phase_results,
+            transfer_metrics=transfer_metrics,
+            topology_type=topology_type,
+            task_sequence=task_order,
+            sweep_results=None  # Will be populated when sweep results are available
+        )
+        
+        print(f"✅ Advanced plots logged to wandb!")
+        print(f"📈 Generated comprehensive visualizations:")
+        print(f"   • Multi-phase learning curves")
+        print(f"   • Transfer learning comparison")
+        print(f"   • Performance matrix")
+        print(f"   • Capacity scaling analysis")
+        print(f"   • Task order effects")
     
     # Clean up
     env1.close()
     env2.close()
     env3.close()
-    eval_env1.close()
-    eval_env2.close()
-    eval_env3.close()
+    
+    # Final completion message
+    print("\n" + "=" * 80)
+    print(f"🎉 TRIPLE-TASK TRAINING COMPLETED SUCCESSFULLY!")
+    print(f"📊 Results saved to Weights & Biases")
+    print(f"🔗 View run: {wandb.run.url if wandb.run else 'N/A'}")
+    print("=" * 80)
     
     return {
-        'task1_rewards': rewards1,
-        'task2_rewards': rewards2,
-        'task3_rewards': rewards3,
-        'task1_success': success1,
-        'task2_success': success2,
-        'task3_success': success3,
-        'cross_task_results': cross_task_results,
+        'phase1_results': phase1_results,
+        'phase2_results': phase2_results,
+        'phase3_results': phase3_results,
+        'transfer_metrics': transfer_metrics,
+        'task_order': task_order,
         'sequential_training': True
     }
 
@@ -1023,5 +1747,91 @@ def train_with_sweep():
     print(f"   • Task 3 ({train_task_3}) success rate: {results['task3_success']:.3f}")
     print(f"   • Overall success rate: {(results['task1_success'] + results['task2_success'] + results['task3_success']) / 3:.3f}")
 
+def unified_training_function():
+    """
+    Unified training function for triple-task training with reward scaling.
+    This is the main entry point for wandb sweeps.
+    """
+    
+    # Check if we're in a wandb sweep or running standalone
+    if wandb.run is None:
+        # Standalone execution - use default configuration
+        print("🚀 Running triple-task training in standalone mode...")
+        
+        # Default configuration for standalone execution
+        config = {
+            'topology_type': 'small_world',
+            'hidden_size': 128,
+            'num_layers': 2,
+            'task_order': 'Acrobot-v1_CartPole-v1_MountainCar-v0',  # Start with Acrobot-v1
+            'learning_rate': 3e-4,
+            'n_steps': 2048,
+            'batch_size': 128,
+            'n_epochs': 10,
+            'gamma': 0.99,
+            'gae_lambda': 0.95,
+            'clip_range': 0.2,
+            'ent_coef': 0.01,
+            'max_grad_norm': 0.5,
+            'total_timesteps': 500000,
+            'n_eval_episodes': 15,
+            'activation': 'relu',
+            'dropout': 0.0,
+            # Topology-specific parameters
+            'small_world_k': 4,
+            'small_world_p': 0.3,
+            'modular_num_modules': 4,
+            'modular_inter_module_prob': 0.2,
+            'modular_intra_module_prob': 0.8,
+            'hybrid_num_modules': 4,
+            'hybrid_k': 4,
+            'hybrid_p': 0.3,
+            'hybrid_inter_module_prob': 0.2,
+        }
+        
+        # Initialize wandb with default config
+        wandb.init(
+            entity="katko-it-universitetet-i-k-benhavn",
+            project="topologies--triple-task-training",
+            config=config
+        )
+    else:
+        # Sweep execution - use wandb.config
+        config = wandb.config
+    
+    # Determine topology type
+    topology_type = config.get('topology_type', 'fully_connected')
+    
+    # Determine hidden size or capacity
+    hidden_size = config.get('hidden_size', 64)
+    num_layers = config.get('num_layers', 3)
+    
+    # Determine tasks from task_order parameter
+    task_order = config.get('task_order', 'Acrobot-v1_CartPole-v1_MountainCar-v0')  # Start with Acrobot-v1
+    tasks = task_order.split('_')
+    train_task_1 = tasks[0]
+    train_task_2 = tasks[1]
+    train_task_3 = tasks[2]
+    
+    # Initialize wandb with proper naming (if not already done)
+    if wandb.run is not None:
+        initialize_wandb_run(config, topology_type, 'triple_task')
+    
+    # Create configuration
+    debug_config = create_debug_config()
+    
+    # Run triple-task training
+    return triple_task_training(
+        DebugTopologyPolicy,
+        topology_type,
+        debug_config,
+        num_layers=num_layers,
+        hidden_size=hidden_size,
+        train_task_1=train_task_1,
+        train_task_2=train_task_2,
+        train_task_3=train_task_3
+    )
+
 if __name__ == "__main__":
-    train_with_sweep()
+    # Run the unified training function for wandb sweeps
+    unified_training_function()

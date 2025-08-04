@@ -21,6 +21,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from tqdm import tqdm
+import time # Added for timing training runs
 
 # Add the src directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -773,7 +774,11 @@ def evaluate_model(model, env, n_eval_episodes=3):
     
     # Use tqdm for progress bar
     for episode in tqdm(range(n_eval_episodes), desc="Evaluating", leave=False):
-        obs, _ = env.reset()
+        reset_result = env.reset()
+        if isinstance(reset_result, tuple):
+            obs, _ = reset_result
+        else:
+            obs = reset_result
         done = False
         truncated = False
         episode_reward = 0
@@ -781,7 +786,11 @@ def evaluate_model(model, env, n_eval_episodes=3):
         
         while not (done or truncated):
             action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, _ = env.step(action)
+            step_result = env.step(action)
+            if len(step_result) == 5:
+                obs, reward, done, truncated, _ = step_result
+            else:
+                obs, reward, done, truncated = step_result
             episode_reward += reward
             episode_length += 1
         
@@ -825,6 +834,7 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     """
     Simplified double-task training: train sequentially on two different tasks.
     Only supports CartPole-v1 and Acrobot-v1.
+    Creates separate training and testing runs for better interpretability.
     """
     # Skip same-task combinations
     if train_task_1 == train_task_2:
@@ -858,14 +868,80 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     print(f"   • Task 2: {train_task_2}")
     print(f"   • Hidden Size: {hidden_size}")
     print(f"   • Layers: {num_layers}")
-    print(f"   • Mode: Sequential training with comprehensive evaluation")
+    print(f"   • Mode: Sequential training with separate testing runs")
     
     # Create environments
     env1 = DummyVecEnv([make_env(train_task_1)])
     env2 = DummyVecEnv([make_env(train_task_2)])
     
-    # Create callback for tracking
-    callback = EnhancedDebugCallback(verbose=1, log_freq=1000)
+    # Get network parameters for run naming
+    temp_model = PPO(
+        policy_class,
+        env1,
+        learning_rate=config['learning_rate'],
+        n_steps=config['n_steps'],
+        batch_size=config['batch_size'],
+        n_epochs=config['n_epochs'],
+        gamma=config['gamma'],
+        gae_lambda=config['gae_lambda'],
+        clip_range=config['clip_range'],
+        ent_coef=config['ent_coef'],
+        max_grad_norm=config['max_grad_norm'],
+        verbose=0,
+        tensorboard_log=None
+    )
+    
+    # Get parameter counts
+    actor_params = temp_model.policy._get_topology_params(temp_model.policy.actor_topology)
+    critic_params = temp_model.policy._get_topology_params(temp_model.policy.critic_topology)
+    total_params = actor_params + critic_params
+    
+    # Create descriptive run names
+    training_run_name = f"training_{topology_type}_{num_layers}_{hidden_size}_{total_params}_{train_task_1}_{train_task_2}"
+    
+    # Initialize training run
+    try:
+        training_wandb_run = wandb.init(
+            entity="katko-it-universitetet-i-k-benhavn",
+            project="topologies--simplified-double-task-training",
+            name=training_run_name,
+            config={
+                "run_type": "sequential_training",
+                "topology_type": topology_type,
+                "num_layers": num_layers,
+                "hidden_size": hidden_size,
+                "total_params": total_params,
+                "actor_params": actor_params,
+                "critic_params": critic_params,
+                "train_task_1": train_task_1,
+                "train_task_2": train_task_2,
+                "total_timesteps": config['total_timesteps'],
+                "n_eval_episodes": config['n_eval_episodes'],
+                "learning_rate": config['learning_rate'],
+                "batch_size": config['batch_size'],
+                "n_steps": config['n_steps'],
+                "n_epochs": config['n_epochs'],
+                "gamma": config['gamma'],
+                "gae_lambda": config['gae_lambda'],
+                "clip_range": config['clip_range'],
+                "ent_coef": config['ent_coef'],
+                "max_grad_norm": config['max_grad_norm'],
+                "activation": config['activation'],
+                "dropout": config['dropout'],
+                "experiment_type": "sequential_double_task",
+            },
+            tags=[topology_type, f"layers_{num_layers}", f"size_{hidden_size}", f"params_{total_params}", train_task_1, train_task_2, "sequential_training"],
+            reinit=True
+        )
+        training_wandb_enabled = True
+        print(f"   ✅ Training run initialized: {training_run_name}")
+    except Exception as e:
+        print(f"   ⚠️  Training WandB logging disabled: {e}")
+        training_wandb_run = None
+        training_wandb_enabled = False
+    
+    # Create callback for training tracking
+    callback = EnhancedDebugCallback(verbose=1, wandb_run=training_wandb_run, log_freq=1000)
     
     # Initialize model with first environment
     model = PPO(
@@ -892,23 +968,87 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     callback.set_task_phase(train_task_1, 1)
     
     # Train with progress bar
+    start_time = time.time()
     model.learn(total_timesteps=config['total_timesteps'], callback=callback, progress_bar=True)
+    phase1_time = time.time() - start_time
     
-    # Evaluate both tasks after Phase 1
+    # Log Phase 1 training metrics
+    if training_wandb_enabled:
+        training_wandb_run.log({
+            "training/phase_1_task1_training_time": phase1_time,
+            "training/phase_1_task1_timesteps_per_second": config['total_timesteps'] / phase1_time,
+            "training/phase_1_task1_completed": True
+        })
+    
+    # Evaluate both tasks after Phase 1 (create separate testing run)
     print(f"📊 EVALUATION AFTER PHASE 1: Testing both tasks after training on {train_task_1}...")
     
     # Evaluate on Task 1 (baseline performance)
-    rewards1_after_task1, lengths1_after_task1, success1_after_task1, mean1_after_task1, std1_after_task1, len1_after_task1 = evaluate_model_enhanced(
+    rewards1_after_task1, lengths1_after_task1, success1_after_task1, mean1_after_task1, std1_after_task1, mean_len1_after_task1 = evaluate_model_enhanced(
         model, env1, train_task_1, config['n_eval_episodes']
     )
     
     # Evaluate on Task 2 (initial transfer)
-    rewards2_after_task1, lengths2_after_task1, success2_after_task1, mean2_after_task1, std2_after_task1, len2_after_task1 = evaluate_model_enhanced(
+    rewards2_after_task1, lengths2_after_task1, success2_after_task1, mean2_after_task1, std2_after_task1, mean_len2_after_task1 = evaluate_model_enhanced(
         model, env2, train_task_2, config['n_eval_episodes']
     )
     
     print(f"   • {train_task_1} (trained): {mean1_after_task1:.2f} (success: {success1_after_task1:.1%})")
     print(f"   • {train_task_2} (untrained): {mean2_after_task1:.2f} (success: {success2_after_task1:.1%})")
+    
+    # Create Phase 1 testing run
+    phase1_testing_run_name = f"testing_{topology_type}_{num_layers}_{hidden_size}_{total_params}_{train_task_1}_{train_task_2}_phase1"
+    try:
+        phase1_testing_run = wandb.init(
+            entity="katko-it-universitetet-i-k-benhavn",
+            project="topologies--simplified-double-task-training",
+            name=phase1_testing_run_name,
+            config={
+                "run_type": "phase1_testing",
+                "topology_type": topology_type,
+                "num_layers": num_layers,
+                "hidden_size": hidden_size,
+                "total_params": total_params,
+                "train_task_1": train_task_1,
+                "train_task_2": train_task_2,
+                "phase": 1,
+                "n_eval_episodes": config['n_eval_episodes'],
+                "experiment_type": "sequential_double_task",
+            },
+            tags=[topology_type, f"layers_{num_layers}", f"size_{hidden_size}", f"params_{total_params}", train_task_1, train_task_2, "phase1_testing"],
+            reinit=True
+        )
+        
+        # Log Phase 1 testing metrics
+        phase1_testing_run.log({
+            # Task 1 (trained) metrics
+            "testing/phase1_task1_trained_mean_reward": mean1_after_task1,
+            "testing/phase1_task1_trained_std_reward": std1_after_task1,
+            "testing/phase1_task1_trained_success_rate": success1_after_task1,
+            "testing/phase1_task1_trained_mean_length": mean_len1_after_task1,
+            
+            # Task 2 (transfer) metrics
+            "testing/phase1_task2_transfer_mean_reward": mean2_after_task1,
+            "testing/phase1_task2_transfer_std_reward": std2_after_task1,
+            "testing/phase1_task2_transfer_success_rate": success2_after_task1,
+            "testing/phase1_task2_transfer_mean_length": mean_len2_after_task1,
+            
+            # Transfer learning metrics
+            "transfer/phase1_task2_transfer_ratio": mean2_after_task1 / mean1_after_task1 if mean1_after_task1 != 0 else 0,
+            "transfer/phase1_task2_relative_performance": (mean2_after_task1 / mean1_after_task1 * 100) if mean1_after_task1 != 0 else 0,
+            
+            # Network architecture
+            "network/topology_type": topology_type,
+            "network/layers": num_layers,
+            "network/size": hidden_size,
+            "network/total_parameters": total_params,
+        })
+        
+        phase1_testing_run.finish()
+        print(f"   ✅ Phase 1 testing run completed: {phase1_testing_run_name}")
+        
+    except Exception as e:
+        print(f"   ⚠️  Error creating Phase 1 testing run: {e}")
     
     # PHASE 2: Train on Task 2
     print(f"🚀 PHASE 2: Training on {train_task_2}...")
@@ -919,23 +1059,151 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     callback.set_task_phase(train_task_2, 2)
     
     # Train with progress bar
+    start_time = time.time()
     model.learn(total_timesteps=config['total_timesteps'], callback=callback, progress_bar=True)
+    phase2_time = time.time() - start_time
+    
+    # Log Phase 2 training metrics
+    if training_wandb_enabled:
+        training_wandb_run.log({
+            "training/phase_2_task2_training_time": phase2_time,
+            "training/phase_2_task2_timesteps_per_second": config['total_timesteps'] / phase2_time,
+            "training/phase_2_task2_completed": True
+        })
     
     # Evaluate both tasks after Phase 2
     print(f"📊 EVALUATION AFTER PHASE 2: Testing both tasks after training on {train_task_2}...")
     
     # Evaluate on Task 1 (retention)
-    rewards1_after_task2, lengths1_after_task2, success1_after_task2, mean1_after_task2, std1_after_task2, len1_after_task2 = evaluate_model_enhanced(
+    rewards1_after_task2, lengths1_after_task2, success1_after_task2, mean1_after_task2, std1_after_task2, mean_len1_after_task2 = evaluate_model_enhanced(
         model, env1, train_task_1, config['n_eval_episodes']
     )
     
     # Evaluate on Task 2 (final performance)
-    rewards2_after_task2, lengths2_after_task2, success2_after_task2, mean2_after_task2, std2_after_task2, len2_after_task2 = evaluate_model_enhanced(
+    rewards2_after_task2, lengths2_after_task2, success2_after_task2, mean2_after_task2, std2_after_task2, mean_len2_after_task2 = evaluate_model_enhanced(
         model, env2, train_task_2, config['n_eval_episodes']
     )
     
     print(f"   • {train_task_1} (retention): {mean1_after_task2:.2f} (success: {success1_after_task2:.1%})")
     print(f"   • {train_task_2} (trained): {mean2_after_task2:.2f} (success: {success2_after_task2:.1%})")
+    
+    # Create Phase 2 testing run
+    phase2_testing_run_name = f"testing_{topology_type}_{num_layers}_{hidden_size}_{total_params}_{train_task_1}_{train_task_2}_phase2"
+    try:
+        phase2_testing_run = wandb.init(
+            entity="katko-it-universitetet-i-k-benhavn",
+            project="topologies--simplified-double-task-training",
+            name=phase2_testing_run_name,
+            config={
+                "run_type": "phase2_testing",
+                "topology_type": topology_type,
+                "num_layers": num_layers,
+                "hidden_size": hidden_size,
+                "total_params": total_params,
+                "train_task_1": train_task_1,
+                "train_task_2": train_task_2,
+                "phase": 2,
+                "n_eval_episodes": config['n_eval_episodes'],
+                "experiment_type": "sequential_double_task",
+            },
+            tags=[topology_type, f"layers_{num_layers}", f"size_{hidden_size}", f"params_{total_params}", train_task_1, train_task_2, "phase2_testing"],
+            reinit=True
+        )
+        
+        # Calculate retention and learning metrics
+        retention_ratio = mean1_after_task2 / mean1_after_task1 if mean1_after_task1 != 0 else 0
+        forgetting_rate = 1 - retention_ratio
+        learning_ratio = mean2_after_task2 / mean2_after_task1 if mean2_after_task1 != 0 else 0
+        task_similarity = mean2_after_task1 / mean1_after_task1 if mean1_after_task1 != 0 else 0
+        
+        # Calculate normalized scores (0-1 scale)
+        # Task-specific maximum rewards for normalization
+        max_rewards = {
+            'CartPole-v1': 500.0,
+            'Acrobot-v1': -80.0,
+        }
+        
+        def normalize_reward(reward, task):
+            max_reward = max_rewards.get(task, 500.0)
+            if max_reward < 0:  # Negative rewards (Acrobot)
+                return (reward - max_reward) / abs(max_reward)
+            else:  # Positive rewards (CartPole)
+                return reward / max_reward
+        
+        task1_baseline_normalized = normalize_reward(mean1_after_task1, train_task_1)
+        task1_retention_normalized = normalize_reward(mean1_after_task2, train_task_1)
+        task2_final_normalized = normalize_reward(mean2_after_task2, train_task_2)
+        
+        # Log Phase 2 testing metrics
+        phase2_testing_run.log({
+            # Task 1 (retention) metrics
+            "testing/phase2_task1_retention_mean_reward": mean1_after_task2,
+            "testing/phase2_task1_retention_std_reward": std1_after_task2,
+            "testing/phase2_task1_retention_success_rate": success1_after_task2,
+            "testing/phase2_task1_retention_mean_length": mean_len1_after_task2,
+            
+            # Task 2 (final) metrics
+            "testing/phase2_task2_final_mean_reward": mean2_after_task2,
+            "testing/phase2_task2_final_std_reward": std2_after_task2,
+            "testing/phase2_task2_final_success_rate": success2_after_task2,
+            "testing/phase2_task2_final_mean_length": mean_len2_after_task2,
+            
+            # Retention analysis
+            "retention/task1_retention_ratio": retention_ratio,
+            "retention/task1_forgetting_rate": forgetting_rate,
+            "retention/task1_retention_success_ratio": success1_after_task2 / success1_after_task1 if success1_after_task1 > 0 else 0,
+            
+            # Learning analysis
+            "learning/task2_learning_ratio": learning_ratio,
+            "learning/task2_learning_success_ratio": success2_after_task2 / success2_after_task1 if success2_after_task1 > 0 else 0,
+            
+            # Task similarity
+            "task_similarity/phase1_transfer_ratio": task_similarity,
+            "task_similarity/phase1_transfer_success_ratio": success2_after_task1 / success1_after_task1 if success1_after_task1 > 0 else 0,
+            
+            # Normalized performance scores
+            "normalized/task1_baseline_score": task1_baseline_normalized,
+            "normalized/task1_retention_score": task1_retention_normalized,
+            "normalized/task2_final_score": task2_final_normalized,
+            "normalized/overall_performance_score": (task1_retention_normalized + task2_final_normalized) / 2,
+            
+            # Network architecture
+            "network/topology_type": topology_type,
+            "network/layers": num_layers,
+            "network/size": hidden_size,
+            "network/total_parameters": total_params,
+        })
+        
+        phase2_testing_run.finish()
+        print(f"   ✅ Phase 2 testing run completed: {phase2_testing_run_name}")
+        
+    except Exception as e:
+        print(f"   ⚠️  Error creating Phase 2 testing run: {e}")
+    
+    # Finish training run
+    if training_wandb_enabled:
+        total_training_time = phase1_time + phase2_time
+        training_wandb_run.log({
+            "training/total_training_time": total_training_time,
+            "training/total_timesteps": config['total_timesteps'] * 2,
+            "training/timesteps_per_second": (config['total_timesteps'] * 2) / total_training_time,
+            "training/sequential_training_completed": True
+        })
+        
+        # Create training summary table
+        training_summary_table = wandb.Table(columns=["Metric", "Value", "Description"])
+        training_summary_table.add_data("Topology Type", topology_type, "Network topology used")
+        training_summary_table.add_data("Number of Layers", str(num_layers), "Network depth")
+        training_summary_table.add_data("Hidden Size", str(hidden_size), "Hidden units per layer")
+        training_summary_table.add_data("Total Parameters", f"{total_params:,}", "Trainable parameters")
+        training_summary_table.add_data("Task 1", train_task_1, "First training task")
+        training_summary_table.add_data("Task 2", train_task_2, "Second training task")
+        training_summary_table.add_data("Total Training Time", f"{total_training_time:.2f}s", "Total training duration")
+        training_summary_table.add_data("Timesteps/sec", f"{(config['total_timesteps'] * 2) / total_training_time:.2f}", "Training speed")
+        
+        training_wandb_run.log({"training_summary": training_summary_table})
+        training_wandb_run.finish()
+        print(f"   ✅ Training run completed: {training_run_name}")
     
     # Calculate comprehensive analysis
     print(f"📈 COMPREHENSIVE ANALYSIS:")
@@ -953,29 +1221,31 @@ def simplified_double_task_training(policy_class, topology_type, config, num_lay
     task_similarity = mean2_after_task1 / mean1_after_task1 if mean1_after_task1 != 0 else 0
     print(f"   • Task Similarity (Task2/Task1 baseline): {task_similarity:.1%}")
     
-    # Collect results
+    # Collect results for return
     result = {
-        'task1_baseline_rewards': rewards1_after_task1,
-        'task1_final_rewards': rewards1_after_task2,
-        'task2_baseline_rewards': rewards2_after_task1,
-        'task2_final_rewards': rewards2_after_task2,
-        'task1_baseline_success': success1_after_task1,
-        'task1_final_success': success1_after_task2,
-        'task2_baseline_success': success2_after_task1,
-        'task2_final_success': success2_after_task2,
-        'retention_reward_task1': retention_rate,
-        'retention_success_task1': success1_after_task2 / success1_after_task1 if success1_after_task1 > 0 else 0,
-        'forgetting_reward_task1': forgetting_rate,
-        'forgetting_success_task1': 1 - (success1_after_task2 / success1_after_task1 if success1_after_task1 > 0 else 0),
-        'learning_reward_task2': learning_rate,
-        'learning_success_task2': success2_after_task2 / success2_after_task1 if success2_after_task1 > 0 else 0,
-        'task_similarity_reward': task_similarity,
-        'task_similarity_success': success2_after_task1 / success1_after_task1 if success1_after_task1 > 0 else 0,
         'sequential_training': True,
-        'simplified_mode': True
+        'simplified_mode': True,
+        'topology_type': topology_type,
+        'num_layers': num_layers,
+        'hidden_size': hidden_size,
+        'total_params': total_params,
+        'train_task_1': train_task_1,
+        'train_task_2': train_task_2,
+        'phase1_task1_baseline_reward': mean1_after_task1,
+        'phase1_task2_transfer_reward': mean2_after_task1,
+        'phase2_task1_retention_reward': mean1_after_task2,
+        'phase2_task2_final_reward': mean2_after_task2,
+        'retention_ratio': retention_rate,
+        'forgetting_rate': forgetting_rate,
+        'learning_ratio': learning_rate,
+        'task_similarity': task_similarity,
+        'total_training_time': phase1_time + phase2_time
     }
     
-    print(f"Debug result: {result}")
+    print(f"✅ Simplified double-task training completed!")
+    print(f"   • Total training time: {phase1_time + phase2_time:.2f}s")
+    print(f"   • Training runs: {training_run_name}")
+    print(f"   • Testing runs: {phase1_testing_run_name}, {phase2_testing_run_name}")
     
     return result
 
@@ -1025,14 +1295,7 @@ def train_with_sweep():
         print("🐛 Running in debug mode...")
         config = create_debug_config()
     else:
-        # Get configuration from wandb
-        if wandb.run is None:
-            wandb.init(
-                project="topologies--simplified-double-task-training",
-                entity="katko-it-universitetet-i-k-benhavn",
-                name=f"simplified_double_task_{args.topology_type}_{args.train_task_1}_{args.train_task_2}"
-            )
-        
+        # Configuration is handled within the training function for separate runs
         config = {
             'topology_type': args.topology_type,
             'hidden_size': args.hidden_size,
@@ -1086,10 +1349,6 @@ def train_with_sweep():
             print(f"   • Status: SKIPPED ({result.get('reason', 'unknown')})")
             print(f"   • Tasks: {result['train_task_1']} → {result['train_task_2']}")
             return result
-        
-        # Log results to wandb if available
-        if wandb.run and not result.get('skipped', False):
-            wandb.log(result)
         
         print(f"✅ Simplified double-task training completed!")
         return result

@@ -4,6 +4,7 @@ Topology Networks with Weights & Biases Sweep Support
 
 This script is a modified version of the single-task training script that can work with wandb sweeps
 for hyperparameter optimization. It reads hyperparameters from wandb.config and runs training accordingly.
+Includes reward scaling and task normalization for fair comparison across tasks.
 """
 
 import torch
@@ -39,6 +40,14 @@ from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
+from src.utils.task_normalization import (
+    compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
+    get_task_thresholds, get_normalization_constants, normalize_reward
+)
+from src.utils.advanced_plotting import (
+    log_comprehensive_plots_for_run, create_multi_phase_learning_curves
+)
+from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 
 # Import the original classes and functions from the single-task training script
 # (You'll need to copy the UniversalActionWrapper, DebugTopologyPolicy, etc. from the original file)
@@ -92,6 +101,10 @@ class UniversalActionWrapper(gym.Wrapper):
         Map universal action to task-specific action and step the environment.
         Pad observations to universal dimensions.
         """
+        # Convert numpy array to integer for dictionary lookup
+        if isinstance(action, np.ndarray):
+            action = int(action.item())
+        
         # Map universal action to task-specific action
         if action in self.current_mapping:
             mapped_action = self.current_mapping[action]
@@ -214,9 +227,19 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         # Get weight statistics
         actor_params = self._get_topology_params(self.actor_topology)
         critic_params = self._get_topology_params(self.critic_topology)
-        total_params = actor_params + critic_params
-        print(f"   • Actor topology parameters: {actor_params:,}")
-        print(f"   • Critic topology parameters: {critic_params:,}")
+        
+        # Calculate total parameters safely
+        if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+            total_params = actor_params + critic_params
+        elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+            actor_size = actor_params.get('size', 0)
+            critic_size = critic_params.get('size', 0)
+            total_params = actor_size + critic_size
+        else:
+            total_params = 0
+            
+        print(f"   • Actor topology parameters: {actor_params}")
+        print(f"   • Critic topology parameters: {critic_params}")
         print(f"   • Total parameters: {total_params:,}")
         
         # Debug: Check if networks have forward methods
@@ -723,8 +746,8 @@ def calculate_success_rate(rewards, episode_lengths, task_name):
         # Success: reached goal position (reward > -200)
         return np.mean([reward > -200 for reward in rewards])
     elif task_name == 'Acrobot-v1':
-        # Success: swung up to vertical (reward > -100)
-        return np.mean([reward > -100 for reward in rewards])
+        # Success: swung up to vertical (reward >= -80)
+        return np.mean([reward >= -80 for reward in rewards])
     else:
         # Default: no success criteria defined
         return 0.0
@@ -1610,8 +1633,17 @@ class EnhancedDebugCallback(BaseCallback):
                     metrics.update({
                         "network/actor_parameters": actor_params,
                         "network/critic_parameters": critic_params,
-                        "network/total_parameters": actor_params + critic_params,
                     })
+                    
+                    # Calculate total parameters safely
+                    if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+                        total_params = actor_params + critic_params
+                        metrics["network/total_parameters"] = total_params
+                    elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+                        actor_size = actor_params.get('size', 0)
+                        critic_size = critic_params.get('size', 0)
+                        total_params = actor_size + critic_size
+                        metrics["network/total_parameters"] = total_params
                     
                     # NEW: Add enhanced graph metrics
                     self._log_graph_metrics()
@@ -1944,6 +1976,195 @@ class EnhancedDebugCallback(BaseCallback):
         except Exception as e:
             print(f"   ⚠️  Error logging hyperparameter correlation: {e}")
 
+# ============================================================================
+# IMPROVED LOGGING SYSTEM WITH REWARD SCALING
+# ============================================================================
+
+def initialize_wandb_run(config, topology_type, training_type='single_task'):
+    """Initialize wandb with proper naming and configuration."""
+    
+    # Create descriptive run name
+    run_name = create_run_name(config, topology_type, training_type)
+    
+    # Create tags for easy filtering
+    tags = create_run_tags(config, topology_type, training_type)
+    
+    # Initialize wandb
+    wandb.init(
+        project="topology-playground",
+        entity="katko-it-universitetet-i-k-benhavn",
+        config=config,
+        name=run_name,
+        tags=tags
+    )
+
+def create_run_name(config, topology_type, training_type):
+    """Create descriptive run name."""
+    
+    # Base name
+    name_parts = [training_type, topology_type]
+    
+    # Add capacity or size information
+    if 'target_capacity' in config:
+        name_parts.append(f"cap{config.get('target_capacity')}")
+    elif 'hidden_size' in config:
+        name_parts.append(f"size{config.get('hidden_size')}")
+    
+    # Add task information
+    if training_type == 'baseline' or training_type == 'single_task':
+        name_parts.append(config.get('train_task', 'unknown'))
+    
+    return "_".join(name_parts)
+
+def create_run_tags(config, topology_type, training_type):
+    """Create tags for easy filtering and organization."""
+    
+    tags = [
+        training_type,
+        topology_type,
+        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
+        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
+        "normalized_metrics"  # Indicate that normalized metrics are used
+    ]
+    
+    # Add task tags
+    if training_type == 'baseline' or training_type == 'single_task':
+        tags.append(config.get('train_task', 'unknown'))
+    
+    return tags
+
+def log_baseline_results(wandb_run, baseline_results, topology_type):
+    """Log baseline evaluation results with hierarchical structure and normalization."""
+    
+    for task, results in baseline_results.items():
+        # Raw metrics
+        wandb_run.log({
+            f'baseline/{task}/raw/mean_reward': results['mean_reward'],
+            f'baseline/{task}/raw/success_rate': results['success_rate'],
+            f'baseline/{task}/raw/mean_length': np.mean(results['lengths']),
+            f'baseline/{task}/raw/std_reward': np.std(results['rewards']),
+            f'baseline/{task}/raw/std_length': np.std(results['lengths'])
+        })
+        
+        # Normalized metrics
+        normalized_reward = normalize_reward(results['mean_reward'], task)
+        wandb_run.log({
+            f'baseline/{task}/normalized/reward': normalized_reward,
+            f'baseline/{task}/normalized/efficiency': results.get('efficiency_score', 1.0)
+        })
+
+def log_phase_results(wandb_run, phase_results, phase_idx, topology_type, task_order=None):
+    """Log results after each training phase with topology-aware naming."""
+    
+    for task, results in phase_results.items():
+        context = results['context']
+        
+        # Topology-aware metric names for easy comparison
+        base_path = f"{topology_type}/{task_order}/{context}" if task_order else f"{topology_type}/phase{phase_idx}"
+        
+        # Raw metrics with topology context
+        wandb_run.log({
+            f'{base_path}/{task}/raw/mean_reward': results['mean_reward'],
+            f'{base_path}/{task}/raw/success_rate': results['success_rate'],
+            f'{base_path}/{task}/raw/mean_length': np.mean(results['lengths']),
+            f'{base_path}/{task}/raw/std_reward': np.std(results['rewards']),
+            f'{base_path}/{task}/raw/std_length': np.std(results['lengths'])
+        })
+        
+        # Normalized metrics with topology context
+        normalized_reward = normalize_reward(results['mean_reward'], task)
+        wandb_run.log({
+            f'{base_path}/{task}/normalized/reward': normalized_reward,
+            f'{base_path}/{task}/normalized/efficiency': results.get('efficiency_score', 1.0),
+            f'{base_path}/{task}/normalized/steps_to_threshold': results.get('steps_to_threshold', 0)
+        })
+        
+        # Legacy phase-based metrics for backward compatibility
+        wandb_run.log({
+            f'phase{phase_idx}/{task}/{context}/raw/mean_reward': results['mean_reward'],
+            f'phase{phase_idx}/{task}/{context}/raw/success_rate': results['success_rate'],
+            f'phase{phase_idx}/{task}/{context}/raw/mean_length': np.mean(results['lengths']),
+            f'phase{phase_idx}/{task}/{context}/raw/std_reward': np.std(results['rewards']),
+            f'phase{phase_idx}/{task}/{context}/raw/std_length': np.std(results['lengths']),
+            f'phase{phase_idx}/{task}/{context}/normalized/reward': normalized_reward,
+            f'phase{phase_idx}/{task}/{context}/normalized/efficiency': results.get('efficiency_score', 1.0),
+            f'phase{phase_idx}/{task}/{context}/normalized/steps_to_threshold': results.get('steps_to_threshold', 0)
+        })
+        
+        # Add task order context if provided
+        if task_order:
+            wandb_run.log({
+                f'phase{phase_idx}/task_order': task_order,
+                f'phase{phase_idx}/current_task': task,
+                f'{base_path}/task_order': task_order,
+                f'{base_path}/current_task': task
+            })
+
+def log_normalized_metrics(wandb_run, task_metrics, phase_idx, topology_type, task_order=None):
+    """Log comprehensive normalized metrics with topology context."""
+    
+    base_path = f"{topology_type}/{task_order}" if task_order else f"{topology_type}/phase{phase_idx}"
+    
+    # Task-specific normalized metrics with topology context
+    for task, metrics in task_metrics.items():
+        wandb_run.log({
+            f'{base_path}/normalized/{task}/normalized_reward': metrics['normalized_reward'],
+            f'{base_path}/normalized/{task}/steps_to_threshold': metrics['steps_to_threshold'],
+            f'{base_path}/normalized/{task}/final_reward': metrics['final_reward'],
+            f'{base_path}/normalized/{task}/rolling_mean_final': metrics['rolling_mean_final']
+        })
+    
+    # Aggregated normalized metrics with topology context
+    final_normalized_score = np.mean([metrics['normalized_reward'] for metrics in task_metrics.values()])
+    efficiency_score = np.mean([metrics['steps_to_threshold'] for metrics in task_metrics.values()])
+    
+    wandb_run.log({
+        f'{base_path}/normalized/final_normalized_score': final_normalized_score,
+        f'{base_path}/normalized/efficiency_score': efficiency_score
+    })
+    
+    # Legacy metrics for backward compatibility
+    wandb_run.log({
+        f'normalized/phase{phase_idx}/final_normalized_score': final_normalized_score,
+        f'normalized/phase{phase_idx}/efficiency_score': efficiency_score
+    })
+
+def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None):
+    """Log final comprehensive analysis with topology context."""
+    
+    base_path = f"{topology_type}/{task_order}/final" if task_order else f"{topology_type}/final"
+    
+    # Raw performance metrics with topology context
+    wandb_run.log({
+        f'{base_path}/raw/mean_reward': final_analysis['final_mean_reward'],
+        f'{base_path}/raw/success_rate': final_analysis['final_success_rate'],
+        f'{base_path}/raw/mean_length': final_analysis['final_mean_length']
+    })
+    
+    # Normalized performance metrics with topology context
+    wandb_run.log({
+        f'{base_path}/normalized/final_normalized_score': final_analysis['final_normalized_score'],
+        f'{base_path}/normalized/efficiency_score': final_analysis['efficiency_score'],
+        f'{base_path}/normalized/parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0)
+    })
+    
+    # Topology-specific normalized metrics
+    wandb_run.log({
+        f'{base_path}/topology/normalized_parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        f'{base_path}/topology/normalized_learning_stability': final_analysis.get('learning_stability', 0.0)
+    })
+    
+    # Legacy metrics for backward compatibility
+    wandb_run.log({
+        'final/raw/mean_reward': final_analysis['final_mean_reward'],
+        'final/raw/success_rate': final_analysis['final_success_rate'],
+        'final/raw/mean_length': final_analysis['final_mean_length'],
+        'final/normalized/final_normalized_score': final_analysis['final_normalized_score'],
+        'final/normalized/efficiency_score': final_analysis['efficiency_score'],
+        'final/normalized/parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        f'final/topology/{topology_type}/normalized_parameter_efficiency': final_analysis.get('parameter_efficiency', 0.0),
+        f'final/topology/{topology_type}/normalized_learning_stability': final_analysis.get('learning_stability', 0.0)
+    })
 
 # ============================================================================
 # SWEEP-SPECIFIC FUNCTIONS
@@ -2137,7 +2358,16 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     policy = model.policy
     actor_params = policy._get_topology_params(policy.actor_topology)
     critic_params = policy._get_topology_params(policy.critic_topology)
-    total_params = actor_params + critic_params
+    
+    # Calculate total parameters safely
+    if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+        total_params = actor_params + critic_params
+    elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+        actor_size = actor_params.get('size', 0)
+        critic_size = critic_params.get('size', 0)
+        total_params = actor_size + critic_size
+    else:
+        total_params = 0
     
     # Create descriptive run name for training
     training_run_name = f"training_{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_{train_task}"
@@ -2187,12 +2417,55 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     print(f"\n🎯 Training Phase:")
     print(f"   • Training on {train_task}...")
     
+    # Get task-specific training configuration
+    task_timesteps = get_task_timesteps(train_task, config)
+    convergence_callback = create_convergence_callback(train_task, config)
+    
+    print(f"📋 Task-specific training: {train_task} for {task_timesteps:,} timesteps")
+    
     # Create callback for training monitoring
     callback = EnhancedDebugCallback(verbose=1, wandb_run=training_wandb_run, log_freq=100)
     
-    # Train the model
+    # Create a callback that integrates convergence monitoring with periodic evaluation
+    class ConvergenceEvaluationCallback(BaseCallback):
+        def __init__(self, convergence_callback, model, env, task_name, eval_interval=20000):
+            super().__init__()
+            self.convergence_callback = convergence_callback
+            self.model = model
+            self.env = env
+            self.task_name = task_name
+            self.eval_interval = eval_interval
+            self.last_eval_step = 0
+        
+        def _on_step(self) -> bool:
+            # Check if we should do a quick evaluation
+            if self.num_timesteps - self.last_eval_step >= self.eval_interval:
+                self.last_eval_step = self.num_timesteps
+                
+                # Quick evaluation to check convergence
+                try:
+                    rewards, lengths, success = evaluate_model_enhanced(
+                        self.model, self.env, self.task_name, 5  # Quick eval with 5 episodes
+                    )
+                    mean_reward = np.mean(rewards)
+                    
+                    # Update convergence callback with evaluation results
+                    self.convergence_callback.update_with_evaluation(mean_reward, success)
+                    
+                    if self.convergence_callback.verbose > 0:
+                        print(f"📊 {self.task_name}: Quick eval - Reward: {mean_reward:.2f}, Success: {success:.1%}, Completion: {completion:.1f}%")
+                
+                except Exception as e:
+                    # If evaluation fails, continue training
+                    if self.convergence_callback.verbose > 0:
+                        print(f"⚠️  {self.task_name}: Evaluation failed: {e}")
+            
+            return True
+    
+    # Train the model with convergence monitoring
     start_time = time.time()
-    model.learn(total_timesteps=config['total_timesteps'], callback=callback, progress_bar=True)
+    combined_callback = [callback, convergence_callback, ConvergenceEvaluationCallback(convergence_callback, model, env, train_task)]
+    model.learn(total_timesteps=task_timesteps, callback=combined_callback, progress_bar=True)
     training_time = time.time() - start_time
     print(f"✅ Training completed in {training_time:.2f} seconds")
     
@@ -2318,39 +2591,65 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             else:
                 normalized_performance = 0.0
             
-            # Log comprehensive testing metrics
+            # Create task order string for topology-aware logging (single task = just the training task)
+            task_order = train_task
+            
+            # Log comprehensive testing metrics with topology-aware naming
             testing_metrics = {
-                # Basic performance metrics
+                # Topology-aware metrics for easy comparison
+                f"{topology_type}/{task_order}/testing/{test_task}/mean_reward": results['mean_reward'],
+                f"{topology_type}/{task_order}/testing/{test_task}/std_reward": results['std_reward'],
+                f"{topology_type}/{task_order}/testing/{test_task}/mean_length": results['mean_length'],
+                f"{topology_type}/{task_order}/testing/{test_task}/std_length": results['std_length'],
+                f"{topology_type}/{task_order}/testing/{test_task}/success_rate": results['success_rate'],
+                f"{topology_type}/{task_order}/testing/{test_task}/n_eval_episodes": config['n_eval_episodes'],
+                
+                # Transfer learning metrics with topology context
+                f"{topology_type}/{task_order}/transfer/{test_task}/transfer_ratio": transfer_ratio,
+                f"{topology_type}/{task_order}/transfer/{test_task}/relative_performance": transfer_ratio * 100,
+                f"{topology_type}/{task_order}/transfer/{test_task}/is_training_task": is_training_task,
+                f"{topology_type}/{task_order}/transfer/{test_task}/training_task_performance": train_reward,
+                
+                # Task-specific analysis with topology context
+                f"{topology_type}/{task_order}/task_analysis/{test_task}/normalized_performance": normalized_performance,
+                f"{topology_type}/{task_order}/task_analysis/{test_task}/raw_performance": results['mean_reward'],
+                f"{topology_type}/{task_order}/task_analysis/{test_task}/max_possible": max_reward,
+                f"{topology_type}/{task_order}/task_analysis/{test_task}/task_difficulty": test_task,
+                
+                # Network architecture with topology context
+                f"{topology_type}/{task_order}/network/topology_type": topology_type,
+                f"{topology_type}/{task_order}/network/layers": num_layers,
+                f"{topology_type}/{task_order}/network/size": actual_hidden_size,
+                f"{topology_type}/{task_order}/network/total_parameters": total_params,
+                f"{topology_type}/{task_order}/network/parameter_efficiency": total_params / actual_hidden_size,
+                f"{topology_type}/{task_order}/network/actor_critic_ratio": actor_params / critic_params if critic_params > 0 else 0,
+                
+                # Training context with topology context
+                f"{topology_type}/{task_order}/context/training_time": training_time,
+                f"{topology_type}/{task_order}/context/timesteps_per_second": config['total_timesteps'] / training_time,
+                f"{topology_type}/{task_order}/context/total_training_timesteps": config['total_timesteps'],
+                
+                # Legacy metrics for backward compatibility
                 "testing/mean_reward": results['mean_reward'],
                 "testing/std_reward": results['std_reward'],
                 "testing/n_eval_episodes": config['n_eval_episodes'],
-                
-                # Enhanced metrics (Phase 1)
                 "testing/mean_length": results['mean_length'],
                 "testing/std_length": results['std_length'],
                 "testing/success_rate": results['success_rate'],
-                
-                # Transfer learning metrics
                 "transfer/transfer_ratio": transfer_ratio,
-                "transfer/relative_performance": transfer_ratio * 100,  # Percentage
+                "transfer/relative_performance": transfer_ratio * 100,
                 "transfer/is_training_task": is_training_task,
                 "transfer/training_task_performance": train_reward,
-                
-                # Task-specific analysis
                 "task_analysis/normalized_performance": normalized_performance,
                 "task_analysis/raw_performance": results['mean_reward'],
                 "task_analysis/max_possible": max_reward,
                 "task_analysis/task_difficulty": test_task,
-                
-                # Network architecture
                 "network/topology_type": topology_type,
                 "network/layers": num_layers,
                 "network/size": actual_hidden_size,
                 "network/total_parameters": total_params,
                 "network/parameter_efficiency": total_params / actual_hidden_size,
                 "network/actor_critic_ratio": actor_params / critic_params if critic_params > 0 else 0,
-                
-                # Training context
                 "context/training_time": training_time,
                 "context/timesteps_per_second": config['total_timesteps'] / training_time,
                 "context/total_training_timesteps": config['total_timesteps'],
@@ -2384,6 +2683,29 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             print(f"   ⚠️  Error creating testing run for {test_task}: {e}")
             import traceback
             traceback.print_exc()
+    
+    # ============================================================================
+    # ADVANCED PLOTTING INTEGRATION
+    # ============================================================================
+    if wandb.run:
+        print(f"📊 Generating advanced plots for {topology_type} - {train_task}...")
+        
+        # Combine all results for plotting (single-task has only one phase)
+        all_phase_results = {}
+        for test_task, results in cross_task_results.items():
+            all_phase_results[f'{topology_type}/{train_task}/phase1/testing/{test_task}/mean_reward'] = results['mean_reward']
+        
+        # Log comprehensive plots
+        log_comprehensive_plots_for_run(
+            wandb_run=wandb.run,
+            phase_results=all_phase_results,
+            transfer_metrics={},  # No transfer metrics for single-task
+            topology_type=topology_type,
+            task_sequence=train_task,
+            sweep_results=None  # Will be populated when sweep results are available
+        )
+        
+        print(f"✅ Advanced plots logged to wandb!")
     
     train_env.close()
     
@@ -2544,11 +2866,100 @@ def train_with_sweep():
     finally:
         wandb.finish()
 
-if __name__ == "__main__":
-    train_with_sweep() 
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
+def unified_training_function():
+    """
+    Unified training function for single-task training with reward scaling.
+    This is the main entry point for wandb sweeps.
+    """
+    
+    # Check if we're in a wandb sweep or running standalone
+    if wandb.run is None:
+        # Standalone execution - use default configuration
+        print("🚀 Running single-task training in standalone mode...")
+        
+        # Default configuration for standalone execution
+        config = {
+            'topology_type': 'small_world',
+            'hidden_size': 128,
+            'num_layers': 1,
+            'train_task': 'CartPole-v1',
+            'learning_rate': 3e-4,
+            'n_steps': 2048,
+            'batch_size': 128,
+            'n_epochs': 5,
+            'gamma': 0.99,
+            'gae_lambda': 0.95,
+            'clip_range': 0.2,
+            'ent_coef': 0.05,
+            'max_grad_norm': 0.5,
+            'total_timesteps': 600000,
+            'n_eval_episodes': 15,
+            'activation': 'relu',
+            'dropout': 0.0,
+            # Universal dimensions
+            'universal_input_dim': 6,
+            'universal_output_dim': 3,
+            'universal_action_dim': 3,
+            # Tasks for cross-task testing
+            'tasks': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0'],
+            # PPO parameters
+            'ppo_params': {
+                'learning_rate': 3e-4,
+                'n_steps': 2048,
+                'batch_size': 128,
+                'n_epochs': 5,
+                'gamma': 0.99,
+                'gae_lambda': 0.95,
+                'clip_range': 0.2,
+                'ent_coef': 0.05,
+                'max_grad_norm': 0.5
+            },
+            # Topology-specific parameters
+            'small_world_k': 4,
+            'small_world_p': 0.3,
+            'modular_num_modules': 4,
+            'modular_inter_module_prob': 0.2,
+            'modular_intra_module_prob': 0.8,
+            'hybrid_num_modules': 4,
+            'hybrid_k': 4,
+            'hybrid_p': 0.3,
+            'hybrid_inter_module_prob': 0.2,
+        }
+        
+        # Initialize wandb with default config
+        wandb.init(
+            entity="katko-it-universitetet-i-k-benhavn",
+            project="topologies--single-task-training",
+            config=config
+        )
+    else:
+        # Sweep execution - use wandb.config
+        config = wandb.config
+    
+    # Determine topology type
+    topology_type = config.get('topology_type', 'fully_connected')
+    
+    # Determine hidden size or capacity
+    hidden_size = config.get('hidden_size', 64)
+    num_layers = config.get('num_layers', 1)
+    
+    # Determine task
+    task = config.get('train_task', 'CartPole-v1')
+    
+    # Initialize wandb with proper naming (if not already done)
+    if wandb.run is not None:
+        initialize_wandb_run(config, topology_type, 'single_task')
+    
+    # Run single-task training with cross-task evaluation
+    return cross_task_testing(
+        DebugTopologyPolicy,
+        topology_type,
+        config,
+        num_layers=num_layers,
+        hidden_size=hidden_size,
+        train_task=task
+    )
 
 if __name__ == "__main__":
-    train_with_sweep()
+    # Run the unified training function for wandb sweeps
+    unified_training_function()

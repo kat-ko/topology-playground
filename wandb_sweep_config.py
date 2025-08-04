@@ -145,9 +145,13 @@ def create_sweep_config(program='topologies--single-task-training-sweep.py'):
             # ============================================================================
             # TRAINING CONFIGURATION
             # ============================================================================
-            'total_timesteps': {
-                'values': [600000, 700000]
+            # Task-specific timesteps for optimal training duration
+            'task_timesteps': {
+                'CartPole-v1': {'value': 200000},  # Faster convergence
+                'Acrobot-v1': {'value': 800000},   # Slower convergence
+                'MountainCar-v0': {'value': 600000}  # Medium convergence
             },
+            'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {
                 'values': [15]
             },
@@ -309,9 +313,13 @@ def create_baseline_sweep_config(program='topologies--baseline-training-sweep.py
             # ============================================================================
             # TRAINING CONFIGURATION (Same as comprehensive)
             # ============================================================================
-            'total_timesteps': {
-                'values': [600000, 700000]
+            # Task-specific timesteps for optimal training duration
+            'task_timesteps': {
+                'CartPole-v1': {'value': 200000},  # Faster convergence
+                'Acrobot-v1': {'value': 800000},   # Slower convergence
+                'MountainCar-v0': {'value': 600000}  # Medium convergence
             },
+            'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {
                 'values': [15]
             },
@@ -410,7 +418,13 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -480,7 +494,13 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -643,7 +663,13 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -713,7 +739,13 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -771,13 +803,6 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                 },
                 'target_capacity': {
                     'values': [1000, 5000, 10000, 50000]  # Parameter count targets
-                },
-                
-                # ============================================================================
-                # TASK VARIATION
-                # ============================================================================
-                'train_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
                 },
                 
                 # ============================================================================
@@ -1175,7 +1200,13 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1248,7 +1279,13 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1423,7 +1460,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION (Fixed for fair comparison)
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1499,7 +1542,13 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                 # ============================================================================
                 # EVALUATION CONFIGURATION
                 # ============================================================================
-                'total_timesteps': {'value': 600000},
+                                # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1679,7 +1728,13 @@ def create_topology_comparison_sweep_config(program='topologies--topology-compar
             # ============================================================================
             # EVALUATION CONFIGURATION (Fixed for fair comparison)
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -1751,7 +1806,13 @@ def create_topology_optimization_sweep_config(topology_type='small_world', progr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
                 'n_eval_episodes': {'value': 15},
             }
         }
@@ -1959,7 +2020,13 @@ def create_small_world_optimization_sweep_config(program='topologies--single-tas
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2044,7 +2111,13 @@ def create_modular_optimization_sweep_config(program='topologies--single-task-tr
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2126,7 +2199,13 @@ def create_hybrid_optimization_sweep_config(program='topologies--single-task-tra
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2196,7 +2275,13 @@ def create_fully_connected_optimization_sweep_config(program='topologies--single
             # ============================================================================
             # EVALUATION CONFIGURATION
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+                            # Task-specific timesteps for optimal training duration
+                'task_timesteps': {
+                    'CartPole-v1': {'value': 200000},  # Faster convergence
+                    'Acrobot-v1': {'value': 800000},   # Slower convergence
+                    'MountainCar-v0': {'value': 600000}  # Medium convergence
+                },
+                'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2383,7 +2468,13 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+            # Task-specific timesteps for optimal training duration
+            'task_timesteps': {
+                'CartPole-v1': {'value': 200000},  # Faster convergence
+                'Acrobot-v1': {'value': 800000},   # Slower convergence
+                'MountainCar-v0': {'value': 600000}  # Medium convergence
+            },
+            'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2567,7 +2658,13 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
-            'total_timesteps': {'value': 600000},
+            # Task-specific timesteps for optimal training duration
+            'task_timesteps': {
+                'CartPole-v1': {'value': 200000},  # Faster convergence
+                'Acrobot-v1': {'value': 800000},   # Slower convergence
+                'MountainCar-v0': {'value': 600000}  # Medium convergence
+            },
+            'total_timesteps': {'value': 600000},  # Fallback for backward compatibility
             'n_eval_episodes': {'value': 15},
         }
     }
@@ -2949,6 +3046,228 @@ def create_simplified_baseline_sweep_config(program='topologies--simplified-base
             # ============================================================================
             # FIXED EVALUATION PARAMETERS
             # ============================================================================
+            'total_timesteps': {'value': 600000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
+    """
+    Create sweep configuration for comparing topologies with fixed network sizes.
+    Uses normalized metrics as primary optimization target.
+    
+    Args:
+        training_type (str): Type of training ('single_task', 'double_task', 'triple_task', 'baseline')
+    
+    Returns:
+        dict: Fixed network sizes comparison sweep configuration
+    """
+    
+    program_map = {
+        'baseline': 'topologies--baseline-training-sweep.py',
+        'single_task': 'topologies--single-task-training-sweep.py',
+        'double_task': 'topologies--double-task-training-sweep.py',
+        'triple_task': 'topologies--triple-task-training-sweep.py'
+    }
+    
+    program = program_map.get(training_type)
+    
+    # Determine task parameters based on training type
+    if training_type == 'baseline' or training_type == 'single_task':
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            }
+        }
+    elif training_type == 'double_task':
+        # For double-task: all valid combinations (no duplicates)
+        # 6 possible combinations: (CartPole, Acrobot), (CartPole, MountainCar), (Acrobot, CartPole), etc.
+        task_params = {
+            'task_order': {
+                'values': [
+                    'CartPole-v1_Acrobot-v1',
+                    'CartPole-v1_MountainCar-v0', 
+                    'Acrobot-v1_CartPole-v1',
+                    'Acrobot-v1_MountainCar-v0',
+                    'MountainCar-v0_CartPole-v1',
+                    'MountainCar-v0_Acrobot-v1'
+                ]
+            }
+        }
+    elif training_type == 'triple_task':
+        # For triple-task: all valid permutations (no duplicates)
+        # 6 possible permutations: (CartPole, Acrobot, MountainCar), (CartPole, MountainCar, Acrobot), etc.
+        task_params = {
+            'task_order': {
+                'values': [
+                    'CartPole-v1_Acrobot-v1_MountainCar-v0',
+                    'CartPole-v1_MountainCar-v0_Acrobot-v1',
+                    'Acrobot-v1_CartPole-v1_MountainCar-v0',
+                    'Acrobot-v1_MountainCar-v0_CartPole-v1',
+                    'MountainCar-v0_CartPole-v1_Acrobot-v1',
+                    'MountainCar-v0_Acrobot-v1_CartPole-v1'
+                ]
+            }
+        }
+    
+    return {
+        'program': program,
+        'method': 'grid',  # Grid search for systematic comparison
+        'metric': {
+            'name': f'fixed_network_sizes_{training_type}/normalized/final_normalized_score',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # Topology comparison
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            
+            # Fixed network sizes
+            'hidden_size': {
+                'values': [64, 128, 256, 512]
+            },
+            
+            # Task configuration
+            **task_params,
+            
+            # Fixed optimal hyperparameters
+            'learning_rate': {'value': 3e-4},
+            'batch_size': {'value': 64},
+            'n_steps': {'value': 2048},
+            'n_epochs': {'value': 10},
+            'gamma': {'value': 0.99},
+            'gae_lambda': {'value': 0.95},
+            'clip_range': {'value': 0.2},
+            'ent_coef': {'value': 0.01},
+            'max_grad_norm': {'value': 0.5},
+            'activation': {'value': 'relu'},
+            'dropout': {'value': 0.0},
+            
+            # Fixed topology parameters
+            'small_world_k': {'value': 4},
+            'small_world_p': {'value': 0.1},
+            'modular_num_modules': {'value': 4},
+            'modular_inter_module_prob': {'value': 0.05},
+            'modular_intra_module_prob': {'value': 0.7},
+            'hybrid_num_modules': {'value': 4},
+            'hybrid_k': {'value': 4},
+            'hybrid_p': {'value': 0.1},
+            'hybrid_inter_module_prob': {'value': 0.05},
+            'num_layers': {'value': 3},  # For fully connected
+            
+            # Evaluation parameters
+            'total_timesteps': {'value': 600000},
+            'n_eval_episodes': {'value': 15},
+        }
+    }
+
+def create_fixed_capacities_comparison_sweep(training_type='single_task'):
+    """
+    Create sweep configuration for comparing topologies with fixed parameter capacities.
+    Uses normalized metrics as primary optimization target.
+    
+    Args:
+        training_type (str): Type of training ('single_task', 'double_task', 'triple_task', 'baseline')
+    
+    Returns:
+        dict: Fixed capacities comparison sweep configuration
+    """
+    
+    program_map = {
+        'baseline': 'topologies--baseline-training-sweep.py',
+        'single_task': 'topologies--single-task-training-sweep.py',
+        'double_task': 'topologies--double-task-training-sweep.py',
+        'triple_task': 'topologies--triple-task-training-sweep.py'
+    }
+    
+    program = program_map.get(training_type)
+    
+    # Determine task parameters based on training type
+    if training_type == 'baseline' or training_type == 'single_task':
+        task_params = {
+            'train_task': {
+                'values': ['CartPole-v1', 'Acrobot-v1', 'MountainCar-v0']
+            }
+        }
+    elif training_type == 'double_task':
+        # For double-task: all valid combinations (no duplicates)
+        # 6 possible combinations: (CartPole, Acrobot), (CartPole, MountainCar), (Acrobot, CartPole), etc.
+        task_params = {
+            'task_order': {
+                'values': [
+                    'CartPole-v1_Acrobot-v1',
+                    'CartPole-v1_MountainCar-v0', 
+                    'Acrobot-v1_CartPole-v1',
+                    'Acrobot-v1_MountainCar-v0',
+                    'MountainCar-v0_CartPole-v1',
+                    'MountainCar-v0_Acrobot-v1'
+                ]
+            }
+        }
+    elif training_type == 'triple_task':
+        # For triple-task: all valid permutations (no duplicates)
+        # 6 possible permutations: (CartPole, Acrobot, MountainCar), (CartPole, MountainCar, Acrobot), etc.
+        task_params = {
+            'task_order': {
+                'values': [
+                    'CartPole-v1_Acrobot-v1_MountainCar-v0',
+                    'CartPole-v1_MountainCar-v0_Acrobot-v1',
+                    'Acrobot-v1_CartPole-v1_MountainCar-v0',
+                    'Acrobot-v1_MountainCar-v0_CartPole-v1',
+                    'MountainCar-v0_CartPole-v1_Acrobot-v1',
+                    'MountainCar-v0_Acrobot-v1_CartPole-v1'
+                ]
+            }
+        }
+    
+    return {
+        'program': program,
+        'method': 'grid',  # Grid search for systematic comparison
+        'metric': {
+            'name': f'fixed_capacities_{training_type}/normalized/final_normalized_score',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # Topology comparison
+            'topology_type': {
+                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+            },
+            
+            # Fixed target capacities
+            'target_capacity': {
+                'values': [1000, 5000, 10000, 50000]
+            },
+            
+            # Task configuration
+            **task_params,
+            
+            # Fixed optimal hyperparameters (same as network sizes)
+            'learning_rate': {'value': 3e-4},
+            'batch_size': {'value': 64},
+            'n_steps': {'value': 2048},
+            'n_epochs': {'value': 10},
+            'gamma': {'value': 0.99},
+            'gae_lambda': {'value': 0.95},
+            'clip_range': {'value': 0.2},
+            'ent_coef': {'value': 0.01},
+            'max_grad_norm': {'value': 0.5},
+            'activation': {'value': 'relu'},
+            'dropout': {'value': 0.0},
+            
+            # Fixed topology parameters (same as network sizes)
+            'small_world_k': {'value': 4},
+            'small_world_p': {'value': 0.1},
+            'modular_num_modules': {'value': 4},
+            'modular_inter_module_prob': {'value': 0.05},
+            'modular_intra_module_prob': {'value': 0.7},
+            'hybrid_num_modules': {'value': 4},
+            'hybrid_k': {'value': 4},
+            'hybrid_p': {'value': 0.1},
+            'hybrid_inter_module_prob': {'value': 0.05},
+            'num_layers': {'value': 3},
+            
+            # Evaluation parameters
             'total_timesteps': {'value': 600000},
             'n_eval_episodes': {'value': 15},
         }

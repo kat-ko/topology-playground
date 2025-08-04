@@ -20,6 +20,9 @@ from wandb_sweep_config import (
     create_fully_connected_optimization_sweep_config,
     create_fixed_network_sizes_optimization_sweep,
     create_fixed_capacities_optimization_sweep,
+    # NEW: Comparison sweep functions (grid search with fixed hyperparameters)
+    create_fixed_network_sizes_comparison_sweep,
+    create_fixed_capacities_comparison_sweep,
     # Simplified task training functions (CartPole + Acrobot only)
     create_simplified_single_task_sweep_config,
     create_simplified_double_task_sweep_config,
@@ -437,12 +440,13 @@ def launch_capacity_matched_comparison_sweep():
     return sweep_id
 
 
-def launch_fixed_network_sizes_optimization_sweep(training_type='single_task'):
-    """Launch a fixed network sizes optimization sweep."""
-    print(f"🔬 Launching {training_type} fixed network sizes optimization sweep...")
+def launch_fixed_network_sizes_comparison_sweep(training_type='single_task'):
+    """Launch comparison sweep with fixed network sizes using normalized metrics."""
+    
+    print(f"🔬 Launching {training_type} fixed network sizes comparison sweep...")
     
     # Create sweep config with training type
-    sweep_config = create_fixed_network_sizes_optimization_sweep(training_type)
+    sweep_config = create_fixed_network_sizes_comparison_sweep(training_type)
     
     # Get the appropriate agent config based on training type
     if training_type == 'baseline':
@@ -451,37 +455,46 @@ def launch_fixed_network_sizes_optimization_sweep(training_type='single_task'):
         agent_config = create_double_task_sweep_agent_config()
     elif training_type == 'triple_task':
         agent_config = create_triple_task_sweep_agent_config()
-    elif training_type.startswith('simplified'):
-        # For simplified versions, use the appropriate agent config
-        if training_type == 'simplified_baseline':
-            agent_config = create_baseline_sweep_agent_config()
-        elif training_type == 'simplified_double_task':
-            agent_config = create_double_task_sweep_agent_config()
-        else:  # simplified_single_task
-            agent_config = create_sweep_agent_config()
     else:  # single_task
         agent_config = create_sweep_agent_config()
     
-    sweep_config['name'] = f'{training_type}_fixed_network_sizes_optimization'
+    sweep_config['name'] = f'{training_type}_fixed_network_sizes_normalized_comparison'
+    
+    # Calculate total runs
+    topology_count = 4
+    size_count = 4
+    
+    if training_type == 'baseline' or training_type == 'single_task':
+        task_count = 3  # CartPole, Acrobot, MountainCar
+    elif training_type == 'double_task':
+        task_count = 6  # 6 valid task combinations (no duplicates)
+    elif training_type == 'triple_task':
+        task_count = 6  # 6 valid task permutations (no duplicates)
+    
+    total_runs = topology_count * size_count * task_count
+    
     print(f"   • Project: {agent_config['project']}")
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
     print(f"   • Parameters: {len(sweep_config['parameters'])}")
     print(f"   • Network Sizes: [64, 128, 256, 512]")
-    print(f"   • Topologies: All 4 with topology-specific parameter variation")
-    print(f"   • Training Parameters: Random search optimization")
+    print(f"   • Topologies: All 4 with fixed hyperparameters")
+    print(f"   • Primary Metric: normalized/final_normalized_score")
+    print(f"   • Total Runs: {total_runs}")
+    
     sweep_id = wandb.sweep(sweep_config, **agent_config)
-    print(f"✅ {training_type} fixed network sizes optimization sweep created with ID: {sweep_id}")
+    print(f"✅ {training_type} fixed network sizes comparison sweep created with ID: {sweep_id}")
     print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
     return sweep_id
 
 
-def launch_fixed_capacities_optimization_sweep(training_type='single_task'):
-    """Launch fixed capacities optimization sweep for specified training type."""
-    print(f"🚀 Launching {training_type} fixed capacities optimization sweep...")
+def launch_fixed_capacities_comparison_sweep(training_type='single_task'):
+    """Launch comparison sweep with fixed capacities using normalized metrics."""
+    
+    print(f"🚀 Launching {training_type} fixed capacities comparison sweep...")
     
     # Create sweep config with training type
-    sweep_config = create_fixed_capacities_optimization_sweep(training_type)
+    sweep_config = create_fixed_capacities_comparison_sweep(training_type)
     
     # Get the appropriate agent config based on training type
     if training_type == 'baseline':
@@ -490,26 +503,35 @@ def launch_fixed_capacities_optimization_sweep(training_type='single_task'):
         agent_config = create_double_task_sweep_agent_config()
     elif training_type == 'triple_task':
         agent_config = create_triple_task_sweep_agent_config()
-    elif training_type.startswith('simplified'):
-        # For simplified versions, use the appropriate agent config
-        if training_type == 'simplified_baseline':
-            agent_config = create_baseline_sweep_agent_config()
-        elif training_type == 'simplified_double_task':
-            agent_config = create_double_task_sweep_agent_config()
-        else:  # simplified_single_task
-            agent_config = create_sweep_agent_config()
     else:  # single_task
         agent_config = create_sweep_agent_config()
     
-    sweep_config['name'] = f'{training_type}_fixed_capacities_optimization'
+    sweep_config['name'] = f'{training_type}_fixed_capacities_normalized_comparison'
+    
+    # Calculate total runs
+    topology_count = 4
+    capacity_count = 4
+    
+    if training_type == 'baseline' or training_type == 'single_task':
+        task_count = 3
+    elif training_type == 'double_task':
+        task_count = 6  # 6 valid task combinations (no duplicates)
+    elif training_type == 'triple_task':
+        task_count = 6  # 6 valid task permutations (no duplicates)
+    
+    total_runs = topology_count * capacity_count * task_count
     
     print(f"   • Project: {agent_config['project']}")
     print(f"   • Entity: {agent_config['entity']}")
     print(f"   • Method: {sweep_config['method']}")
     print(f"   • Parameters: {len(sweep_config['parameters'])}")
+    print(f"   • Target Capacities: [1K, 5K, 10K, 50K] parameters")
+    print(f"   • Topologies: All 4 with fixed hyperparameters")
+    print(f"   • Primary Metric: normalized/final_normalized_score")
+    print(f"   • Total Runs: {total_runs}")
     
     sweep_id = wandb.sweep(sweep_config, **agent_config)
-    print(f"✅ {training_type} fixed capacities optimization sweep created with ID: {sweep_id}")
+    print(f"✅ {training_type} fixed capacities comparison sweep created with ID: {sweep_id}")
     print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
     return sweep_id
 
@@ -582,8 +604,8 @@ def launch_topology_analysis_suite():
     print("🎯 Topology Analysis Suite")
     print("==========================")
     print("1. Topology Comparison (Fair head-to-head)")
-    print("2. Fixed Network Sizes Optimization")  # NEW: Your research sweep
-    print("3. Fixed Capacities Optimization")     # NEW: Your research sweep
+    print("2. Fixed Network Sizes Comparison (Grid search with normalized metrics)")
+    print("3. Fixed Capacities Comparison (Grid search with normalized metrics)")
     print("4. Small World Optimization")
     print("5. Modular Optimization") 
     print("6. Hybrid Optimization")
@@ -598,9 +620,9 @@ def launch_topology_analysis_suite():
     if choice == "1":
         return launch_topology_comparison_sweep()
     elif choice == "2":
-        return launch_fixed_network_sizes_optimization_sweep()
+        return launch_fixed_network_sizes_comparison_sweep()
     elif choice == "3":
-        return launch_fixed_capacities_optimization_sweep()
+        return launch_fixed_capacities_comparison_sweep()
     elif choice == "4":
         return launch_topology_optimization_sweep('small_world')
     elif choice == "5":
@@ -640,8 +662,8 @@ def main():
     if training_type in ['5', '6', '7']:
         print("\nAnalysis Types for Simplified Training:")
         print("1. Simplified Training Sweep (Direct)")
-        print("2. Fixed Network Sizes Optimization (Research sweep)")
-        print("3. Fixed Capacities Optimization (Research sweep)")
+        print("2. Fixed Network Sizes Comparison (Grid search with normalized metrics)")
+        print("3. Fixed Capacities Comparison (Grid search with normalized metrics)")
         
         analysis_choice = input("\nSelect analysis type (1-3): ").strip()
         
@@ -663,11 +685,11 @@ def main():
             }
             return simplified_map[training_type]()
         elif analysis_choice == '2':
-            # Fixed network sizes research sweep
-            return launch_fixed_network_sizes_optimization_sweep(training_type_name)
+            # Fixed network sizes comparison sweep
+            return launch_fixed_network_sizes_comparison_sweep(training_type_name)
         elif analysis_choice == '3':
-            # Fixed capacities research sweep
-            return launch_fixed_capacities_optimization_sweep(training_type_name)
+            # Fixed capacities comparison sweep
+            return launch_fixed_capacities_comparison_sweep(training_type_name)
         else:
             print("❌ Invalid choice. Please try again.")
             return main()
@@ -677,8 +699,8 @@ def main():
     print("2. Topology Optimization (Individual tuning)")
     print("3. Meta-Analysis (Optimized vs optimized)")
     print("4. Capacity-Matched Comparison")
-    print("5. Fixed Network Sizes Optimization (Research sweep)")
-    print("6. Fixed Capacities Optimization (Research sweep)")
+    print("5. Fixed Network Sizes Comparison (Grid search with normalized metrics)")
+    print("6. Fixed Capacities Comparison (Grid search with normalized metrics)")
     print("7. Individual Topology Optimization (Choose specific topology)")
     print("8. Comprehensive (All parameters)")
     
@@ -686,7 +708,7 @@ def main():
     
     # Map selections to actual values
     training_map = {'1': 'single_task', '2': 'baseline', '3': 'double_task', '4': 'triple_task'}
-    analysis_map = {'1': 'topology_comparison', '2': 'topology_optimization', '3': 'meta_analysis', '4': 'capacity_matched', '5': 'fixed_network_sizes_optimization', '6': 'fixed_capacities_optimization', '7': 'individual_topology_optimization', '8': 'comprehensive'}
+    analysis_map = {'1': 'topology_comparison', '2': 'topology_optimization', '3': 'meta_analysis', '4': 'capacity_matched', '5': 'fixed_network_sizes_comparison', '6': 'fixed_capacities_comparison', '7': 'individual_topology_optimization', '8': 'comprehensive'}
     
     training_type = training_map.get(training_type, 'single_task')
     analysis_type = analysis_map.get(analysis_type, 'comprehensive')
@@ -697,12 +719,12 @@ def main():
     if analysis_type == 'individual_topology_optimization':
         return launch_individual_topology_optimization_for_training_type(training_type)
     
-    # Handle research sweeps (fixed network sizes and capacities)
-    if analysis_type in ['fixed_network_sizes_optimization', 'fixed_capacities_optimization']:
-        if analysis_type == 'fixed_network_sizes_optimization':
-            return launch_fixed_network_sizes_optimization_sweep(training_type)
+    # Handle comparison sweeps (fixed network sizes and capacities)
+    if analysis_type in ['fixed_network_sizes_comparison', 'fixed_capacities_comparison']:
+        if analysis_type == 'fixed_network_sizes_comparison':
+            return launch_fixed_network_sizes_comparison_sweep(training_type)
         else:
-            return launch_fixed_capacities_optimization_sweep(training_type)
+            return launch_fixed_capacities_comparison_sweep(training_type)
     
     # Launch appropriate sweep based on selections
     if training_type == 'single_task':

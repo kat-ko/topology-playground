@@ -69,6 +69,57 @@ def normalize_reward(reward: float, task: str) -> float:
     return np.clip(normalized, 0.0, 1.0)
 
 
+def calculate_reward_completion_percentage(reward: float, task: str) -> float:
+    """
+    Calculate what percentage of the maximum possible reward has been achieved.
+    
+    Args:
+        reward: Raw reward value
+        task: Task name (e.g., 'CartPole-v1')
+    
+    Returns:
+        Completion percentage (0-100 scale)
+    """
+    if task not in R_MIN or task not in R_SOLVED:
+        raise ValueError(f"Unknown task: {task}")
+    
+    r_min = R_MIN[task]
+    r_solved = R_SOLVED[task]
+    
+    # Handle edge cases
+    if r_solved == r_min:
+        return 0.0 if reward <= r_min else 100.0
+    
+    # Calculate completion percentage
+    completion = (reward - r_min) / (r_solved - r_min) * 100.0
+    return np.clip(completion, 0.0, 100.0)
+
+
+def calculate_success_rate_with_completion(rewards: List[float], task: str) -> Tuple[float, float]:
+    """
+    Calculate both traditional success rate and reward completion percentage.
+    
+    Args:
+        rewards: List of episodic rewards
+        task: Task name (e.g., 'CartPole-v1')
+    
+    Returns:
+        Tuple of (success_rate, completion_percentage)
+    """
+    if not rewards:
+        return 0.0, 0.0
+    
+    # Traditional success rate (episodes that reached solved threshold)
+    success_count = sum(1 for r in rewards if r >= R_SOLVED[task])
+    success_rate = (success_count / len(rewards)) * 100.0
+    
+    # Average completion percentage across all episodes
+    completion_percentages = [calculate_reward_completion_percentage(r, task) for r in rewards]
+    avg_completion = np.mean(completion_percentages)
+    
+    return success_rate, avg_completion
+
+
 def compute_rolling_mean(rewards: List[float], window_size: int = ROLLING_WINDOW) -> List[float]:
     """
     Compute rolling mean of rewards.
