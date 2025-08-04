@@ -224,7 +224,7 @@ class BaselineTopologyPolicy(ActorCriticPolicy):
         
         # Calculate total parameters safely
         if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
-            total_params = actor_params + critic_params
+        total_params = actor_params + critic_params
         elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
             actor_size = actor_params.get('size', 0)
             critic_size = critic_params.get('size', 0)
@@ -741,97 +741,37 @@ def initialize_wandb_run(config, topology_type, training_type='baseline'):
     )
 
 def create_run_name(config, topology_type, training_type):
-    """Create descriptive run name with exact capacity and size information."""
+    """Create descriptive run name."""
     
-    # Get topology abbreviation
-    topology_abbrev = {
-        'small_world': 'SW',
-        'modular': 'MOD', 
-        'hybrid': 'HYB',
-        'fully_connected': 'FC'
-    }.get(topology_type, topology_type.upper())
+    # Base name
+    name_parts = [training_type, topology_type]
     
-    # Get capacity and size information
+    # Add capacity or size information
     if 'target_capacity' in config:
-        # Fixed capacity experiment - show target capacity and actual size
-        target_capacity = config.get('target_capacity')
-        actual_size = config.get('hidden_size', 'unknown')
-        capacity_str = f"C{target_capacity}"
-        size_str = f"S{actual_size}"
+        name_parts.append(f"cap{config.get('target_capacity')}")
     elif 'hidden_size' in config:
-        # Fixed size experiment - show actual capacity and target size
-        target_size = config.get('hidden_size')
-        # We'll need to calculate actual capacity during training
-        # For now, use placeholder that will be updated
-        capacity_str = f"C{target_size * 10}"  # Placeholder, will be updated
-        size_str = f"S{target_size}"
-    else:
-        capacity_str = "Cunknown"
-        size_str = "Sunknown"
+        name_parts.append(f"size{config.get('hidden_size')}")
     
-    # Build task sequence
-    if training_type == 'baseline':
-        task = config.get('train_task', 'CartPole-v1')
-        # Abbreviate task name
-        if 'LunarLander' in task:
-            task_abbrev = 'LL'
-        elif 'Acrobot' in task:
-            task_abbrev = 'AC'
-        elif 'CartPole' in task:
-            task_abbrev = 'CP'
-        elif 'MountainCar' in task:
-            task_abbrev = 'MC'
-        else:
-            task_abbrev = task
-        task_sequence = task_abbrev
-    else:
-        task_sequence = "unknown"
-    
-    # Build name parts
-    name_parts = [topology_abbrev, capacity_str, size_str, task_sequence]
+    # Add task information
+    if training_type == 'baseline' or training_type == 'single_task':
+        name_parts.append(config.get('train_task', 'unknown'))
     
     return "_".join(name_parts)
 
-def update_run_name_with_actual_capacity(wandb_run, actual_capacity, topology_type, training_type):
-    """Update the run name with the actual capacity after training."""
-    if wandb_run and actual_capacity is not None:
-        new_name = create_run_name(wandb_run.config, topology_type, training_type, actual_capacity)
-        wandb_run.name = new_name
-        # Also update the actual_capacity tag
-        wandb_run.config.update({'actual_capacity': actual_capacity})
-        wandb_run.log({'actual_capacity': actual_capacity})
-
 def create_run_tags(config, topology_type, training_type):
-    """Create comprehensive tags for easy filtering and organization."""
+    """Create tags for easy filtering and organization."""
     
-    # Primary tags
     tags = [
-        topology_type,
         training_type,
-        "normalized_metrics"
+        topology_type,
+        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
+        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
+        "normalized_metrics"  # Indicate that normalized metrics are used
     ]
     
-    # Capacity and size tags
-    if 'target_capacity' in config:
-        tags.extend([
-            "fixed_capacity",
-            f"target_capacity_{config.get('target_capacity')}",
-            "capacity_matched"
-        ])
-        if 'hidden_size' in config:
-            tags.append(f"size_value_{config.get('hidden_size')}")
-    elif 'hidden_size' in config:
-        tags.extend([
-            "fixed_size", 
-            f"size_value_{config.get('hidden_size')}",
-            "size_matched"
-        ])
-    
-    # Task sequence tags
-    if training_type == 'baseline':
-        task = config.get('train_task', 'CartPole-v1')
-        tags.append(task)
-        tags.append(f"task_sequence_{task}")
+    # Add task tags
+    if training_type == 'baseline' or training_type == 'single_task':
+        tags.append(config.get('train_task', 'unknown'))
     
     return tags
 
@@ -1204,14 +1144,6 @@ def baseline_training(policy_class, topology_type, config, num_layers=1, hidden_
         verbose=1
     )
     
-    # Calculate actual capacity and update run name
-    if wandb.run is not None:
-        actor_params = model.policy._get_topology_params(model.policy.actor_topology)
-        critic_params = model.policy._get_topology_params(model.policy.critic_topology)
-        total_params = actor_params + critic_params if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)) else 0
-        update_run_name_with_actual_capacity(wandb.run, total_params, topology_type, 'baseline')
-        print(f"📊 Actual capacity: {total_params:,} parameters")
-    
     # Create callback for logging
     callback = BaselineCallback(wandb_run=wandb.run, log_freq=100)
     
@@ -1384,7 +1316,7 @@ def unified_training_function():
             project="topologies--baseline-training",
             config=config
         )
-    else:
+        else:
         # Sweep execution - use wandb.config
         config = wandb.config
     
