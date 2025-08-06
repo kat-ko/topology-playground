@@ -42,10 +42,11 @@ from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
 from src.utils.task_normalization import (
     compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
-    get_task_thresholds, get_normalization_constants, normalize_reward
+    get_task_thresholds, get_normalization_constants, normalize_reward,
+    calculate_reward_completion_percentage
 )
 from src.utils.advanced_plotting import (
-    log_comprehensive_plots_for_run, create_multi_phase_learning_curves
+    log_streamlined_plots_for_run, create_multi_phase_learning_curves
 )
 from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 
@@ -1547,7 +1548,7 @@ def save_connection_lists(actor_connections, critic_connections, topology_type, 
 class EnhancedDebugCallback(BaseCallback):
     """Enhanced callback to track detailed training progress and network metrics."""
     
-    def __init__(self, verbose=0, wandb_run=None, log_freq=100):
+    def __init__(self, verbose=0, wandb_run=None, log_freq=1000):
         super().__init__(verbose)
         self.episode_rewards = []
         self.episode_lengths = []
@@ -1616,6 +1617,31 @@ class EnhancedDebugCallback(BaseCallback):
                     current_lr = self.model.lr_schedule(self.num_timesteps)
                     metrics["train/learning_rate"] = current_lr
                 
+                # NEW: Add learning progression metrics
+                if len(self.training_metrics['episode_rewards']) > 0:
+                    recent_rewards = self.training_metrics['episode_rewards'][-100:]  # Last 100 episodes
+                    recent_lengths = self.training_metrics['episode_lengths'][-100:]  # Last 100 episodes
+                    
+                    metrics.update({
+                        "learning_progression/episode_reward_mean": np.mean(recent_rewards),
+                        "learning_progression/episode_reward_std": np.std(recent_rewards),
+                        "learning_progression/episode_length_mean": np.mean(recent_lengths),
+                        "learning_progression/episode_length_std": np.std(recent_lengths),
+                        "learning_progression/training_progress_ratio": self.num_timesteps / self.model.total_timesteps if hasattr(self.model, 'total_timesteps') else 0.0
+                    })
+                    
+                    # Calculate current success rate and completion percentage if we have task info
+                    if hasattr(self.model, 'env') and hasattr(self.model.env, 'envs') and len(self.model.env.envs) > 0:
+                        env = self.model.env.envs[0]
+                        if hasattr(env, 'spec') and env.spec is not None:
+                            task_name = env.spec.id
+                            success_rate = calculate_success_rate(recent_rewards, recent_lengths, task_name)
+                            completion_pct = calculate_reward_completion_percentage(recent_rewards, task_name)
+                            metrics.update({
+                                "learning_progression/success_rate_current": success_rate,
+                                "learning_progression/completion_percentage_current": completion_pct
+                            })
+                
                 # Add gradient norm if available
                 if hasattr(self.model, 'policy') and hasattr(self.model.policy, 'optimizer'):
                     total_norm = 0
@@ -1645,11 +1671,14 @@ class EnhancedDebugCallback(BaseCallback):
                         total_params = actor_size + critic_size
                         metrics["network/total_parameters"] = total_params
                     
-                    # NEW: Add enhanced graph metrics
-                    self._log_graph_metrics()
-                    self._log_depth_analysis()
-                    self._log_sample_efficiency()
-                    self._log_hyperparameter_correlation()
+                    # REMOVED: Graph metrics logging (too expensive during training)
+                    # REMOVED: Depth analysis (too expensive during training)
+                    # REMOVED: Sample efficiency (redundant metrics)
+                    # REMOVED: Hyperparameter correlation (redundant metrics)
+                
+                # NEW: Real-time training progress table (every 1000 steps)
+                if self.num_timesteps % 10000 == 0:  # Update table every 10k steps
+                    self._log_training_progress_table()
                 
                 self.wandb_run.log(metrics, step=self.num_timesteps)
         except Exception as e:
@@ -1714,37 +1743,37 @@ class EnhancedDebugCallback(BaseCallback):
         return skewness
     
     def _log_final_training_summary(self):
-        """Log final training summary and create visualizations."""
+        """Log final training summary with comprehensive statistics."""
         try:
-            if len(self.training_metrics['episode_rewards']) > 0:
-                # Create training curves
-                self._create_training_curves()
-                
-                # Calculate comprehensive final statistics
-                rewards = np.array(self.training_metrics['episode_rewards'])
-                lengths = np.array(self.training_metrics['episode_lengths'])
-                
+            print(f"   📊 Logging final training summary...")
+            
+            # Get all episode rewards and lengths
+            rewards = self.training_metrics['episode_rewards']
+            lengths = self.training_metrics['episode_lengths']
+            
+            if len(rewards) > 0:
+                # Calculate comprehensive statistics
                 final_metrics = {
                     "final/mean_reward": np.mean(rewards),
                     "final/std_reward": np.std(rewards),
                     "final/max_reward": np.max(rewards),
                     "final/min_reward": np.min(rewards),
+                    "final/mean_length": np.mean(lengths),
+                    "final/std_length": np.std(lengths),
                     "final/total_episodes": len(rewards),
                     "final/total_steps": self.step_count,
-                    "final/mean_episode_length": np.mean(lengths),
-                    "final/reward_variance": np.var(rewards),
-                    "final/reward_skewness": self._calculate_skewness(rewards),
                     "final/positive_reward_ratio": len(rewards[rewards > 0]) / len(rewards),
-                    "final/negative_reward_ratio": len(rewards[rewards < 0]) / len(rewards),
-                    "final/zero_reward_ratio": len(rewards[rewards == 0]) / len(rewards),
+                    "final/training_efficiency": np.mean(rewards) / self.step_count if self.step_count > 0 else 0,
                 }
                 
-                # Add percentiles
-                percentiles = [10, 25, 50, 75, 90]
-                for p in percentiles:
-                    final_metrics[f"final/reward_p{p}"] = np.percentile(rewards, p)
+                # Add skewness analysis
+                if len(rewards) > 10:
+                    reward_skewness = self._calculate_skewness(rewards)
+                    final_metrics["final/reward_skewness"] = reward_skewness
                 
-                self.wandb_run.log(final_metrics)
+                # Log final metrics
+                if self.wandb_run is not None:
+                    self.wandb_run.log(final_metrics)
                 
                 # Create training summary table
                 if self.wandb_run is not None:
@@ -1759,62 +1788,41 @@ class EnhancedDebugCallback(BaseCallback):
                     summary_table.add_data("Positive Reward Ratio", f"{len(rewards[rewards > 0]) / len(rewards):.1%}", "Percentage of positive rewards")
                     summary_table.add_data("Training Efficiency", f"{np.mean(rewards) / self.step_count:.4f}", "Reward per step")
                     
-                    self.wandb_run.log({"training_summary": summary_table})
+                    self.wandb_run.log({"tables/training_summary": summary_table})
         except Exception as e:
             print(f"   ⚠️  Error logging final summary: {e}")
-    
-    def _create_training_curves(self):
-        """Create and log training curves."""
-        try:
-            # Create reward curve
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
-            
-            # Reward curve
-            rewards = self.training_metrics['episode_rewards']
-            ax1.plot(rewards, alpha=0.6, color='blue')
-            ax1.set_title('Training Reward Curve')
-            ax1.set_xlabel('Episode')
-            ax1.set_ylabel('Reward')
-            ax1.grid(True, alpha=0.3)
-            
-            # Moving average
-            if len(rewards) > 10:
-                window = min(10, len(rewards) // 10)
-                moving_avg = np.convolve(rewards, np.ones(window)/window, mode='valid')
-                ax1.plot(range(window-1, len(rewards)), moving_avg, color='red', linewidth=2, label=f'{window}-episode moving average')
-                ax1.legend()
-            
-            # Reward distribution
-            ax2.hist(rewards, bins=20, alpha=0.7, color='green', edgecolor='black')
-            ax2.set_title('Reward Distribution')
-            ax2.set_xlabel('Reward')
-            ax2.set_ylabel('Frequency')
-            ax2.grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            
-            # Convert to wandb image
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-            buf.seek(0)
-            img = Image.open(buf)
-            
-            self.wandb_run.log({"training_curves": wandb.Image(img)})
-            plt.close()
-            
-        except Exception as e:
-            print(f"   ⚠️  Error creating training curves: {e}")
 
-    def _calculate_skewness(self, data):
-        """Calculate skewness of data distribution."""
-        if len(data) < 3:
-            return 0.0
-        mean = np.mean(data)
-        std = np.std(data)
-        if std == 0:
-            return 0.0
-        skewness = np.mean(((data - mean) / std) ** 3)
-        return skewness
+    def _log_training_progress_table(self):
+        """Log real-time training progress table during training."""
+        try:
+            if self.wandb_run is not None and len(self.training_metrics['episode_rewards']) > 0:
+                # Get recent metrics (last 50 episodes)
+                recent_rewards = self.training_metrics['episode_rewards'][-50:]
+                recent_lengths = self.training_metrics['episode_lengths'][-50:]
+                
+                # Create progress table
+                progress_table = wandb.Table(columns=["Step", "Recent Mean Reward", "Recent Std Reward", "Recent Mean Length", "Training Progress %"])
+                
+                # Calculate current metrics
+                mean_reward = np.mean(recent_rewards)
+                std_reward = np.std(recent_rewards)
+                mean_length = np.mean(recent_lengths)
+                progress_pct = (self.num_timesteps / self.model.total_timesteps * 100) if hasattr(self.model, 'total_timesteps') else 0
+                
+                # Add current progress
+                progress_table.add_data(
+                    f"{self.num_timesteps:,}",
+                    f"{mean_reward:.2f}",
+                    f"{std_reward:.2f}",
+                    f"{mean_length:.1f}",
+                    f"{progress_pct:.1f}%"
+                )
+                
+                # Log the table
+                self.wandb_run.log({"tables/training_progress": progress_table})
+                
+        except Exception as e:
+            print(f"   ⚠️  Error logging training progress table: {e}")
     
     def _log_graph_metrics(self):
         """Log real-time graph metrics during training."""
@@ -1991,43 +1999,111 @@ def initialize_wandb_run(config, topology_type, training_type='single_task'):
     
     # Initialize wandb
     wandb.init(
-        project="topology-playground",
+        project="topologies--single-task-training",
         entity="katko-it-universitetet-i-k-benhavn",
         config=config,
         name=run_name,
         tags=tags
     )
 
-def create_run_name(config, topology_type, training_type):
-    """Create descriptive run name."""
+def create_run_name(config, topology_type, training_type, model=None, total_params=None):
+    """Create descriptive run name with exact capacity and size."""
     
-    # Base name
-    name_parts = [training_type, topology_type]
+    # Topology abbreviation
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
     
-    # Add capacity or size information
+    # Get actual capacity and size
+    actual_capacity = None
+    actual_size = config.get('hidden_size', 'unknown')
+    
+    # Calculate actual capacity if we have a model to check
     if 'target_capacity' in config:
-        name_parts.append(f"cap{config.get('target_capacity')}")
+        # For capacity-matched sweeps, use target capacity
+        actual_capacity = config.get('target_capacity')
+    elif total_params is not None:
+        # Use pre-calculated total parameters
+        actual_capacity = total_params
+    elif model is not None and hasattr(model, 'policy'):
+        # Calculate actual capacity from the model
+        try:
+            policy = model.policy
+            actor_params = policy._get_topology_params(policy.actor_topology)
+            critic_params = policy._get_topology_params(policy.critic_topology)
+            
+            # Calculate total parameters safely
+            if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+                actual_capacity = actor_params + critic_params
+            elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+                actor_size = actor_params.get('size', 0)
+                critic_size = critic_params.get('size', 0)
+                actual_capacity = actor_size + critic_size
+            else:
+                actual_capacity = None
+        except Exception as e:
+            print(f"   ⚠️  Could not calculate actual capacity: {e}")
+            actual_capacity = None
     elif 'hidden_size' in config:
-        name_parts.append(f"size{config.get('hidden_size')}")
+        # For size-matched sweeps without model, we can't calculate actual capacity yet
+        actual_capacity = None
+    
+    # Task abbreviations
+    task_abbrev = {
+        'LunarLander-v2': 'LL',
+        'Acrobot-v1': 'AC', 
+        'CartPole-v1': 'CP',
+        'MountainCar-v0': 'MC'
+    }
+    
+    # Build name parts
+    name_parts = [topology_abbrev]
+    
+    # Add capacity (exact number)
+    if actual_capacity is not None:
+        name_parts.append(f"C{actual_capacity}")
+    else:
+        name_parts.append("C?")
+    
+    # Add size
+    name_parts.append(f"S{actual_size}")
     
     # Add task information
     if training_type == 'baseline' or training_type == 'single_task':
-        name_parts.append(config.get('train_task', 'unknown'))
+        task_name = config.get('train_task', 'unknown')
+        task_abbrev_name = task_abbrev.get(task_name, task_name)
+        name_parts.append(task_abbrev_name)
     
     return "_".join(name_parts)
 
 def create_run_tags(config, topology_type, training_type):
-    """Create tags for easy filtering and organization."""
+    """Create enhanced tags for easy filtering and organization."""
     
+    # Primary tags
     tags = [
-        training_type,
         topology_type,
-        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
-        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
-        "normalized_metrics"  # Indicate that normalized metrics are used
+        training_type,
+        "normalized_metrics"
     ]
     
-    # Add task tags
+    # Capacity and size tags
+    if 'target_capacity' in config:
+        tags.extend([
+            "fixed_capacity",
+            f"target_capacity_{config.get('target_capacity')}",
+            "capacity_matched"
+        ])
+    elif 'hidden_size' in config:
+        tags.extend([
+            "fixed_size", 
+            f"size_{config.get('hidden_size')}",
+            "size_matched"
+        ])
+    
+    # Task tags
     if training_type == 'baseline' or training_type == 'single_task':
         tags.append(config.get('train_task', 'unknown'))
     
@@ -2370,14 +2446,17 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
         total_params = 0
     
     # Create descriptive run name for training
-    training_run_name = f"training_{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_{train_task}"
+    # Create proper naming for this specific training run with actual capacity
+    run_name = create_run_name(config, topology_type, 'single_task', total_params=total_params)
+    tags = create_run_tags(config, topology_type, 'single_task')
     
     # Initialize wandb run for training (separate from testing)
     try:
         training_wandb_run = wandb.init(
             entity="katko-it-universitetet-i-k-benhavn",
             project="topologies--single-task-training",  # Single-task training project
-            name=training_run_name,
+            name=run_name,
+            tags=tags,
             config={
                 "run_type": "training",
                 "topology_type": topology_type,
@@ -2394,7 +2473,6 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
                 "universal_action_dim": config['universal_action_dim'],
                 "experiment_type": "cross_task_testing",
             },
-            tags=[topology_type, f"layers_{num_layers}", f"size_{actual_hidden_size}", f"params_{total_params}", train_task, "training"],
             reinit=True
         )
         training_wandb_enabled = True
@@ -2424,7 +2502,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     print(f"📋 Task-specific training: {train_task} for {task_timesteps:,} timesteps")
     
     # Create callback for training monitoring
-    callback = EnhancedDebugCallback(verbose=1, wandb_run=training_wandb_run, log_freq=100)
+    callback = EnhancedDebugCallback(verbose=1, wandb_run=training_wandb_run, log_freq=1000)
     
     # Create a callback that integrates convergence monitoring with periodic evaluation
     class ConvergenceEvaluationCallback(BaseCallback):
@@ -2543,15 +2621,17 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     
     # Create individual testing runs for each task
     for test_task, results in cross_task_results.items():
-        # Create descriptive run name for testing
-        testing_run_name = f"testing_{topology_type}_{num_layers}_{actual_hidden_size}_{total_params}_train_{train_task}_test_{test_task}"
+        # Create proper naming for this specific test run
+        test_config = config.copy()
+        test_config['test_task'] = test_task
+        test_run_name = f"{run_name}_test_{test_task}"
         
         try:
             # Initialize wandb run for this specific test
             testing_wandb_run = wandb.init(
                 entity="katko-it-universitetet-i-k-benhavn",
                 project="topologies--single-task-training",  # Single-task training project
-                name=testing_run_name,
+                name=test_run_name,
                 config={
                     "run_type": "testing",
                     "topology_type": topology_type,
@@ -2685,18 +2765,41 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             traceback.print_exc()
     
     # ============================================================================
-    # ADVANCED PLOTTING INTEGRATION
+    # STREAMLINED LOGGING INTEGRATION
     # ============================================================================
     if wandb.run:
-        print(f"📊 Generating advanced plots for {topology_type} - {train_task}...")
+        print(f"📊 Generating streamlined logs for {topology_type} - {train_task}...")
+        
+        # Prepare training results for table logging
+        training_results = {
+            'total_episodes': len(callback.episode_rewards) if hasattr(callback, 'episode_rewards') else 0,
+            'total_steps': callback.step_count if hasattr(callback, 'step_count') else 0,
+            'training_time': training_time,
+            'episode_rewards': callback.episode_rewards if hasattr(callback, 'episode_rewards') else [],
+            'episode_lengths': callback.episode_lengths if hasattr(callback, 'episode_lengths') else [],
+            'success_rate': cross_task_results.get(train_task, {}).get('success_rate', 0),
+            'completion_percentage': cross_task_results.get(train_task, {}).get('completion_percentage', 0)
+        }
+        
+        # Log streamlined tables
+        log_streamlined_tables(
+            wandb_run=wandb.run,
+            training_results=training_results,
+            cross_task_results=cross_task_results,
+            model=model,
+            topology_type=topology_type,
+            hidden_size=actual_hidden_size,
+            num_layers=num_layers,
+            train_task=train_task
+        )
         
         # Combine all results for plotting (single-task has only one phase)
         all_phase_results = {}
         for test_task, results in cross_task_results.items():
             all_phase_results[f'{topology_type}/{train_task}/phase1/testing/{test_task}/mean_reward'] = results['mean_reward']
         
-        # Log comprehensive plots
-        log_comprehensive_plots_for_run(
+        # Log essential plots only
+        log_streamlined_plots_for_run(
             wandb_run=wandb.run,
             phase_results=all_phase_results,
             transfer_metrics={},  # No transfer metrics for single-task
@@ -2705,7 +2808,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             sweep_results=None  # Will be populated when sweep results are available
         )
         
-        print(f"✅ Advanced plots logged to wandb!")
+        print(f"✅ Streamlined logs (tables + essential plots) logged to wandb!")
     
     train_env.close()
     
@@ -2866,6 +2969,125 @@ def train_with_sweep():
     finally:
         wandb.finish()
 
+# ============================================================================
+# STREAMLINED TABLE GENERATION FUNCTIONS
+# ============================================================================
+
+def create_training_summary_table(wandb_run, training_results, topology_type, task_name):
+    """Create a comprehensive training summary table."""
+    try:
+        summary_table = wandb.Table(columns=["Metric", "Value", "Description"])
+        
+        # Training statistics
+        summary_table.add_data("Topology Type", topology_type, "Network topology used")
+        summary_table.add_data("Training Task", task_name, "Task used for training")
+        summary_table.add_data("Total Episodes", str(training_results.get('total_episodes', 'N/A')), "Number of episodes completed")
+        summary_table.add_data("Total Steps", str(training_results.get('total_steps', 'N/A')), "Total training steps")
+        summary_table.add_data("Training Time", f"{training_results.get('training_time', 0):.2f}s", "Total training time")
+        
+        # Reward statistics
+        rewards = training_results.get('episode_rewards', [])
+        if rewards:
+            summary_table.add_data("Mean Reward", f"{np.mean(rewards):.2f}", "Average reward per episode")
+            summary_table.add_data("Std Reward", f"{np.std(rewards):.2f}", "Standard deviation of rewards")
+            summary_table.add_data("Max Reward", f"{np.max(rewards):.2f}", "Best episode reward")
+            summary_table.add_data("Min Reward", f"{np.min(rewards):.2f}", "Worst episode reward")
+            summary_table.add_data("Success Rate", f"{training_results.get('success_rate', 0):.1%}", "Percentage of successful episodes")
+            summary_table.add_data("Completion Percentage", f"{training_results.get('completion_percentage', 0):.1f}%", "Average completion percentage")
+        
+        # Episode statistics
+        lengths = training_results.get('episode_lengths', [])
+        if lengths:
+            summary_table.add_data("Mean Episode Length", f"{np.mean(lengths):.1f}", "Average steps per episode")
+            summary_table.add_data("Std Episode Length", f"{np.std(lengths):.1f}", "Standard deviation of episode lengths")
+        
+        # Efficiency metrics
+        if rewards and training_results.get('total_steps'):
+            efficiency = np.mean(rewards) / training_results['total_steps']
+            summary_table.add_data("Training Efficiency", f"{efficiency:.4f}", "Reward per step")
+        
+        wandb_run.log({"tables/training_summary": summary_table})
+        print(f"✅ Training summary table logged for {topology_type} - {task_name}")
+        
+    except Exception as e:
+        print(f"⚠️ Error creating training summary table: {e}")
+
+def create_network_architecture_table(wandb_run, model, topology_type, hidden_size, num_layers):
+    """Create a network architecture details table."""
+    try:
+        network_table = wandb.Table(columns=["Component", "Value", "Description"])
+        
+        # Basic network info
+        network_table.add_data("Topology Type", topology_type, "Network topology architecture")
+        network_table.add_data("Hidden Size", str(hidden_size), "Number of hidden units per layer")
+        network_table.add_data("Number of Layers", str(num_layers), "Number of hidden layers")
+        
+        # Parameter counts
+        if hasattr(model, 'policy'):
+            actor_params = model.policy._get_topology_params(model.policy.actor_topology)
+            critic_params = model.policy._get_topology_params(model.policy.critic_topology)
+            
+            if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+                total_params = actor_params + critic_params
+                network_table.add_data("Total Parameters", f"{total_params:,}", "Total trainable parameters")
+                network_table.add_data("Actor Parameters", f"{actor_params:,}", "Actor network parameters")
+                network_table.add_data("Critic Parameters", f"{critic_params:,}", "Critic network parameters")
+                network_table.add_data("Actor-Critic Ratio", f"{actor_params/critic_params:.2f}", "Ratio of actor to critic parameters")
+                network_table.add_data("Parameter Efficiency", f"{total_params/hidden_size:.1f}", "Parameters per hidden unit")
+        
+        wandb_run.log({"tables/network_architecture": network_table})
+        print(f"✅ Network architecture table logged for {topology_type}")
+        
+    except Exception as e:
+        print(f"⚠️ Error creating network architecture table: {e}")
+
+def create_cross_task_results_table(wandb_run, cross_task_results, topology_type, train_task):
+    """Create a cross-task results comparison table."""
+    try:
+        results_table = wandb.Table(columns=["Task", "Mean Reward", "Std Reward", "Success Rate", "Completion %", "Transfer Ratio"])
+        
+        # Get training task performance as baseline
+        train_task_results = cross_task_results.get(train_task, {})
+        train_reward = train_task_results.get('mean_reward', 0)
+        
+        for task_name, results in cross_task_results.items():
+            mean_reward = results.get('mean_reward', 0)
+            std_reward = results.get('std_reward', 0)
+            success_rate = results.get('success_rate', 0)
+            completion_pct = results.get('completion_percentage', 0)
+            
+            # Calculate transfer ratio (performance relative to training task)
+            transfer_ratio = mean_reward / train_reward if train_reward > 0 else 0
+            
+            # Mark training task
+            task_display = f"{task_name} (TRAINED)" if task_name == train_task else task_name
+            
+            results_table.add_data(
+                task_display,
+                f"{mean_reward:.2f}",
+                f"{std_reward:.2f}",
+                f"{success_rate:.1%}",
+                f"{completion_pct:.1f}%",
+                f"{transfer_ratio:.3f}"
+            )
+        
+        wandb_run.log({"tables/cross_task_results": results_table})
+        print(f"✅ Cross-task results table logged for {topology_type} - {train_task}")
+        
+    except Exception as e:
+        print(f"⚠️ Error creating cross-task results table: {e}")
+
+def log_streamlined_tables(wandb_run, training_results, cross_task_results, model, topology_type, hidden_size, num_layers, train_task):
+    """Log all streamlined tables for a training run."""
+    print(f"📊 Logging streamlined tables for {topology_type} - {train_task}...")
+    
+    # Create and log all tables
+    create_training_summary_table(wandb_run, training_results, topology_type, train_task)
+    create_network_architecture_table(wandb_run, model, topology_type, hidden_size, num_layers)
+    create_cross_task_results_table(wandb_run, cross_task_results, topology_type, train_task)
+    
+    print(f"✅ All streamlined tables logged for {topology_type} - {train_task}")
+
 def unified_training_function():
     """
     Unified training function for single-task training with reward scaling.
@@ -2926,12 +3148,11 @@ def unified_training_function():
             'hybrid_inter_module_prob': 0.2,
         }
         
-        # Initialize wandb with default config
-        wandb.init(
-            entity="katko-it-universitetet-i-k-benhavn",
-            project="topologies--single-task-training",
-            config=config
-        )
+        # Determine topology type for naming
+        topology_type = config.get('topology_type', 'fully_connected')
+        
+        # Initialize wandb with proper naming
+        initialize_wandb_run(config, topology_type, 'single_task')
     else:
         # Sweep execution - use wandb.config
         config = wandb.config
@@ -2945,10 +3166,6 @@ def unified_training_function():
     
     # Determine task
     task = config.get('train_task', 'CartPole-v1')
-    
-    # Initialize wandb with proper naming (if not already done)
-    if wandb.run is not None:
-        initialize_wandb_run(config, topology_type, 'single_task')
     
     # Run single-task training with cross-task evaluation
     return cross_task_testing(

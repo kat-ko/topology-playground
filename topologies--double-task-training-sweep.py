@@ -44,10 +44,10 @@ from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
 from src.utils.task_normalization import (
     compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
-    get_task_thresholds, get_normalization_constants
+    get_task_thresholds, get_normalization_constants, calculate_reward_completion_percentage
 )
 from src.utils.advanced_plotting import (
-    log_comprehensive_plots_for_run, create_multi_phase_learning_curves
+    log_streamlined_plots_for_run, create_multi_phase_learning_curves
 )
 from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 
@@ -300,7 +300,7 @@ class DebugTopologyPolicy(ActorCriticPolicy):
 class EnhancedDebugCallback(BaseCallback):
     """Enhanced callback for tracking training progress with wandb integration and sequential training support."""
     
-    def __init__(self, verbose=0, wandb_run=None, log_freq=100):
+    def __init__(self, verbose=0, wandb_run=None, log_freq=1000):
         super().__init__(verbose)
         self.wandb_run = wandb_run
         self.log_freq = log_freq
@@ -456,6 +456,29 @@ class EnhancedDebugCallback(BaseCallback):
                 if hasattr(self.model, 'lr_schedule'):
                     current_lr = self.model.lr_schedule(self.num_timesteps)
                     metrics["train/learning_rate"] = current_lr
+                
+                # NEW: Add learning progression metrics
+                if len(self.episode_rewards) > 0:
+                    recent_rewards = self.episode_rewards[-100:]  # Last 100 episodes
+                    recent_lengths = self.episode_lengths[-100:]  # Last 100 episodes
+                    
+                    metrics.update({
+                        "learning_progression/episode_reward_mean": np.mean(recent_rewards),
+                        "learning_progression/episode_reward_std": np.std(recent_rewards),
+                        "learning_progression/episode_length_mean": np.mean(recent_lengths),
+                        "learning_progression/episode_length_std": np.std(recent_lengths),
+                        "learning_progression/training_progress_ratio": self.num_timesteps / self.model.total_timesteps if hasattr(self.model, 'total_timesteps') else 0.0
+                    })
+                    
+                    # Calculate current success rate and completion percentage if we have task info
+                    if self.task_phases and len(self.task_phases) > 0:
+                        current_task = self.task_phases[-1]['task']
+                        success_rate = calculate_success_rate(recent_rewards, recent_lengths, current_task)
+                        completion_pct = calculate_reward_completion_percentage(recent_rewards, current_task)
+                        metrics.update({
+                            "learning_progression/success_rate_current": success_rate,
+                            "learning_progression/completion_percentage_current": completion_pct
+                        })
                     metrics[f"phase_{self.current_task_phase}/learning_rate"] = current_lr
                 
                 # Add network-specific metrics if available
@@ -474,11 +497,10 @@ class EnhancedDebugCallback(BaseCallback):
                         total_params = actor_size + critic_size
                         metrics["network/total_parameters"] = total_params
                     
-                    # Add enhanced graph metrics
-                    self._log_graph_metrics()
-                    self._log_depth_analysis()
-                    self._log_sample_efficiency()
-                    self._log_hyperparameter_correlation()
+                    # REMOVED: Graph metrics logging (too expensive during training)
+                    # REMOVED: Depth analysis (too expensive during training)
+                    # REMOVED: Sample efficiency (redundant metrics)
+                    # REMOVED: Hyperparameter correlation (redundant metrics)
                 
                 wandb.log(metrics, step=self.global_timesteps)
         except Exception as e:
@@ -708,45 +730,128 @@ def initialize_wandb_run(config, topology_type, training_type='double_task'):
     
     # Initialize wandb
     wandb.init(
-        project="topology-playground",
+        project="topologies--double-task-training",
         entity="katko-it-universitetet-i-k-benhavn",
         config=config,
         name=run_name,
         tags=tags
     )
 
-def create_run_name(config, topology_type, training_type):
-    """Create descriptive run name."""
+def create_run_name(config, topology_type, training_type, model=None):
+    """Create descriptive run name with exact capacity and size."""
     
-    # Base name
-    name_parts = [training_type, topology_type]
+    # Topology abbreviation
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
     
-    # Add capacity or size information
+    # Get actual capacity and size
+    actual_capacity = None
+    actual_size = config.get('hidden_size', 'unknown')
+    
+    # Handle capacity calculation based on sweep type
     if 'target_capacity' in config:
-        name_parts.append(f"cap{config.get('target_capacity')}")
+        # For capacity-matched sweeps, use target capacity directly
+        actual_capacity = config.get('target_capacity')
+        
+        # For capacity-matched sweeps, we need to show the adjusted hidden size
+        # This will be calculated during model creation, but for naming we can estimate
+        # or use a placeholder that will be updated later
+        if model is not None and hasattr(model, 'policy'):
+            try:
+                # Try to get the actual adjusted size from the model
+                policy = model.policy
+                if hasattr(policy, 'actor_topology') and hasattr(policy.actor_topology, 'hidden_size'):
+                    actual_size = policy.actor_topology.hidden_size
+                elif hasattr(policy, 'critic_topology') and hasattr(policy.critic_topology, 'hidden_size'):
+                    actual_size = policy.critic_topology.hidden_size
+            except Exception as e:
+                # If we can't get the adjusted size, use a placeholder
+                actual_size = f"adj_{config.get('hidden_size', 'unknown')}"
+        else:
+            # For initial naming, use a placeholder that indicates it will be adjusted
+            actual_size = f"adj_{config.get('hidden_size', 'unknown')}"
+            
+    elif model is not None and hasattr(model, 'policy'):
+        # Calculate actual capacity from the model
+        try:
+            policy = model.policy
+            actor_params = policy._get_topology_params(policy.actor_topology)
+            critic_params = policy._get_topology_params(policy.critic_topology)
+            
+            # Calculate total parameters safely
+            if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+                actual_capacity = actor_params + critic_params
+            elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+                actor_size = actor_params.get('size', 0)
+                critic_size = critic_params.get('size', 0)
+                actual_capacity = actor_size + critic_size
+            else:
+                actual_capacity = None
+        except Exception as e:
+            print(f"   ⚠️  Could not calculate actual capacity: {e}")
+            actual_capacity = None
     elif 'hidden_size' in config:
-        name_parts.append(f"size{config.get('hidden_size')}")
+        # For size-matched sweeps without model, we can't calculate actual capacity yet
+        actual_capacity = None
     
-    # Add task information
+    # Task abbreviations
+    task_abbrev = {
+        'LunarLander-v2': 'LL',
+        'Acrobot-v1': 'AC', 
+        'CartPole-v1': 'CP',
+        'MountainCar-v0': 'MC'
+    }
+    
+    # Build name parts
+    name_parts = [topology_abbrev]
+    
+    # Add capacity (exact number)
+    if actual_capacity is not None:
+        name_parts.append(f"C{actual_capacity}")
+    else:
+        name_parts.append("C?")
+    
+    # Add size
+    name_parts.append(f"S{actual_size}")
+    
+    # Add task sequence
     if training_type == 'double_task':
         task_order = config.get('task_order', 'LunarLander-v2_CartPole-v1')
         tasks = task_order.split('_')
-        name_parts.extend(tasks)
+        task_abbrevs = [task_abbrev.get(task, task) for task in tasks]
+        name_parts.append("-".join(task_abbrevs))
     
     return "_".join(name_parts)
 
 def create_run_tags(config, topology_type, training_type):
-    """Create tags for easy filtering and organization."""
+    """Create enhanced tags for easy filtering and organization."""
     
+    # Primary tags
     tags = [
-        training_type,
         topology_type,
-        f"capacity_{config.get('target_capacity', 'variable')}" if 'target_capacity' in config else f"size_{config.get('hidden_size', 'variable')}",
-        "comparison_sweep" if 'target_capacity' in config or config.get('hidden_size') in [64, 128, 256, 512] else "optimization_sweep",
-        "normalized_metrics"  # Indicate that normalized metrics are used
+        training_type,
+        "normalized_metrics"
     ]
     
-    # Add task tags
+    # Capacity and size tags
+    if 'target_capacity' in config:
+        tags.extend([
+            "fixed_capacity",
+            f"target_capacity_{config.get('target_capacity')}",
+            "capacity_matched"
+        ])
+    elif 'hidden_size' in config:
+        tags.extend([
+            "fixed_size", 
+            f"size_{config.get('hidden_size')}",
+            "size_matched"
+        ])
+    
+    # Task tags
     if training_type == 'double_task':
         task_order = config.get('task_order', 'LunarLander-v2_CartPole-v1')
         tasks = task_order.split('_')
@@ -1053,11 +1158,16 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     
     # Initialize wandb if not already done
     if wandb.run is None:
+        # Create proper naming for this specific training run
+        run_name = create_run_name(config, topology_type, 'double_task')
+        tags = create_run_tags(config, topology_type, 'double_task')
+        
         wandb.init(
             project="topologies--double-task-training",
             entity="katko-it-universitetet-i-k-benhavn",
             config=config,
-            name=f"double_task_{topology_type}_{train_task_1}_{train_task_2}"
+            name=run_name,
+            tags=tags
         )
     
     # Create task order string for topology-aware logging
@@ -1088,6 +1198,42 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
             'config': config
         }
     )
+    
+    # Calculate actual capacity and update run name if needed
+    if wandb.run is not None and 'target_capacity' not in config:
+        try:
+            # Calculate actual capacity from the model
+            policy = model.policy
+            actor_params = policy._get_topology_params(policy.actor_topology)
+            critic_params = policy._get_topology_params(policy.critic_topology)
+            
+            # Calculate total parameters safely
+            if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
+                total_params = actor_params + critic_params
+            elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
+                actor_size = actor_params.get('size', 0)
+                critic_size = critic_params.get('size', 0)
+                total_params = actor_size + critic_size
+            else:
+                total_params = 0
+            
+            # Update run name with actual capacity
+            updated_run_name = create_run_name(config, topology_type, 'double_task', model)
+            if updated_run_name != wandb.run.name:
+                print(f"📝 Updating run name with actual capacity: {wandb.run.name} → {updated_run_name}")
+                wandb.run.name = updated_run_name
+            
+            # Log the actual capacity
+            wandb.log({
+                'network/actual_capacity': total_params,
+                'network/actor_params': actor_params,
+                'network/critic_params': critic_params
+            })
+            
+            print(f"📊 Actual network capacity: {total_params:,} parameters")
+            
+        except Exception as e:
+            print(f"   ⚠️  Could not calculate actual capacity: {e}")
     
     # Create callback
     callback = EnhancedDebugCallback(wandb_run=wandb.run, log_freq=1000)
@@ -1240,7 +1386,7 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     # Log Phase 2 results with topology-aware naming
     if wandb.run:
         for task, results in phase2_results.items():
-        wandb.log({
+            wandb.log({
                 f'{topology_type}/{task_order}/phase2/testing/{task}/mean_reward': results['mean_reward'],
                 f'{topology_type}/{task_order}/phase2/testing/{task}/std_reward': results['std_reward'],
                 f'{topology_type}/{task_order}/phase2/testing/{task}/mean_length': results['mean_length'],
@@ -1321,7 +1467,7 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
                 all_phase_results[f'{topology_type}/{task_order}/phase2/testing/{task}/mean_reward'] = phase2_results[task]['mean_reward']
         
         # Log comprehensive plots
-        log_comprehensive_plots_for_run(
+        log_streamlined_plots_for_run(
             wandb_run=wandb.run,
             phase_results=all_phase_results,
             transfer_metrics=transfer_metrics,
@@ -1496,12 +1642,11 @@ def unified_training_function():
             'hybrid_inter_module_prob': 0.2,
         }
         
-        # Initialize wandb with default config
-        wandb.init(
-            entity="katko-it-universitetet-i-k-benhavn",
-            project="topologies--double-task-training",
-            config=config
-        )
+        # Determine topology type for naming
+        topology_type = config.get('topology_type', 'fully_connected')
+        
+        # Initialize wandb with proper naming
+        initialize_wandb_run(config, topology_type, 'double_task')
     else:
         # Sweep execution - use wandb.config
         config = wandb.config
@@ -1518,10 +1663,6 @@ def unified_training_function():
     tasks = task_order.split('_')
     train_task_1 = tasks[0]
     train_task_2 = tasks[1]
-    
-    # Initialize wandb with proper naming (if not already done)
-    if wandb.run is not None:
-        initialize_wandb_run(config, topology_type, 'double_task')
     
     # Create configuration
     debug_config = create_debug_config()

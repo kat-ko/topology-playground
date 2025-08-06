@@ -100,50 +100,53 @@ def create_multi_phase_learning_curves(
     
     fig = go.Figure()
     
+    # Get topology abbreviation for metric keys
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
+    
     # Add performance lines for each task
     for task in ALL_TASKS:
         task_performance = []
-        phases = []
+        x_axis_labels = []
         
         for phase_num in range(1, num_phases + 1):
             phase_key = f'phase{phase_num}'
-            metric_key = f'{topology_type}/{task_sequence}/{phase_key}/testing/{task}/mean_reward'
+            # Use completion percentage instead of mean reward for better cross-task comparison
+            # Use topology abbreviation in metric key to match actual data format
+            metric_key = f'{topology_abbrev}/{task_sequence}/{phase_key}/testing/{task}/completion_percentage'
             
             if metric_key in phase_results:
                 task_performance.append(phase_results[metric_key])
-                phases.append(f'Phase {phase_num}')
+                # Use actual trained task name instead of "Phase X"
+                if phase_num <= len(trained_tasks):
+                    x_axis_labels.append(trained_tasks[phase_num - 1])
+                else:
+                    x_axis_labels.append(f'Phase {phase_num}')
         
         if task_performance:  # Only add if we have data
             fig.add_trace(go.Scatter(
-                x=phases,
+                x=x_axis_labels,
                 y=task_performance,
                 name=task,
                 line=dict(color=TASK_COLORS[task], width=3),
                 mode='lines+markers',
                 marker=dict(size=8),
                 hovertemplate=f"<b>{task}</b><br>" +
-                             "Phase: %{x}<br>" +
-                             "Reward: %{y:.1f}<br>" +
+                             "Trained on: %{x}<br>" +
+                             "Completion: %{y:.1f}%<br>" +
                              "<extra></extra>"
             ))
     
-    # Add vertical lines to separate training phases
-    for phase_num in range(1, num_phases):
-        trained_task = get_trained_task_for_phase(task_sequence, phase_num)
-        fig.add_vline(
-            x=phase_num - 0.5, 
-            line_dash="dash", 
-            line_color="gray", 
-            line_width=2,
-            annotation_text=f"Trained on: {trained_task}",
-            annotation_position="top right",
-            annotation_font_size=10
-        )
+    # Remove the dotted lines with "Trained on..." annotations as requested
     
     fig.update_layout(
         title=f"Learning Progression: {topology_type} - {task_sequence}",
-        xaxis_title="Training Phase",
-        yaxis_title="Mean Reward",
+        xaxis_title="Task Trained On",
+        yaxis_title="Completion Percentage (%)",
         hovermode='x unified',
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         height=500,
@@ -806,119 +809,227 @@ def create_task_order_effects_plot(
     return fig
 
 
-def generate_all_plots_for_sweep(sweep_results: Dict) -> Dict:
+def generate_streamlined_plots_for_sweep(sweep_results: Dict) -> Dict:
     """
-    Generate ALL plots for ALL task orders.
+    Generate ONLY 5 essential plots for sweep analysis.
+    This replaces the previous generate_all_plots_for_sweep function.
     
     Args:
         sweep_results: Results from the sweep
     
     Returns:
-        Dictionary containing all plots organized by task order
+        Dictionary containing only essential plots
     """
     
-    all_plots = {}
+    essential_plots = {}
     
-    # Generate plots for each double-task order
+    # 1. LEARNING PROGRESSION PLOTS (Most Important)
+    # Create learning progression plots for each task order
+    for task_order in DOUBLE_TASK_ORDERS + TRIPLE_TASK_ORDERS:
+        for topology in ALL_TOPOLOGIES:
+            plot_key = f"learning_progression/{task_order}/{topology}"
+            essential_plots[plot_key] = create_multi_phase_learning_curves(
+                sweep_results, topology, task_order
+            )
+    
+    # 2. SEQUENTIAL PERFORMANCE PLOTS (Crucial for Continual Learning)
+    # Create sequential performance plots for each task order
     for task_order in DOUBLE_TASK_ORDERS:
-        plots = {}
-        
-        # Learning curves for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'learning_curves_{topology}'] = create_multi_phase_learning_curves(
-                sweep_results, topology, task_order
-            )
-        
-        # Transfer comparison
-        plots['transfer_comparison'] = create_transfer_comparison_for_task_order(
-            sweep_results, task_order
-        )
-        
-        # Performance matrix
-        plots['performance_matrix'] = create_performance_matrix_for_task_order(
-            sweep_results, task_order
-        )
-        
-        # Capacity scaling for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'capacity_scaling_{topology}'] = create_capacity_scaling_for_task_order(
-                sweep_results, topology, task_order
-            )
-        
-        # Sequential performance plot (all topologies comparison)
-        plots['sequential_performance_comparison'] = create_sequential_task_performance_plot(
+        plot_key = f"sequential_performance/{task_order}"
+        essential_plots[plot_key] = create_sequential_task_performance_plot(
             sweep_results, task_order, 'double_task'
         )
-        
-        # Individual sequential performance plots for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'sequential_performance_{topology}'] = create_single_topology_sequential_plot(
-                sweep_results, topology, task_order, 'double_task'
-            )
-        
-        # Task-specific topology comparison plots (one for each tested task)
-        for tested_task in ALL_TASKS:
-            plots[f'topology_comparison_{tested_task}'] = create_task_specific_topology_comparison_plot(
-                sweep_results, task_order, tested_task, 'double_task'
-            )
-        
-        all_plots[f'double_task_{task_order}'] = plots
     
-    # Generate plots for each triple-task order  
     for task_order in TRIPLE_TASK_ORDERS:
-        plots = {}
-        
-        # Learning curves for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'learning_curves_{topology}'] = create_multi_phase_learning_curves(
-                sweep_results, topology, task_order
-            )
-        
-        # Transfer comparison
-        plots['transfer_comparison'] = create_transfer_comparison_for_task_order(
-            sweep_results, task_order
-        )
-        
-        # Performance matrix
-        plots['performance_matrix'] = create_performance_matrix_for_task_order(
-            sweep_results, task_order
-        )
-        
-        # Capacity scaling for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'capacity_scaling_{topology}'] = create_capacity_scaling_for_task_order(
-                sweep_results, topology, task_order
-            )
-        
-        # Sequential performance plot (all topologies comparison)
-        plots['sequential_performance_comparison'] = create_sequential_task_performance_plot(
+        plot_key = f"sequential_performance/{task_order}"
+        essential_plots[plot_key] = create_sequential_task_performance_plot(
             sweep_results, task_order, 'triple_task'
         )
-        
-        # Individual sequential performance plots for each topology
-        for topology in ALL_TOPOLOGIES:
-            plots[f'sequential_performance_{topology}'] = create_single_topology_sequential_plot(
-                sweep_results, topology, task_order, 'triple_task'
-            )
-        
-        # Task-specific topology comparison plots (one for each tested task)
-        for tested_task in ALL_TASKS:
-            plots[f'topology_comparison_{tested_task}'] = create_task_specific_topology_comparison_plot(
-                sweep_results, task_order, tested_task, 'triple_task'
-            )
-        
-        all_plots[f'triple_task_{task_order}'] = plots
     
-    # Generate task order effects plots for each topology
+    # 3. TRANSFER LEARNING ANALYSIS (Key for Topology Comparison)
+    # Create transfer learning comparison for each task order
+    for task_order in DOUBLE_TASK_ORDERS + TRIPLE_TASK_ORDERS:
+        plot_key = f"transfer_analysis/{task_order}"
+        essential_plots[plot_key] = create_transfer_comparison_for_task_order(
+            sweep_results, task_order
+        )
+    
+    # 4. TOPOLOGY COMPARISON (Sweep-level)
+    # Create topology comparison plots for each tested task
+    for tested_task in ALL_TASKS:
+        plot_key = f"topology_comparison/{tested_task}"
+        # Use the first available task order for comparison
+        if DOUBLE_TASK_ORDERS:
+            essential_plots[plot_key] = create_task_specific_topology_comparison_plot(
+                sweep_results, DOUBLE_TASK_ORDERS[0], tested_task, 'double_task'
+            )
+    
+    # 5. CAPACITY SCALING (if capacity data available)
+    # Create capacity scaling plots for each topology and task order
     for topology in ALL_TOPOLOGIES:
-        all_plots[f'task_order_effects_{topology}_double'] = create_task_order_effects_plot(
-            sweep_results, topology, 'double_task'
-        )
-        all_plots[f'task_order_effects_{topology}_triple'] = create_task_order_effects_plot(
-            sweep_results, topology, 'triple_task'
-        )
+        for task_order in DOUBLE_TASK_ORDERS[:1] + TRIPLE_TASK_ORDERS[:1]:  # Only first task order each
+            plot_key = f"capacity_scaling/{topology}/{task_order}"
+            essential_plots[plot_key] = create_capacity_scaling_for_task_order(
+                sweep_results, topology, task_order
+            )
     
-    return all_plots
+    print(f"✅ Generated {len(essential_plots)} essential plots (reduced from 60+ plots)")
+    return essential_plots
+
+
+def create_sweep_comparison_table(sweep_results: Dict) -> wandb.Table:
+    """
+    Create a comprehensive sweep comparison table.
+    
+    Args:
+        sweep_results: Results from the sweep
+    
+    Returns:
+        WandB table with sweep comparison data
+    """
+    try:
+        # Create table with comprehensive columns
+        table = wandb.Table(columns=[
+            "Topology", "Capacity", "Size", "Task Sequence", 
+            "CartPole Reward", "Acrobot Reward", "LunarLander Reward",
+            "Forward Transfer", "Retention", "Training Time", "Overall Score"
+        ])
+        
+        # Process each run in the sweep
+        for run_key, run_data in sweep_results.items():
+            # Extract topology and task sequence from key
+            if '/' in run_key:
+                parts = run_key.split('/')
+                topology = parts[0] if len(parts) > 0 else "Unknown"
+                task_sequence = parts[1] if len(parts) > 1 else "Unknown"
+            else:
+                topology = "Unknown"
+                task_sequence = "Unknown"
+            
+            # Extract performance data
+            cartpole_reward = run_data.get('CartPole-v1/mean_reward', 0)
+            acrobot_reward = run_data.get('Acrobot-v1/mean_reward', 0)
+            lunarlander_reward = run_data.get('LunarLander-v2/mean_reward', 0)
+            
+            # Calculate transfer metrics
+            forward_transfer = run_data.get('transfer/forward_transfer', 0)
+            retention = run_data.get('transfer/retention', 0)
+            
+            # Extract training info
+            training_time = run_data.get('training/training_time', 0)
+            capacity = run_data.get('network/total_parameters', 0)
+            size = run_data.get('network/hidden_size', 0)
+            
+            # Calculate overall score (simple average)
+            overall_score = (cartpole_reward + acrobot_reward + lunarlander_reward) / 3
+            
+            # Add row to table
+            table.add_data(
+                topology,
+                f"{capacity:,}" if capacity > 0 else "N/A",
+                str(size) if size > 0 else "N/A",
+                task_sequence,
+                f"{cartpole_reward:.2f}",
+                f"{acrobot_reward:.2f}",
+                f"{lunarlander_reward:.2f}",
+                f"{forward_transfer:.3f}",
+                f"{retention:.3f}",
+                f"{training_time:.1f}s",
+                f"{overall_score:.2f}"
+            )
+        
+        return table
+        
+    except Exception as e:
+        print(f"⚠️ Error creating sweep comparison table: {e}")
+        return wandb.Table(columns=["Error"], data=[["Failed to create table"]])
+
+
+def create_transfer_learning_summary_table(sweep_results: Dict) -> wandb.Table:
+    """
+    Create a transfer learning summary table.
+    
+    Args:
+        sweep_results: Results from the sweep
+    
+    Returns:
+        WandB table with transfer learning summary
+    """
+    try:
+        table = wandb.Table(columns=[
+            "Topology", "Task Sequence", "Forward Transfer", 
+            "Backward Transfer", "Overall Transfer Score", "Rank"
+        ])
+        
+        transfer_scores = []
+        
+        # Process each run
+        for run_key, run_data in sweep_results.items():
+            if '/' in run_key:
+                parts = run_key.split('/')
+                topology = parts[0] if len(parts) > 0 else "Unknown"
+                task_sequence = parts[1] if len(parts) > 1 else "Unknown"
+            else:
+                topology = "Unknown"
+                task_sequence = "Unknown"
+            
+            # Extract transfer metrics
+            forward_transfer = run_data.get('transfer/forward_transfer', 0)
+            backward_transfer = run_data.get('transfer/backward_transfer', 0)
+            overall_transfer = run_data.get('transfer/overall_transfer', 0)
+            
+            transfer_scores.append({
+                'topology': topology,
+                'task_sequence': task_sequence,
+                'forward_transfer': forward_transfer,
+                'backward_transfer': backward_transfer,
+                'overall_transfer': overall_transfer
+            })
+        
+        # Sort by overall transfer score
+        transfer_scores.sort(key=lambda x: x['overall_transfer'], reverse=True)
+        
+        # Add rows to table with ranking
+        for i, score in enumerate(transfer_scores):
+            table.add_data(
+                score['topology'],
+                score['task_sequence'],
+                f"{score['forward_transfer']:.3f}",
+                f"{score['backward_transfer']:.3f}",
+                f"{score['overall_transfer']:.3f}",
+                f"{i+1}"
+            )
+        
+        return table
+        
+    except Exception as e:
+        print(f"⚠️ Error creating transfer learning summary table: {e}")
+        return wandb.Table(columns=["Error"], data=[["Failed to create table"]])
+
+
+def log_sweep_level_tables(wandb_run, sweep_results: Dict):
+    """
+    Log all sweep-level tables for comprehensive analysis.
+    
+    Args:
+        wandb_run: WandB run object
+        sweep_results: Results from the sweep
+    """
+    try:
+        print(f"📊 Logging sweep-level tables...")
+        
+        # Create and log sweep comparison table
+        sweep_comparison_table = create_sweep_comparison_table(sweep_results)
+        wandb_run.log({"tables/sweep_comparison": sweep_comparison_table})
+        
+        # Create and log transfer learning summary table
+        transfer_summary_table = create_transfer_learning_summary_table(sweep_results)
+        wandb_run.log({"tables/transfer_learning_summary": transfer_summary_table})
+        
+        print(f"✅ Sweep-level tables logged successfully")
+        
+    except Exception as e:
+        print(f"⚠️ Error logging sweep-level tables: {e}")
 
 
 def log_all_plots_to_wandb(wandb_run, all_plots: Dict):
@@ -944,7 +1055,7 @@ def log_all_plots_to_wandb(wandb_run, all_plots: Dict):
             })
 
 
-def log_comprehensive_plots_for_run(
+def log_streamlined_plots_for_run(
     wandb_run, 
     phase_results: Dict, 
     transfer_metrics: Dict, 
@@ -953,7 +1064,8 @@ def log_comprehensive_plots_for_run(
     sweep_results: Optional[Dict] = None
 ):
     """
-    Log comprehensive plots for a single run.
+    Log ONLY 5 essential plots for a single run.
+    This replaces the previous log_comprehensive_plots_for_run function.
     
     Args:
         wandb_run: Wandb run object
@@ -964,44 +1076,39 @@ def log_comprehensive_plots_for_run(
         sweep_results: Optional sweep results for comparison
     """
     
-    # 1. Multi-phase learning curves (MOST IMPORTANT)
+    print(f"📊 Logging streamlined plots for {topology_type} - {task_sequence}...")
+    
+    # 1. LEARNING PROGRESSION (MOST IMPORTANT)
     learning_curves = create_multi_phase_learning_curves(phase_results, topology_type, task_sequence)
-    wandb_run.log({f"{topology_type}/{task_sequence}/plots/learning_progression": learning_curves})
+    wandb_run.log({f"plots/learning_progression/{task_sequence}/{topology_type}": learning_curves})
     
-    # 2. Transfer learning comparison (if we have data from other topologies)
-    if sweep_results:
-        transfer_plot = create_transfer_comparison_for_task_order(sweep_results, task_sequence)
-        wandb_run.log({f"{topology_type}/{task_sequence}/plots/transfer_analysis": transfer_plot})
-    
-    # 3. Performance matrix (if sweep results available)
-    if sweep_results:
-        performance_matrix = create_performance_matrix_for_task_order(sweep_results, task_sequence)
-        wandb_run.log({f"sweep_analysis/performance_matrix_{task_sequence}": performance_matrix})
-    
-    # 4. Capacity scaling (if capacity data available)
-    if sweep_results:
-        capacity_plot = create_capacity_scaling_for_task_order(sweep_results, topology_type, task_sequence)
-        wandb_run.log({f"{topology_type}/{task_sequence}/plots/capacity_scaling": capacity_plot})
-    
-    # 5. Task order effects (if multiple task sequences available)
-    if sweep_results:
-        task_order_plot = create_task_order_effects_plot(sweep_results, topology_type)
-        wandb_run.log({f"{topology_type}/plots/task_order_effects": task_order_plot})
-    
-    # 6. Sequential performance plot (CRUCIAL for continual learning analysis)
+    # 2. SEQUENTIAL PERFORMANCE (CRUCIAL for continual learning analysis)
     if sweep_results:
         sequential_plot = create_sequential_task_performance_plot(sweep_results, task_sequence)
-        wandb_run.log({f"{topology_type}/{task_sequence}/plots/sequential_performance": sequential_plot})
+        wandb_run.log({f"plots/sequential_performance/{task_sequence}": sequential_plot})
     
-    # 7. Single topology sequential plot (clearer view for this topology)
+    # 3. TRANSFER LEARNING ANALYSIS (Key for topology comparison)
     if sweep_results:
-        single_topology_plot = create_single_topology_sequential_plot(sweep_results, topology_type, task_sequence)
-        wandb_run.log({f"{topology_type}/{task_sequence}/plots/sequential_performance_single": single_topology_plot})
+        transfer_plot = create_transfer_comparison_for_task_order(sweep_results, task_sequence)
+        wandb_run.log({f"plots/transfer_analysis/{task_sequence}": transfer_plot})
     
-    # 8. Task-specific topology comparison plots (one for each tested task)
+    # 4. TOPOLOGY COMPARISON (Sweep-level)
     if sweep_results:
         for tested_task in ALL_TASKS:
             task_comparison_plot = create_task_specific_topology_comparison_plot(
                 sweep_results, task_sequence, tested_task
             )
-            wandb_run.log({f"{topology_type}/{task_sequence}/plots/topology_comparison_{tested_task}": task_comparison_plot}) 
+            wandb_run.log({f"plots/topology_comparison/{tested_task}": task_comparison_plot})
+    
+    # 5. CAPACITY SCALING (if capacity data available)
+    if sweep_results:
+        capacity_plot = create_capacity_scaling_for_task_order(sweep_results, topology_type, task_sequence)
+        wandb_run.log({f"plots/capacity_scaling/{topology_type}/{task_sequence}": capacity_plot})
+    
+    print(f"✅ Streamlined plots logged for {topology_type} - {task_sequence}")
+    print(f"📈 Generated 5 essential plots:")
+    print(f"   • Learning progression")
+    print(f"   • Sequential performance")
+    print(f"   • Transfer learning analysis")
+    print(f"   • Topology comparison")
+    print(f"   • Capacity scaling") 

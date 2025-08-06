@@ -557,7 +557,7 @@ def create_baseline_focused_sweep_config(focus_area='topology_comparison', progr
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'target_capacity': {
-                    'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                    'values': [1000, 5000, 10000]  # Reduced from [1000, 5000, 10000] - removed 50000 for faster evaluation
                 },
                 
                 # ============================================================================
@@ -802,7 +802,7 @@ def create_focused_sweep_config(focus_area='topology_comparison', program='topol
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'target_capacity': {
-                    'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                    'values': [1000, 5000, 10000]  # Parameter count targets
                 },
                 
                 # ============================================================================
@@ -1254,12 +1254,9 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                 'max_grad_norm': {'distribution': 'uniform', 'min': 0.1, 'max': 1.0},
                 
                 # ============================================================================
-                # TASK SEQUENCE VARIATION
+                # TASK VARIATION
                 # ============================================================================
-                'first_task': {
-                    'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
-                },
-                'second_task': {
+                'train_task': {
                     'values': ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2']
                 },
                 
@@ -1345,7 +1342,7 @@ def create_focused_double_task_sweep_config(focus_area='topology_comparison', pr
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'target_capacity': {
-                    'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                    'values': [1000, 5000, 10000]  # Reduced from [1000, 5000, 10000] - removed 50000 for faster evaluation
                 },
                 
                 # ============================================================================
@@ -1611,7 +1608,7 @@ def create_focused_triple_task_sweep_config(focus_area='topology_comparison', pr
                     'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
                 },
                 'target_capacity': {
-                    'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                    'values': [1000, 5000, 10000]  # Parameter count targets
                 },
                 
                 # ============================================================================
@@ -1918,7 +1915,7 @@ def create_capacity_matched_comparison_sweep(program='topologies--capacity-match
                 'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
             },
             'target_capacity': {
-                'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                'values': [1000, 5000, 10000]  # Reduced from [1000, 5000, 10000] - removed 50000 for faster evaluation
             },
             
             # ============================================================================
@@ -2379,7 +2376,7 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
                 'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
             },
             'hidden_size': {
-                'values': [64, 128, 256, 512]  # Multiple network sizes to test
+                'values': [64, 128, 256]  # Multiple network sizes to test
             },
             
             # ============================================================================
@@ -2388,13 +2385,13 @@ def create_fixed_network_sizes_optimization_sweep(training_type='single_task'):
             **task_params,
             
             # ============================================================================
-            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # VARIED TRAINING PARAMETERS (2 values each for robustness)
             # ============================================================================
             'learning_rate': {
-                'value': 3e-4  # Fixed: Optimal learning rate
+                'values': [1e-4, 3e-4]  # Conservative vs Aggressive learning
             },
             'batch_size': {
-                'value': 64  # Fixed: Good balance of efficiency and stability
+                'values': [64, 128]  # Smaller vs Larger batches
             },
             'n_steps': {
                 'value': 2048  # Fixed: Good default
@@ -2569,7 +2566,7 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
                 'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
             },
             'target_capacity': {
-                'values': [1000, 5000, 10000, 50000]  # Parameter count targets
+                'values': [1000, 5000, 10000]  # Reduced from [1000, 5000, 10000] - removed 50000 for faster evaluation
             },
             
             # ============================================================================
@@ -2578,14 +2575,10 @@ def create_fixed_capacities_optimization_sweep(training_type='single_task'):
             **task_params,
             
             # ============================================================================
-            # FIXED TRAINING PARAMETERS (Optimal values for all topologies)
+            # VARIED TRAINING PARAMETERS (2 values each for robustness)
             # ============================================================================
-            'learning_rate': {
-                'value': 3e-4  # Fixed: Optimal learning rate
-            },
-            'batch_size': {
-                'value': 64  # Fixed: Good balance of efficiency and stability
-            },
+            'learning_rate': {'value': 3e-4},  # Reduced from [1e-4, 3e-4] to single value for faster evaluation
+            'batch_size': {'value': 64},  # Reduced from [64, 128] to single value for faster evaluation
             'n_steps': {
                 'value': 2048  # Fixed: Good default
             },
@@ -3095,17 +3088,13 @@ def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
             }
         }
     elif training_type == 'triple_task':
-        # For triple-task: all valid permutations (no duplicates)
-        # 6 possible permutations: (CartPole, Acrobot, MountainCar), (CartPole, MountainCar, Acrobot), etc.
+        # For triple-task: reduced to 3 orders for faster evaluation
         task_params = {
             'task_order': {
                 'values': [
                     'CartPole-v1_Acrobot-v1_LunarLander-v2',
-                    'CartPole-v1_LunarLander-v2_Acrobot-v1',
-                    'Acrobot-v1_CartPole-v1_LunarLander-v2',
                     'Acrobot-v1_LunarLander-v2_CartPole-v1',
-                    'LunarLander-v2_CartPole-v1_Acrobot-v1',
-                    'LunarLander-v2_Acrobot-v1_CartPole-v1'
+                    'LunarLander-v2_CartPole-v1_Acrobot-v1'
                 ]
             }
         }
@@ -3118,31 +3107,49 @@ def create_fixed_network_sizes_comparison_sweep(training_type='single_task'):
             'goal': 'maximize'
         },
         'parameters': {
-            # Topology comparison
+            # Topology comparison - REDUCED TO 2 TOPOLOGIES FOR TESTING
             'topology_type': {
-                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+                'values': ['small_world', 'fully_connected']
             },
             
             # Fixed network sizes
             'hidden_size': {
-                'values': [64, 128, 256, 512]
+                'values': [64, 128, 256]
             },
             
             # Task configuration
             **task_params,
             
-            # Fixed optimal hyperparameters
+            # Varied hyperparameters for robustness (2 values each)
             'learning_rate': {'value': 3e-4},
             'batch_size': {'value': 64},
-            'n_steps': {'value': 2048},
-            'n_epochs': {'value': 10},
-            'gamma': {'value': 0.99},
-            'gae_lambda': {'value': 0.95},
-            'clip_range': {'value': 0.2},
-            'ent_coef': {'value': 0.01},
-            'max_grad_norm': {'value': 0.5},
-            'activation': {'value': 'relu'},
-            'dropout': {'value': 0.0},
+            'n_steps': {
+                'value': 2048  # Fixed: Good default
+            },
+            'n_epochs': {
+                'value': 10  # Fixed: Good default
+            },
+            'gamma': {
+                'value': 0.99  # Fixed: Standard value
+            },
+            'gae_lambda': {
+                'value': 0.95  # Fixed: Standard value
+            },
+            'clip_range': {
+                'value': 0.2  # Fixed: Standard value
+            },
+            'ent_coef': {
+                'value': 0.01  # Fixed: Standard value
+            },
+            'max_grad_norm': {
+                'value': 0.5  # Fixed: Standard value
+            },
+            'activation': {
+                'value': 'relu'  # Fixed: Standard value
+            },
+            'dropout': {
+                'value': 0.0  # Fixed: Standard value
+            },
             
             # Fixed topology parameters
             'small_world_k': {'value': 4},
@@ -3207,14 +3214,10 @@ def create_fixed_capacities_comparison_sweep(training_type='single_task'):
         }
     elif training_type == 'triple_task':
         # For triple-task: all valid permutations (no duplicates)
-        # 6 possible permutations: (CartPole, Acrobot, MountainCar), (CartPole, MountainCar, Acrobot), etc.
         task_params = {
             'task_order': {
                 'values': [
                     'CartPole-v1_Acrobot-v1_LunarLander-v2',
-                    'CartPole-v1_LunarLander-v2_Acrobot-v1',
-                    'Acrobot-v1_CartPole-v1_LunarLander-v2',
-                    'Acrobot-v1_LunarLander-v2_CartPole-v1',
                     'LunarLander-v2_CartPole-v1_Acrobot-v1',
                     'LunarLander-v2_Acrobot-v1_CartPole-v1'
                 ]
@@ -3229,20 +3232,20 @@ def create_fixed_capacities_comparison_sweep(training_type='single_task'):
             'goal': 'maximize'
         },
         'parameters': {
-            # Topology comparison
+            # Topology comparison - REDUCED TO 2 TOPOLOGIES FOR TESTING
             'topology_type': {
-                'values': ['small_world', 'modular', 'hybrid', 'fully_connected']
+                'values': ['small_world', 'fully_connected']
             },
             
             # Fixed target capacities
             'target_capacity': {
-                'values': [1000, 5000, 10000, 50000]
+                'values': [1000, 5000, 10000]
             },
             
             # Task configuration
             **task_params,
             
-            # Fixed optimal hyperparameters (same as network sizes)
+            # Varied hyperparameters for robustness (2 values each)
             'learning_rate': {'value': 3e-4},
             'batch_size': {'value': 64},
             'n_steps': {'value': 2048},
