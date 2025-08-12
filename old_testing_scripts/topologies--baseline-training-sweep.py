@@ -225,7 +225,7 @@ class BaselineTopologyPolicy(ActorCriticPolicy):
         
         # Calculate total parameters safely
         if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
-            total_params = actor_params + critic_params
+        total_params = actor_params + critic_params
         elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
             actor_size = actor_params.get('size', 0)
             critic_size = critic_params.get('size', 0)
@@ -1260,13 +1260,13 @@ def baseline_training(policy_class, topology_type, config, num_layers=1, hidden_
     if wandb.run is not None and 'target_capacity' not in config:
         try:
             # Calculate actual capacity from the model
-            policy = model.policy
-            actor_params = policy._get_topology_params(policy.actor_topology)
-            critic_params = policy._get_topology_params(policy.critic_topology)
+    policy = model.policy
+    actor_params = policy._get_topology_params(policy.actor_topology)
+    critic_params = policy._get_topology_params(policy.critic_topology)
             
             # Calculate total parameters safely
             if isinstance(actor_params, (int, float)) and isinstance(critic_params, (int, float)):
-                total_params = actor_params + critic_params
+    total_params = actor_params + critic_params
             elif isinstance(actor_params, dict) and isinstance(critic_params, dict):
                 actor_size = actor_params.get('size', 0)
                 critic_size = critic_params.get('size', 0)
@@ -1289,7 +1289,7 @@ def baseline_training(policy_class, topology_type, config, num_layers=1, hidden_
             
             print(f"📊 Actual network capacity: {total_params:,} parameters")
             
-        except Exception as e:
+    except Exception as e:
             print(f"   ⚠️  Could not calculate actual capacity: {e}")
     
     # Create callback for logging
@@ -1330,7 +1330,7 @@ def baseline_training(policy_class, topology_type, config, num_layers=1, hidden_
                     if self.convergence_callback.verbose > 0:
                         print(f"📊 {self.task_name}: Quick eval - Reward: {mean_reward:.2f}, Success: {success:.1%}, Completion: {completion:.1f}%")
                 
-                except Exception as e:
+        except Exception as e:
                     # If evaluation fails, continue training
                     if self.convergence_callback.verbose > 0:
                         print(f"⚠️  {self.task_name}: Evaluation failed: {e}")
@@ -1463,7 +1463,7 @@ def unified_training_function():
         
         # Initialize wandb with proper naming
         initialize_wandb_run(config, topology_type, 'baseline')
-    else:
+        else:
         # Sweep execution - use wandb.config
         config = wandb.config
     

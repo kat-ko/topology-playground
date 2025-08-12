@@ -398,23 +398,15 @@ class EnhancedDebugCallback(BaseCallback):
     
     def _on_rollout_end(self) -> None:
         """Log metrics at the end of each rollout."""
-        self.rollout_count += 1
-        
-        # Collect episodic rewards for current task
-        if self.current_task and self.current_task in self.task_rewards:
-            # Get the latest episode rewards from the rollout
-            if hasattr(self, 'episode_rewards') and self.episode_rewards:
-                latest_rewards = self.episode_rewards[-self.n_envs:] if hasattr(self, 'n_envs') else self.episode_rewards[-1:]
-                self.task_rewards[self.current_task].extend(latest_rewards)
-        
         if wandb.run:
             self._log_rollout_metrics()
             
-            # Log overall rollout metrics
+            # Log overall rollout metrics with organized structure
+            if self.episode_rewards:
             wandb.log({
                 'rollout/mean_reward': np.mean(self.episode_rewards[-self.n_envs:]) if self.episode_rewards else 0,
                 'rollout/mean_length': np.mean(self.episode_lengths[-self.n_envs:]) if self.episode_lengths else 0,
-                'sequential_training/phase': self.current_task_phase
+                    'sequential_training/current_phase': self.current_task_phase
             })
     
     def _on_training_end(self) -> None:
@@ -1386,7 +1378,7 @@ def double_task_training(policy_class, topology_type, config, num_layers=2, hidd
     # Log Phase 2 results with topology-aware naming
     if wandb.run:
         for task, results in phase2_results.items():
-            wandb.log({
+        wandb.log({
                 f'{topology_type}/{task_order}/phase2/testing/{task}/mean_reward': results['mean_reward'],
                 f'{topology_type}/{task_order}/phase2/testing/{task}/std_reward': results['std_reward'],
                 f'{topology_type}/{task_order}/phase2/testing/{task}/mean_length': results['mean_length'],

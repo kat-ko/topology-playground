@@ -1676,7 +1676,7 @@ class EnhancedDebugCallback(BaseCallback):
                     # REMOVED: Sample efficiency (redundant metrics)
                     # REMOVED: Hyperparameter correlation (redundant metrics)
                 
-                # NEW: Real-time training progress table (every 1000 steps)
+                # NEW: Real-time training progress table (every 10k steps)
                 if self.num_timesteps % 10000 == 0:  # Update table every 10k steps
                     self._log_training_progress_table()
                 
@@ -1696,38 +1696,25 @@ class EnhancedDebugCallback(BaseCallback):
                     episode_rewards = buffer.rewards.flatten()
                     episode_lengths = np.ones_like(episode_rewards) * self.model.n_steps
                     
-                    # Calculate additional statistics
-                    positive_rewards = episode_rewards[episode_rewards > 0]
-                    negative_rewards = episode_rewards[episode_rewards < 0]
-                    zero_rewards = episode_rewards[episode_rewards == 0]
-                    
-                    metrics = {
+                    # Calculate rollout statistics
+                    rollout_metrics = {
                         "rollout/mean_reward": np.mean(episode_rewards),
                         "rollout/std_reward": np.std(episode_rewards),
                         "rollout/max_reward": np.max(episode_rewards),
                         "rollout/min_reward": np.min(episode_rewards),
                         "rollout/mean_length": np.mean(episode_lengths),
-                        "rollout/episode_count": len(episode_rewards),
-                        "rollout/positive_reward_ratio": len(positive_rewards) / len(episode_rewards),
-                        "rollout/negative_reward_ratio": len(negative_rewards) / len(episode_rewards),
-                        "rollout/zero_reward_ratio": len(zero_rewards) / len(episode_rewards),
-                        "rollout/reward_variance": np.var(episode_rewards),
-                        "rollout/reward_skewness": self._calculate_skewness(episode_rewards),
+                        "rollout/total_episodes": len(episode_rewards),
+                        "rollout/rollout_number": self.rollout_count,
                     }
                     
-                    # Add percentiles for reward distribution
-                    percentiles = [10, 25, 50, 75, 90]
-                    for p in percentiles:
-                        metrics[f"rollout/reward_p{p}"] = np.percentile(episode_rewards, p)
-                    
-                    self.wandb_run.log(metrics, step=self.num_timesteps)
-                    
-                    # Store for final summary
+                    # Add to training metrics for final summary
                     self.training_metrics['episode_rewards'].extend(episode_rewards.tolist())
                     self.training_metrics['episode_lengths'].extend(episode_lengths.tolist())
                     
-                    # Update episode count
-                    self.episode_count += len(episode_rewards)
+                    # Log rollout metrics
+                    if self.wandb_run is not None:
+                        self.wandb_run.log(rollout_metrics, step=self.num_timesteps)
+                        
         except Exception as e:
             print(f"   ⚠️  Error logging rollout metrics: {e}")
     
@@ -2007,27 +1994,26 @@ def initialize_wandb_run(config, topology_type, training_type='single_task'):
     )
 
 def create_run_name(config, topology_type, training_type, model=None, total_params=None):
-    """Create descriptive run name with exact capacity and size."""
+    """Create enhanced run name with topology abbreviation, exact capacity/size, and task abbreviation."""
     
-    # Topology abbreviation
+    # Topology abbreviations
     topology_abbrev = {
         'small_world': 'SW',
-        'modular': 'MOD', 
-        'hybrid': 'HYB',
+        'modular': 'MD', 
+        'hybrid': 'HY',
         'fully_connected': 'FC'
     }.get(topology_type, topology_type.upper())
     
-    # Get actual capacity and size
-    actual_capacity = None
+    # Get actual size
     actual_size = config.get('hidden_size', 'unknown')
     
     # Calculate actual capacity if we have a model to check
-    if 'target_capacity' in config:
+    if total_params is not None:
+        # Use provided total parameters (most accurate)
+        actual_capacity = total_params
+    elif 'target_capacity' in config:
         # For capacity-matched sweeps, use target capacity
         actual_capacity = config.get('target_capacity')
-    elif total_params is not None:
-        # Use pre-calculated total parameters
-        actual_capacity = total_params
     elif model is not None and hasattr(model, 'policy'):
         # Calculate actual capacity from the model
         try:
@@ -2475,6 +2461,14 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             },
             reinit=True
         )
+        
+        # UPDATE: Update the run name with actual capacity after model creation
+        if wandb.run is not None:
+            updated_run_name = create_run_name(config, topology_type, 'single_task', model=model, total_params=total_params)
+            if updated_run_name != run_name:
+                print(f"🔄 Updating run name from '{run_name}' to '{updated_run_name}'")
+                wandb.run.name = updated_run_name
+        
         training_wandb_enabled = True
     except Exception as e:
         print(f"   ⚠️  Training WandB logging disabled for {topology_type}: {e}")
@@ -2489,7 +2483,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
     print(f"   • Number of layers: {num_layers}")
     print(f"   • Total parameters: {total_params:,}")
     print(f"   • Training timesteps: {config['total_timesteps']:,}")
-    print(f"   • Training WandB Run: {training_run_name}")
+    print(f"   • Training WandB Run: {run_name}")
     
     # Train the model on the training task
     print(f"\n🎯 Training Phase:")
@@ -2578,7 +2572,7 @@ def cross_task_testing(policy_class, topology_type, config, num_layers=2, hidden
             
             # Finish training run
             training_wandb_run.finish()
-            print(f"   ✅ Training run completed: {training_run_name}")
+            print(f"   ✅ Training run completed: {run_name}")
             
         except Exception as e:
             print(f"   ⚠️  Error finishing training run: {e}")
