@@ -56,7 +56,7 @@ from src.utils.advanced_plotting import (
 )
 from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 from src.utils.topology_logging_handler import (
-    TopologyLoggingHandler, EnhancedDebugCallback, create_logging_handler, log_streamlined_tables
+    SimplifiedLoggingHandler, SimplifiedCallback, create_logging_handler
 )
 
 # 🚨 CRITICAL: Set W&B environment variables BEFORE any W&B usage
@@ -214,12 +214,9 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         """Create topology network based on type and parameters."""
         if self.topology_type == 'fully_connected':
             return FullyConnectedTopology(
-                input_size=6,  # Universal observation space
-                hidden_size=self.hidden_size,
-                output_size=self.hidden_size,
-                num_layers=self.num_layers,
-                activation=self.activation,
-                dropout=self.dropout
+                size=self.hidden_size,  # Total network size (matches other topologies)
+                num_layers=self.num_layers,  # Number of layers (fully connected supports variable layers)
+                seed=42  # For reproducibility
             )
         elif self.topology_type == 'small_world':
             k = getattr(wandb.config, 'small_world_k', 4) if wandb.run else 4
@@ -323,186 +320,10 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         return None
 
 # ============================================================================
-# CALLBACK FOR WANDB INTEGRATION
+# SIMPLIFIED LOGGING SYSTEM
 # ============================================================================
-
-# ============================================================================
-# ENHANCED DEBUG CALLBACK (REPLACED BY TOPOLOGY_LOGGING_HANDLER)
-# ============================================================================
-# The old EnhancedDebugCallback has been replaced by the new one in src/utils/topology_logging_handler.py
-# This ensures consistent logging across all training modes (individual, batch, and sweeps)
-    
-# The old EnhancedDebugCallback class has been completely replaced
-    
-# All methods have been replaced by the new logging handler
-    
-    def _log_training_metrics(self):
-        """Log streamlined training metrics with clean organization."""
-        try:
-            # Get metrics from the model's logger
-            if hasattr(self.model, 'logger') and self.model.logger is not None:
-                name_to_value = self.model.logger.name_to_value
-                
-                # ============================================================================
-                # GLOBAL TRAINING METRICS (clean, essential metrics only)
-                # ============================================================================
-                global_metrics = {
-                    "timesteps": self.num_timesteps,
-                    "episodes": len(self.episode_rewards),
-                    "phase": self.current_task_phase,
-                }
-                
-                # Add essential PPO metrics
-                for key, value in name_to_value.items():
-                    if any(term in key.lower() for term in ['loss', 'entropy', 'lr', 'value', 'policy', 'clip']):
-                        global_metrics[key] = value
-                
-                # Add learning rate
-                if hasattr(self.model, 'lr_schedule'):
-                    current_lr = self.model.lr_schedule(self.num_timesteps)
-                    global_metrics["learning_rate"] = current_lr
-                
-                # Add reward and length metrics if available
-                if self.episode_rewards:
-                    recent_rewards = self.episode_rewards[-100:]  # Last 100 episodes
-                    recent_lengths = self.episode_lengths[-100:]  # Last 100 episodes
-                    
-                    global_metrics.update({
-                        "mean_reward": np.mean(recent_rewards),
-                        "mean_length": np.mean(recent_lengths),
-                        "training_progress": self.num_timesteps / self.model.total_timesteps if hasattr(self.model, 'total_timesteps') else 0.0
-                    })
-                    
-                    # Add success rate and completion percentage if we have task info
-                    if self.task_phases and len(self.task_phases) > 0:
-                        current_task = self.task_phases[-1]['task']
-                        success_rate = calculate_success_rate(recent_rewards, recent_lengths, current_task)
-                        completion_pct = calculate_reward_completion_percentage(recent_rewards, current_task)
-                        global_metrics.update({
-                            "success_rate": success_rate,
-                            "completion_percentage": completion_pct
-                        })
-                
-                # Log global metrics
-                # 🚨 CRITICAL FIX: Ensure step is never 0 to prevent W&B warnings
-                safe_step = max(1, self.global_timesteps + 1) if self.global_timesteps == 0 else self.global_timesteps
-                wandb.log({"train/global": global_metrics}, step=safe_step)
-                
-                # ============================================================================
-                # TASK-ORDER-SPECIFIC METRICS (only if task order is available)
-                # ============================================================================
-                if self.task_order and self.task_phases and self.episode_rewards:
-                    current_task = self.task_phases[-1]['task']
-                    task_order_metrics = {
-                        "timesteps": self.num_timesteps,
-                        "episodes": len(self.episode_rewards),
-                        "current_task": current_task,
-                    }
-                    
-                    # Add essential PPO metrics
-                    for key, value in name_to_value.items():
-                        if any(term in key.lower() for term in ['loss', 'entropy', 'lr', 'value', 'policy', 'clip']):
-                            task_order_metrics[key] = value
-                    
-                    # Add learning rate
-                    if hasattr(self.model, 'lr_schedule'):
-                        current_lr = self.model.lr_schedule(self.num_timesteps)
-                        task_order_metrics["learning_rate"] = current_lr
-                    
-                    # Add reward and performance metrics
-                    if self.episode_rewards:
-                        recent_rewards = self.episode_rewards[-100:]
-                        recent_lengths = self.episode_lengths[-100:]
-                        
-                        task_order_metrics.update({
-                            "mean_reward": np.mean(recent_rewards),
-                            "mean_length": np.mean(recent_lengths),
-                        })
-                        
-                        # Add task-specific success metrics
-                        success_rate = calculate_success_rate(recent_rewards, recent_lengths, current_task)
-                        completion_pct = calculate_reward_completion_percentage(recent_rewards, current_task)
-                        task_order_metrics.update({
-                            "success_rate": success_rate,
-                            "completion_percentage": completion_pct
-                        })
-                    
-                    # Log task-order-specific metrics
-                    # 🚨 CRITICAL FIX: Ensure step is never 0 to prevent W&B warnings
-                    safe_step = max(1, self.global_timesteps + 1) if self.global_timesteps == 0 else self.global_timesteps
-                    wandb.log({f"train/task_orders/{self.task_order}/phase_{self.current_task_phase}_{current_task}": task_order_metrics}, step=safe_step)
-                    
-        except Exception as e:
-            print(f"   ⚠️  Error logging training metrics: {e}")
-    
-    def _log_rollout_metrics(self):
-        """Log streamlined rollout metrics."""
-        try:
-            # Get rollout statistics
-            if hasattr(self.model, 'rollout_buffer') and self.model.rollout_buffer is not None:
-                buffer = self.model.rollout_buffer
-                
-                # Calculate rollout statistics
-                if hasattr(buffer, 'observations') and buffer.observations is not None:
-                    obs_mean = np.mean(buffer.observations)
-                    obs_std = np.std(buffer.observations)
-                    
-                    # Global rollout metrics
-                    global_rollout_metrics = {
-                        'obs_mean': obs_mean,
-                        'obs_std': obs_std,
-                        'phase': self.current_task_phase,
-                    }
-                    
-                    # Log global rollout metrics
-                    # 🚨 CRITICAL FIX: Ensure step is never 0 to prevent W&B warnings
-                    safe_step = max(1, self.global_timesteps + 1) if self.global_timesteps == 0 else self.global_timesteps
-                    wandb.log({"rollout/global": global_rollout_metrics}, step=safe_step)
-                    
-                    # Task-order-specific rollout metrics
-                    if self.task_order and self.task_phases:
-                        current_task = self.task_phases[-1]['task']
-                        task_order_rollout_metrics = {
-                            'obs_mean': obs_mean,
-                            'obs_std': obs_std,
-                        }
-                        
-                        # Log task-order-specific rollout metrics
-                        # 🚨 CRITICAL FIX: Ensure step is never 0 to prevent W&B warnings
-                        safe_step = max(1, self.global_timesteps + 1) if self.global_timesteps == 0 else self.global_timesteps
-                        wandb.log({f"rollout/task_orders/{self.task_order}/phase_{self.current_task_phase}_{current_task}": task_order_rollout_metrics}, step=safe_step)
-                        
-        except Exception as e:
-            print(f"   ⚠️  Error logging rollout metrics: {e}")
-    
-    def _log_final_training_summary(self):
-        """Log streamlined final training summary."""
-        try:
-            # Calculate overall statistics
-            if self.episode_rewards:
-                final_rewards = self.episode_rewards[-100:]  # Last 100 episodes
-                final_lengths = self.episode_lengths[-100:]
-                
-                summary = {
-                    'train/global/final_mean_reward': np.mean(final_rewards),
-                    'train/global/final_mean_length': np.mean(final_lengths),
-                    'train/global/total_episodes': len(self.episode_rewards),
-                    'train/global/total_timesteps': self.num_timesteps,
-                    'train/global/total_phases': len(self.task_phases),
-                }
-                
-                # Add phase-specific final metrics
-                if self.task_phases:
-                    for i, phase in enumerate(self.task_phases):
-                        summary[f'train/global/phase_{i}_task'] = phase['task']
-                        summary[f'train/global/phase_{i}_start_timesteps'] = phase['start_timesteps']
-                
-                # 🚨 CRITICAL FIX: Use proper step values for final summary logging
-                # Use max(1, self.num_timesteps) to prevent step 0 warnings
-                safe_step = max(1, self.num_timesteps)
-                wandb.log(summary, step=safe_step)
-        except Exception as e:
-            print(f"   ⚠️  Error logging final summary: {e}")
+# All complex logging methods have been removed.
+# Only standard training metrics are logged via the SimplifiedCallback.
 
 # ============================================================================
 # IMPROVED LOGGING SYSTEM WITH REWARD SCALING
@@ -1291,8 +1112,8 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     logging_handler = create_logging_handler(config, topology_type, 'triple_task')
     logging_handler.initialize_run()
     
-    # Create callback using the new logging handler
-    callback = EnhancedDebugCallback(logging_handler=logging_handler, log_freq=1000)
+    # Create callback using the simplified logging handler
+    callback = SimplifiedCallback(logging_handler=logging_handler, log_freq=1000)
     
     # Calculate actual capacity and update run name if needed
     if wandb.run is not None:
