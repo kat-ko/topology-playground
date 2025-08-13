@@ -115,10 +115,21 @@ class SimplifiedLoggingHandler:
                 # Fallback to config value
                 effective_layers = self.config.get('num_layers', 'unknown')
             
-            # Include task order for triple-task training
-            if self.training_type == 'triple_task':
+            # Include task information based on training type
+            if self.training_type == 'continual_learning':
+                # Single task for continual learning
+                task_name = self.config.get('task_name', 'unknown')
+                task_abbrev = {
+                    'CartPole-v1': 'CP',
+                    'Acrobot-v1': 'AC',
+                    'LunarLander-v2': 'LL'
+                }.get(task_name, task_name)
+                run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{effective_layers}_S{seed}_{task_abbrev}"
+            elif self.training_type == 'triple_task':
+                # Multiple tasks for triple-task training
                 run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{effective_layers}_S{seed}_CP-AC-LL"
             else:
+                # Default case
                 run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{effective_layers}_S{seed}"
             
             # Update the run name

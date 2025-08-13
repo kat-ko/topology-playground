@@ -24,65 +24,84 @@ This document tracks the project's approach to various challenges, ensuring cons
 - Integrates topology networks as actor and critic components
 - Supports universal observation and action spaces
 
-### Enhanced Callback System
-- `EnhancedDebugCallback` for comprehensive logging
-- Phase tracking for sequential training
-- Graph metrics and network analysis
+### Clean Slate Callback System
+- **SimplifiedCallback**: Minimal essential logging for system configuration
+- **CleanTrainingCallback**: Core training metrics only (episode returns, lengths)
+- **ContinualLearningProgressBarCallback**: Progress tracking for continual learning
+- **ShiftLoggingCallback**: Essential continual learning metrics only
+- **TrainingTerminationCallback**: Automatic training termination
 
-### Adaptive Training with Early Stopping
-- **Task-Specific Training Times**: Individual timesteps per task based on complexity
-- **Convergence Monitoring**: Real-time performance tracking every 5K steps
-- **Early Stopping**: Automatic termination when tasks converge or timeout
-- **Resource Optimization**: Prevents overtraining and resource waste
+### Clean Slate Logging Philosophy
+- **Minimal Essential Metrics**: Only log what's absolutely necessary for research
+- **Clean Hierarchy**: Clear, logical grouping of metrics
+- **Research Ready**: Metrics that directly support paper figures
+- **Performance Focused**: Avoid logging noise and redundant data
 
-#### Early Stopping Triggers
-1. **Convergence Detection**: Task reaches target performance threshold
-2. **Performance Plateau**: No improvement for specified patience period
-3. **Maximum Timeout**: Reaches task-specific maximum timesteps
-4. **Target Achievement**: Reaches task-specific target timesteps
+#### Clean Logging Structure
+```
+config/                    # System configuration (one-time)
+├── topology_type
+├── hidden_size
+├── num_layers
+├── total_parameters
+├── task_name
+└── seed
 
-#### Task-Specific Configuration
+training/                  # Core training metrics
+├── timestep
+├── episode_return
+├── episode_length
+├── mean_episode_reward
+└── total_episodes
+
+continual_learning/        # Essential continual learning only
+├── current_segment
+├── shift_boundary
+└── total_shifts
+```
+
+#### Benefits of Clean Slate Approach
+- **Reduced Complexity**: Eliminates redundant and noisy metrics
+- **Faster Training**: Less logging overhead during training
+- **Cleaner W&B Interface**: Easier to navigate and analyze
+- **Research Focused**: Metrics directly support publication needs
+- **Incremental Enhancement**: Can add specific metrics as needed
+
+## Continual Learning with Observation Shifts
+
+### Experimental Setup
+- **Single Task Training**: Focus on one task with observation shifts
+- **Segment Length**: 200 steps per segment (configurable)
+- **Shift Range**: [0, 2] observation space modifications
+- **Total Lifetime**: 3,000 steps for rapid experimentation
+
+### Continual Learning Wrapper
+- **Observation Shifts**: Random modifications to input space every segment
+- **Segment Tracking**: Clear boundaries between learning phases
+- **Adaptation Analysis**: Measure how well networks adapt to changes
+
+### Training Configuration
 ```python
-TASK_TRAINING_CONFIG = {
-    'CartPole-v1': {
-        'total_timesteps': 200000,      # Target convergence time
-        'max_timesteps': 300000,        # Maximum allowed time
-        'min_timesteps': 50000,         # Minimum training time
-        'early_stopping_patience': 10000, # Steps without improvement
-        'convergence_window': 1000,     # Window for convergence check
-        'reward_threshold': 450,        # Performance threshold
-    },
-    'Acrobot-v1': {
-        'total_timesteps': 800000,      # Slower convergence
-        'max_timesteps': 1000000,       # Higher complexity
-        'min_timesteps': 200000,
-        'early_stopping_patience': 20000,
-        'convergence_window': 2000,
-        'reward_threshold': -100,
-    },
-    'MountainCar-v0': {
-        'total_timesteps': 600000,      # Medium complexity
-        'max_timesteps': 800000,
-        'min_timesteps': 150000,
-        'early_stopping_patience': 15000,
-        'convergence_window': 1500,
-        'reward_threshold': -200,
-    }
+CONTINUAL_LEARNING_CONFIG = {
+    'segment_length': 200,           # Steps per segment
+    'shift_range': [0, 2],          # Observation modification range
+    'total_lifetime_steps': 3000,    # Total training budget
+    'log_frequency': 100,            # Log every 100 steps
+    'episode_simulation': 500        # Simulate episodes every 500 steps
 }
 ```
 
-#### Convergence Monitoring Process
-1. **Step-by-Step Tracking**: Monitor training progress every step
-2. **Evaluation Integration**: Connect with existing evaluation callbacks
-3. **Performance Analysis**: Track reward trends and stability
-4. **Decision Making**: Trigger early stopping based on criteria
-5. **Logging**: Record convergence events and timing
+## Adaptive Training with Early Stopping
 
-#### Resource Efficiency Benefits
-- **CartPole-v1**: ~60% time reduction (200K vs 500K timesteps)
-- **Acrobot-v1**: Appropriate complexity-based timing
-- **MountainCar-v0**: Balanced training duration
-- **Overall**: Significant resource savings across all training types
+### Task-Specific Training Times
+- **CartPole-v1**: 200K timesteps (target), 300K (max)
+- **Acrobot-v1**: 800K timesteps (target), 1M (max)
+- **MountainCar-v0**: 600K timesteps (target), 800K (max)
+
+### Convergence Monitoring
+- Real-time performance tracking every 5K steps
+- Automatic termination when tasks converge or timeout
+- Resource optimization to prevent overtraining
 
 ## Capacity Matching with Incremental Adjustment
 
@@ -98,18 +117,6 @@ TASK_TRAINING_CONFIG = {
 - Support for all topology types
 - Pre-calculation before wandb initialization
 
-## Capacity Matching to Fixed Targets
-
-### Fixed Target Capacities
-- **Targets**: 1K, 5K, 10K, 50K parameters
-- **Method**: Grid search with fixed optimal hyperparameters
-- **Advantage**: Systematic comparison across topologies
-
-### Pre-calculation Process
-- Calculate effective hidden size for each topology
-- Use fixed optimal hyperparameters
-- Ensure fair comparison across different network structures
-
 ## Experimental Variants and Architectures
 
 ### Training Types
@@ -117,146 +124,58 @@ TASK_TRAINING_CONFIG = {
 - **Single-Task**: Train on one task, test on all tasks
 - **Double-Task**: Sequential training on two tasks with intermediate testing
 - **Triple-Task**: Sequential training on three tasks with intermediate testing
+- **Continual Learning**: Single task with observation shifts
 
 ### Enhanced Intermediate Testing System
 - **Testing Schedule**: After each training phase, test on ALL tasks
 - **Temporal Tracking**: Clear phase-based metric naming
 - **Transfer Analysis**: Forward and backward transfer measurement
 
-#### Double-Task Training Flow
-```
-Phase 1: Train on Task 1 (600K timesteps)
-         ↓
-Testing: Test on ALL tasks (CartPole, Acrobot, MountainCar)
-         ↓
-Phase 2: Train on Task 2 (600K timesteps)
-         ↓
-Testing: Test on ALL tasks (CartPole, Acrobot, MountainCar)
-```
-
-#### Triple-Task Training Flow
-```
-Phase 1: Train on Task 1 (600K timesteps)
-         ↓
-Testing: Test on ALL tasks (CartPole, Acrobot, MountainCar)
-         ↓
-Phase 2: Train on Task 2 (600K timesteps)
-         ↓
-Testing: Test on ALL tasks (CartPole, Acrobot, MountainCar)
-         ↓
-Phase 3: Train on Task 3 (600K timesteps)
-         ↓
-Testing: Test on ALL tasks (CartPole, Acrobot, MountainCar)
-```
-
 ## Logging and Results Management
 
-### Topology-Aware Metric Structure
+### Clean Slate Metric Structure
 ```
-{topology_type}/{task_sequence}/phase{phase_number}/testing/{task}/{metric}
+training/
+├── mean_episode_reward
+├── total_episodes
+├── episode_return
+├── episode_length
+└── episode_number
+
+continual_learning/
+├── current_segment
+├── shift_boundary
+└── total_shifts
 ```
 
-### Example Metrics
-```
-small_world/CartPole-v1_Acrobot-v1/phase1/testing/CartPole-v1/mean_reward: 450
-small_world/CartPole-v1_Acrobot-v1/phase2/testing/CartPole-v1/mean_reward: 440
-modular/CartPole-v1_Acrobot-v1/phase1/testing/CartPole-v1/mean_reward: 420
-modular/CartPole-v1_Acrobot-v1/phase2/testing/CartPole-v1/mean_reward: 410
-```
-
-### Transfer Learning Metrics
-- **Forward Transfer**: How well does training on A help with B?
-- **Backward Transfer**: How well does training on B affect A retention?
-- **Catastrophic Forgetting**: Measure of performance degradation
-
-### Benefits
-- **Complete temporal visibility**: Every phase tested on all tasks
-- **Clear progression tracking**: Learning and forgetting patterns
-- **Easy comparative analysis**: Same task sequence, different topologies
-- **Systematic transfer analysis**: Forward and backward transfer patterns
+### Benefits of Clean Structure
+- **Minimal Overhead**: Only essential metrics logged
+- **Clear Organization**: Logical grouping by function
+- **Easy Analysis**: Simple to create research plots
+- **Scalable**: Easy to add specific metrics as needed
 
 ## Training and Sweep Management
 
 ### Sweep Types
-- **Fixed Network Sizes**: Compare topologies across fixed hidden sizes (64, 128, 256, 512)
-- **Fixed Capacities**: Compare topologies across fixed parameter counts (1K, 5K, 10K, 50K)
+- **Fixed Network Sizes**: Compare topologies across fixed hidden sizes
+- **Fixed Capacities**: Compare topologies across fixed parameter counts
+- **Continual Learning**: Single task with observation shifts
 
 ### Sweep Configuration
 - **Method**: Grid search for systematic comparison
-- **Primary Metric**: `normalized/final_normalized_score`
+- **Primary Metric**: Clean, essential metrics only
 - **Fixed Hyperparameters**: Optimal settings for fair comparison
-
-### Task Order Combinations
-- **Double-Task**: 6 valid combinations (no duplicates)
-- **Triple-Task**: 6 valid permutations (no duplicates)
-- **Validation**: Ensure no duplicate tasks in sequence
-
-## Task Logic Variants
-
-### Baseline Logic
-- Train on single task
-- Evaluate on training task
-- Comprehensive network analysis
-
-### Single-Task Logic
-- Train on one task
-- Test on all available tasks
-- Cross-task transfer analysis
-
-### Double-Task Logic
-- Sequential training on two tasks
-- Intermediate testing after each phase
-- Forward and backward transfer analysis
-
-### Triple-Task Logic
-- Sequential training on three tasks
-- Intermediate testing after each phase
-- Comprehensive transfer learning analysis
-
-## Variable Naming Conventions
-
-### Topology-Aware Structure
-```
-{topology_type}/{task_sequence}/phase{phase_number}/testing/{task}/{metric}
-```
-
-### Training Phases
-```
-phase1/ - After training on first task
-phase2/ - After training on second task
-phase3/ - After training on third task (triple-task only)
-```
-
-### Testing Contexts
-```
-testing/ - Final evaluation on all tasks
-transfer/ - Transfer learning metrics
-training/ - Training metadata and configuration
-```
-
-### Task-Specific Metrics
-```
-{task}/mean_reward - Average reward for specific task
-{task}/success_rate - Success rate for specific task
-{task}/mean_length - Average episode length for specific task
-```
 
 ## Code Organization Principles
 
 ### File Structure
-- **Training Scripts**: `topologies--{type}-training-sweep.py`
-- **Configuration**: `wandb_sweep_config.py`
-- **Launch Script**: `launch_sweep.py`
-- **Utilities**: `src/utils/` directory
+- **Main Script**: `topologies_continual_task_training_sweep.py`
+- **Configuration**: Clean, minimal configuration
+- **Callbacks**: Streamlined callback system
+- **Utilities**: Essential utilities only
 
 ### Function Organization
-- **Unified Training Functions**: Main entry points for wandb sweeps
-- **Logging Functions**: Topology-aware metric logging
-- **Evaluation Functions**: Comprehensive task evaluation
-- **Utility Functions**: Capacity matching, normalization, etc.
-
-### Consistency Requirements
-- **Same metric structure** across all training types
-- **Consistent parameter naming** across all files
-- **Unified logging approach** with topology context
-- **Backward compatibility** with legacy metric names 
+- **Unified Training Functions**: Main entry points for training
+- **Clean Logging Functions**: Minimal essential metric logging
+- **Streamlined Callbacks**: Focused on core functionality
+- **Utility Functions**: Capacity matching, etc. 

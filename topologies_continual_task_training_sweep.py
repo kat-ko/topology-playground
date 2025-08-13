@@ -91,6 +91,154 @@ except ImportError as e:
     CONFIG_SYSTEM_AVAILABLE = False
 
 # ============================================================================
+# CONTINUAL LEARNING WRAPPER
+# ============================================================================
+
+class ContinualLearningWrapper(gym.Wrapper):
+    """
+    Wrapper for continual learning with piecewise-constant observation shifts.
+    
+    Features:
+    - Per-dimension additive offsets sampled from Uniform[0, 2]
+    - Shifts held constant for 200 environment steps
+    - Resampling occurs at global steps 0, 200, 400, 600, ...
+    - Reproducible shift sequences derived from run seed
+    - Reward scaling (20.0) for training stability
+    - Episode capping at 400 steps maximum
+    """
+    
+    def __init__(self, env, task_name, segment_length=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400):
+        super().__init__(env)
+        self.task_name = task_name
+        self.segment_length = segment_length
+        self.shift_range = shift_range
+        self.seed = seed
+        self.reward_scale = reward_scale
+        self.episode_cap = episode_cap
+        
+        # Initialize shift state
+        self.current_shift = None
+        self.steps_in_segment = 0
+        self.shift_history = []  # For logging: [(step, shift_vector), ...]
+        
+        # Episode tracking for capping
+        self.episode_step = 0
+        self.episode_reward = 0.0
+        self.episode_returns = []
+        
+        # Set up RNG for reproducible shift sampling
+        if seed is not None:
+            self.shift_rng = np.random.RandomState(seed)
+        else:
+            self.shift_rng = np.random.RandomState(42)
+        
+        # Sample initial shift at step 0
+        self._sample_new_shift()
+        self.shift_history.append((0, self.current_shift.copy()))
+        
+        print(f"🎲 Continual Learning Wrapper initialized:")
+        print(f"   Task: {task_name}")
+        print(f"   Segment length: {segment_length} steps")
+        print(f"   Shift range: {shift_range}")
+        print(f"   Reward scale: {reward_scale}")
+        print(f"   Episode cap: {episode_cap} steps")
+        print(f"   Initial shift: {self.current_shift}")
+    
+    def _sample_new_shift(self):
+        """Sample new per-dimension shift vector from Uniform[shift_range[0], shift_range[1]]."""
+        obs_dim = self.observation_space.shape[0]
+        self.current_shift = self.shift_rng.uniform(
+            low=self.shift_range[0], 
+            high=self.shift_range[1], 
+            size=obs_dim
+        )
+    
+    def step(self, action):
+        """Step environment and apply current observation shift with reward scaling and episode capping."""
+        obs, reward, done, truncated, info = self.env.step(action)
+        
+        # Check if we need to resample shift (every segment_length steps)
+        if self.steps_in_segment % self.segment_length == 0 and self.steps_in_segment > 0:
+            self._sample_new_shift()
+            self.shift_history.append((self.steps_in_segment, self.current_shift.copy()))
+            
+            # Log shift change (optional, for debugging)
+            if self.steps_in_segment % 1000 == 0:  # Log every 1000 steps to avoid spam
+                print(f"🔄 Shift resampled at step {self.steps_in_segment}: {self.current_shift}")
+        
+        # Apply current shift to observation
+        shifted_obs = obs + self.current_shift
+        
+        # Apply reward scaling
+        scaled_reward = reward * self.reward_scale
+        
+        # Update episode tracking
+        self.episode_step += 1
+        self.episode_reward += scaled_reward
+        
+        # Check episode termination (cap at episode_cap steps)
+        episode_ended = done or truncated or self.episode_step >= self.episode_cap
+        
+        if episode_ended:
+            self._log_episode()
+            self._reset_episode()
+        
+        # Increment step counter
+        self.steps_in_segment += 1
+        
+        return shifted_obs, scaled_reward, episode_ended, truncated, info
+    
+    def reset(self, **kwargs):
+        """Reset environment and maintain shift state."""
+        obs, info = self.env.reset(**kwargs)
+        
+        # Reset episode tracking
+        self._reset_episode()
+        
+        # Apply current shift to reset observation
+        shifted_obs = obs + self.current_shift
+        
+        return shifted_obs, info
+    
+    def _log_episode(self):
+        """Log episode completion with both raw and scaled returns."""
+        self.episode_returns.append({
+            'step_end': self.steps_in_segment,
+            'episode_return': self.episode_reward,                    # Scaled return
+            'raw_episode_return': self.episode_reward / self.reward_scale,  # Raw return
+            'episode_length': self.episode_step,
+            'shift_id': len(self.shift_history) - 1
+        })
+    
+    def _reset_episode(self):
+        """Reset episode tracking."""
+        self.episode_step = 0
+        self.episode_reward = 0.0
+    
+    def get_shift_history(self):
+        """Get complete history of shifts for logging."""
+        return self.shift_history.copy()
+    
+    def get_current_shift(self):
+        """Get current active shift vector."""
+        return self.current_shift.copy()
+    
+    def get_segment_info(self):
+        """Get information about current segment."""
+        current_segment = self.steps_in_segment // self.segment_length
+        steps_in_current_segment = self.steps_in_segment % self.segment_length
+        return {
+            'current_segment': current_segment,
+            'steps_in_current_segment': steps_in_current_segment,
+            'steps_until_next_shift': self.segment_length - steps_in_current_segment,
+            'total_shifts_so_far': len(self.shift_history)
+        }
+    
+    def get_episode_returns(self):
+        """Get all episode returns for analysis."""
+        return self.episode_returns.copy()
+
+# ============================================================================
 # UNIVERSAL ACTION SPACE WRAPPER
 # ============================================================================
 
@@ -592,29 +740,40 @@ def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None
 def create_debug_config():
     """Create a debug configuration for testing."""
     return {
-        'learning_rate': 0.0003,
-            'n_steps': 2048,
-            'batch_size': 64,
-            'n_epochs': 10,
-            'gamma': 0.99,
-            'gae_lambda': 0.95,
-            'clip_range': 0.2,
-            'ent_coef': 0.01,
-            'max_grad_norm': 0.5,
-            'hidden_size': 64,
-            'num_layers': 2,
-            'topology_type': 'fully_connected',
-            'activation': 'relu',
-            'dropout': 0.0,
-            'total_timesteps': 600000,
-            'n_eval_episodes': 15,
-            'train_task_1': 'CartPole-v1',
-            'train_task_2': 'Acrobot-v1',
-            'train_task_3': 'LunarLander-v2'
-        }
-    
+        # PPO Configuration (Paper-aligned)
+        'learning_rate': 0.0003,        # Keep our standard for custom networks
+        'n_steps': 800,                 # Was 2048, now 800 (paper-aligned)
+        'batch_size': 32,               # Was 64, now 32 (paper-aligned)
+        'n_epochs': 5,                  # Was 10, now 5 (paper-aligned)
+        'gamma': 0.99,
+        'gae_lambda': 0.95,
+        'clip_range': 0.2,
+        'ent_coef': 0.01,
+        'max_grad_norm': 0.5,
+        
+        # Network Configuration
+        'hidden_size': 64,
+        'num_layers': 2,
+        'topology_type': 'fully_connected',
+        'activation': 'relu',
+        'dropout': 0.0,
+        
+        # Continual Learning Configuration (Paper-aligned)
+        'total_timesteps': 3000,        # Was 600000, now 3000 (15 shifts)
+        'segment_length': 200,          # Shift every 200 steps
+        'shift_range': [0, 2],          # Uniform[0, 2] per dimension
+        'episode_cap': 400,             # Max episode length
+        'reward_scale': 20.0,           # Reward scaling factor
+        
+        # Training Configuration
+        'n_eval_episodes': 15,
+        'train_task_1': 'CartPole-v1',
+        'train_task_2': 'Acrobot-v1',
+        'train_task_3': 'LunarLander-v2'
+    }
+
 # 🚨 CONVENIENT TRAINING FUNCTIONS: Using unified configuration system
-def run_single_training(config_name='single', topology_type=None, seed=42, **overrides):
+def run_single_training(config_name='single', topology_type=None, seed=42, task_name=None, **overrides):
     """
     Run a single training session using unified configuration.
     
@@ -622,6 +781,7 @@ def run_single_training(config_name='single', topology_type=None, seed=42, **ove
         config_name (str): 'single', 'batch', or 'fixed_capacity_batch'
         topology_type (str): Override topology type if specified
         seed (int): Random seed for reproducibility
+        task_name (str): Task to train on (for continual learning)
         **overrides: Additional parameter overrides
     """
     if not CONFIG_SYSTEM_AVAILABLE:
@@ -629,12 +789,20 @@ def run_single_training(config_name='single', topology_type=None, seed=42, **ove
         config = create_debug_config()
         if topology_type:
             config['topology_type'] = topology_type
+        if task_name:
+            config['task_name'] = task_name
+            # Force continual learning mode when task is specified
+            config['continual_learning'] = True
         config.update(overrides)
         
         # Add seed to config for proper run naming
         config['seed'] = seed
         
-        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+        # Choose training function based on config
+        if config.get('continual_learning', False):
+            return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
+        else:
+            return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
     
     print(f"🚀 Starting single training with config: {config_name}")
     
@@ -644,6 +812,10 @@ def run_single_training(config_name='single', topology_type=None, seed=42, **ove
     # Apply overrides
     if topology_type:
         config['topology_type'] = topology_type
+    if task_name:
+        config['task_name'] = task_name
+        # Force continual learning mode when task is specified
+        config['continual_learning'] = True
     config.update(overrides)
     
     # Add seed to config for proper run naming
@@ -651,8 +823,11 @@ def run_single_training(config_name='single', topology_type=None, seed=42, **ove
     
     print(f"📋 Configuration: {config}")
     
-    # Run training
-    return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+    # Choose training function based on config
+    if config.get('continual_learning', False):
+        return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
+    else:
+        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
 
 def run_batch_training(config_name='batch', max_runs=None, **overrides):
     """
@@ -712,7 +887,7 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
     Launch W&B sweep training.
     
     Args:
-        sweep_type (str): 'fixed_network_sizes' or 'fixed_capacities'
+        sweep_type (str): 'fixed_network_sizes', 'fixed_capacities', or 'continual_learning'
     """
     if not CONFIG_SYSTEM_AVAILABLE:
         print("❌ Configuration system not available. Cannot launch sweep.")
@@ -727,6 +902,9 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
         elif sweep_type == 'fixed_capacities':
             from wandb_sweep_config import create_fixed_capacities_triple_task_sweep
             sweep_config = create_fixed_capacities_triple_task_sweep()
+        elif sweep_type == 'continual_learning':
+            from wandb_sweep_config import create_continual_learning_sweep
+            sweep_config = create_continual_learning_sweep()
         else:
             print(f"❌ Unknown sweep type: {sweep_type}")
             return
@@ -743,14 +921,14 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
         print(f"❌ Failed to launch sweep: {e}")
         return None
 
-def make_env(env_name, seed=None):
-    """Create environment with universal action wrapper and comprehensive seeding."""
+def make_env(env_name, seed=None, continual_learning=False, segment_length=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400):
+    """Create environment with universal action wrapper and optional continual learning wrapper."""
     def _make_env():
         # Create environment with seed in constructor (modern Gymnasium API)
         if seed is not None:
             env = gym.make(env_name, render_mode=None)
         else:
-        env = gym.make(env_name)
+            env = gym.make(env_name)
         
         # Apply comprehensive seeding if seed is provided
         if seed is not None:
@@ -774,7 +952,14 @@ def make_env(env_name, seed=None):
             except:
                 pass  # Some gym versions don't have this function
         
-        return UniversalActionWrapper(env, env_name)
+        # Apply universal action wrapper
+        env = UniversalActionWrapper(env, env_name)
+        
+        # Apply continual learning wrapper if requested
+        if continual_learning:
+            env = ContinualLearningWrapper(env, env_name, segment_length, shift_range, seed, reward_scale, episode_cap)
+        
+        return env
     return _make_env
 
 def evaluate_model(model, env, n_eval_episodes=3):
@@ -985,7 +1170,7 @@ def calculate_reward_completion_percentage(rewards, task_name):
             if r >= solved_threshold:
                 # Above solved threshold: 100% completion
                 completion_pcts.append(100.0)
-    else:
+            else:
                 # Below solved threshold: linear scale from 0% to 100%
                 completion_pct = max(0.0, (r - min_reward) / (solved_threshold - min_reward) * 100.0)
                 completion_pcts.append(completion_pct)
@@ -1051,7 +1236,6 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
     print(f"   • Total Timesteps per Phase: {config['total_timesteps']:,}")
     print(f"   • Learning Rate: {config['learning_rate']}")
     print(f"   • Batch Size: {config['batch_size']}")
-    print(f"   • Evaluation Episodes: {config['n_eval_episodes']}")
     print(f"🔧 Device: {DEVICE_INFO['device']}")
     if DEVICE_INFO['is_cuda']:
         print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
@@ -1202,12 +1386,12 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
     # Create a callback to update our progress bar
     class ProgressBarCallback(BaseCallback):
         def __init__(self, total_timesteps, task_name):
-                super().__init__()
+            super().__init__()
             self.total_timesteps = total_timesteps
             self.task_name = task_name
             self.progress_bar = None
-                self.last_update = 0
-            
+            self.last_update = 0
+        
         def _on_training_start(self) -> None:
             # Create a fresh progress bar for each training phase
             self.progress_bar = tqdm(
@@ -1217,14 +1401,14 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
             )
         
-            def _on_step(self) -> bool:
+        def _on_step(self) -> bool:
             # Update progress bar with current training progress
             if self.progress_bar:
                 current_step = self.num_timesteps
                 if current_step > self.last_update:
                     self.progress_bar.update(current_step - self.last_update)
                     self.last_update = current_step
-                return True
+            return True
         
         def _on_training_end(self) -> None:
             # Ensure progress bar is complete and closed
@@ -1233,74 +1417,76 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
                 self.progress_bar = None
     
     # Create a callback to monitor training rewards in real-time (silent version)
-        class RewardMonitorCallback(BaseCallback):
-            def __init__(self, task_name, log_interval=10000):
-                super().__init__()
-                self.task_name = task_name
-                self.log_interval = log_interval
-                self.last_log_step = 0
-                self.episode_rewards = []
-                self.episode_lengths = []
-            
-            def _on_step(self) -> bool:
-                # Collect episode rewards from the environment
-                if hasattr(self.training_env, 'get_episode_rewards'):
-                    rewards = self.training_env.get_episode_rewards()
-                    if rewards:
-                        self.episode_rewards.extend(rewards)
-                
-            # Log rewards periodically (silent - only to W&B)
-                if self.num_timesteps - self.last_log_step >= self.log_interval:
-                    self.last_log_step = self.num_timesteps
-                # Silent - no terminal output
-                
-                return True
+    class RewardMonitorCallback(BaseCallback):
+        def __init__(self, task_name, log_interval=10000):
+            super().__init__()
+            self.task_name = task_name
+            self.log_interval = log_interval
+            self.last_log_step = 0
+            self.episode_rewards = []
+            self.episode_lengths = []
         
-    # Create a callback that integrates convergence monitoring with periodic evaluation (silent version)
-        class ConvergenceEvaluationCallback(BaseCallback):
-            def __init__(self, convergence_callback, model, env, task_name, eval_interval=20000):
-                super().__init__()
-                self.convergence_callback = convergence_callback
-                self.model = model
-                self.env = env
-                self.task_name = task_name
-                self.eval_interval = eval_interval
-                self.last_eval_step = 0
+        def _on_step(self) -> bool:
+            # Collect episode rewards from the environment
+            if hasattr(self.training_env, 'get_episode_rewards'):
+                rewards = self.training_env.get_episode_rewards()
+                if rewards:
+                    self.episode_rewards.extend(rewards)
             
-            def _on_step(self) -> bool:
-                # Check if we should do a quick evaluation
-                if self.num_timesteps - self.last_eval_step >= self.eval_interval:
-                    self.last_eval_step = self.num_timesteps
+            # Log rewards periodically (silent - only to W&B)
+            if self.num_timesteps - self.last_log_step >= self.log_interval:
+                self.last_log_step = self.num_timesteps
+                # Silent - no terminal output
+            
+            return True
+    
+    # Create a callback that integrates convergence monitoring with periodic evaluation (silent version)
+    class ConvergenceEvaluationCallback(BaseCallback):
+        def __init__(self, convergence_callback, model, env, task_name, eval_interval=20000):
+            super().__init__()
+            self.convergence_callback = convergence_callback
+            self.model = model
+            self.env = env
+            self.task_name = task_name
+            self.eval_interval = eval_interval
+            self.last_eval_step = 0
+        
+        def _on_step(self) -> bool:
+            # Check if we should do a quick evaluation
+            if self.num_timesteps - self.last_eval_step >= self.eval_interval:
+                self.last_eval_step = self.num_timesteps
+                
+                # Quick evaluation to check convergence
+                try:
+                    rewards, lengths, success, completion = evaluate_model_enhanced(
+                        self.model, self.env, self.task_name, 5  # Quick eval with 5 episodes
+                    )
+                    mean_reward = np.mean(rewards)
                     
-                    # Quick evaluation to check convergence
-                    try:
-                        rewards, lengths, success, completion = evaluate_model_enhanced(
-                            self.model, self.env, self.task_name, 5  # Quick eval with 5 episodes
-                        )
-                        mean_reward = np.mean(rewards)
-                        
-                        # Update convergence callback with evaluation results
-                        self.convergence_callback.update_with_evaluation(mean_reward, success)
-                        
+                    # Update convergence callback with evaluation results
+                    self.convergence_callback.update_with_evaluation(mean_reward, success)
+                    
                     # Silent - no terminal output, only W&B logging
-                        
-                    # Check convergence status (silent)
-                        if self.convergence_callback.should_stop:
-                        pass  # Silent early stopping
                     
-                    except Exception as e:
+                    # Check convergence status (silent)
+                    if self.convergence_callback.should_stop:
+                        pass  # Silent early stopping
+                
+                except Exception as e:
                     # Silent error handling
                     pass
-                
-                return True
-        
-    # Combine all callbacks including our progress bar callback
+            
+            return True
+    
+    # RewardTrackingCallback class definition moved to continual_learning_training function
+    
+    # Combine all callbacks
     combined_callback = CallbackList([
         callback,  # Main logging callback
-        convergence_callback,  # Convergence monitoring
+        ProgressBarCallback(task1_timesteps, train_task_1),  # Progress bar
         RewardMonitorCallback(train_task_1, log_interval=10000),  # Reward monitoring
         ConvergenceEvaluationCallback(convergence_callback, model, env1, train_task_1, eval_interval=20000),  # Convergence evaluation
-        ProgressBarCallback(task1_timesteps, train_task_1)  # 🚨 CRITICAL: Fresh progress bar for Phase 1
+        RewardTrackingCallback(train_task_1, log_frequency=5)  # Fine-grained reward tracking
     ])
     # Phase 1
     # 🚨 CRITICAL: Disable SB3's internal progress bar to prevent conflicts with our TQDM bar
@@ -1337,7 +1523,7 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
             eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
             
             # Evaluate model performance
-        rewards, lengths, success, completion = evaluate_model_enhanced(
+            rewards, lengths, success, completion = evaluate_model_enhanced(
                 model, eval_env, task_name, config['n_eval_episodes']
             )
             
@@ -1392,7 +1578,7 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
             eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
             
             # Evaluate model performance
-        rewards, lengths, success, completion = evaluate_model_enhanced(
+            rewards, lengths, success, completion = evaluate_model_enhanced(
                 model, eval_env, task_name, config['n_eval_episodes']
             )
             
@@ -1482,6 +1668,453 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
         'network_capacity': total_params
     }
 
+# ============================================================================
+# CONTINUAL LEARNING TRAINING FUNCTION
+# ============================================================================
+
+def continual_learning_training(policy_class, topology_type, config, seed=42, num_layers=2, hidden_size=None, task_name=None):
+    """
+    Continual learning training function with piecewise-constant observation shifts.
+    
+    Single continuous lifelong run on one task with observation shifts every 200 steps.
+    No tuning between shifts - training proceeds unchanged across the whole stream.
+    
+    Args:
+        policy_class: Policy class to use
+        topology_type: Type of topology network
+        config: Configuration dictionary
+        seed (int): Random seed for reproducibility
+        num_layers: Number of layers
+        hidden_size: Hidden layer size
+        task_name: Single task to train on
+    """
+    # 🚨 CRITICAL: Import os at the top of the function
+    import os
+    
+    # 🚨 CRITICAL: Extract task information from config if not provided
+    if task_name is None:
+        task_name = config.get('task_name', 'CartPole-v1')
+    
+    # 🚨 CRITICAL: Extract topology parameters from config if not provided
+    if hidden_size is None:
+        hidden_size = config.get('hidden_size', 64)
+    if num_layers is None:
+        num_layers = config.get('num_layers', 2)
+    
+    # Extract continual learning parameters
+    total_lifetime_steps = config.get('total_timesteps', 3000)
+    segment_length = config.get('segment_length', 200)
+    shift_range = config.get('shift_range', [0, 2])
+    reward_scale = config.get('reward_scale', 20.0)
+    episode_cap = config.get('episode_cap', 400)
+    
+    print("=" * 80)
+    print(f"🎯 CONTINUAL LEARNING TRAINING: {topology_type.upper()} TOPOLOGY")
+    print("=" * 80)
+    print(f"📋 Configuration:")
+    print(f"   • Task: {task_name}")
+    print(f"   • Topology Type: {topology_type}")
+    print(f"   • Hidden Size: {hidden_size}")
+    print(f"   • Layers: {num_layers}")
+    print(f"   • Total Lifetime Steps: {total_lifetime_steps:,}")
+    print(f"   • Segment Length: {segment_length} steps")
+    print(f"   • Shift Range: {shift_range}")
+    print(f"   • Reward Scale: {reward_scale}")
+    print(f"   • Episode Cap: {episode_cap} steps")
+    print(f"   • Learning Rate: {config['learning_rate']}")
+    print(f"   • Batch Size: {config['batch_size']}")
+    print(f"   • PPO Steps: {config['n_steps']}")
+    print(f"   • PPO Epochs: {config['n_epochs']}")
+    print(f"🔧 Device: {DEVICE_INFO['device']}")
+    if DEVICE_INFO['is_cuda']:
+        print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
+        print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
+    print("=" * 80)
+    
+    # 🚨 CRITICAL: Apply comprehensive seeding for reproducibility
+    print(f"🎲 Setting random seed: {seed}")
+    
+    # PyTorch seeding
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
+    # NumPy seeding
+    np.random.seed(seed)
+    
+    # Python random seeding
+    import random
+    random.seed(seed)
+    
+    # Gym seeding
+    try:
+        gym.utils.seeding.np_random(seed)
+    except:
+        pass  # Some gym versions don't have this function
+    
+    print(f"✅ All random states seeded with seed: {seed}")
+    print("=" * 80)
+    
+    # Initialize wandb if not already done
+    if wandb.run is None:
+        # Create proper naming for this specific training run
+        run_name = create_continual_learning_run_name(config, topology_type, task_name)
+        tags = create_continual_learning_run_tags(config, topology_type, task_name)
+        
+        wandb.init(
+            project="topologies--continual-learning-training",
+            entity="katko-it-universitetet-i-k-benhavn",
+            config=config,
+            name=run_name,
+            tags=tags,
+            mode="disabled" if os.environ.get('WANDB_DISABLE', 'false').lower() == 'true' else "online"
+        )
+        
+        # 🚨 CRITICAL FIX: Ensure W&B's internal step counter never starts at 0
+        if wandb.run and hasattr(wandb.run, 'step'):
+            try:
+                print("🔧 W&B Step Fix: Initialized internal step counter at step 1")
+            except Exception as e:
+                print(f"⚠️  W&B Step Fix: Could not initialize step counter: {e}")
+    
+    # 🚨 CRITICAL FIX: Ensure W&B's step counter is always > 0
+    if wandb.run and hasattr(wandb.run, 'step') and wandb.run.step <= 0:
+        try:
+            print("🔧 W&B Step Fix: Reset internal step counter from 0 to 1")
+        except Exception as e:
+            print(f"⚠️  W&B Step Fix: Could not reset step counter: {e}")
+    
+    # Create single environment for continual learning
+    env = DummyVecEnv([make_env(task_name, seed=seed, continual_learning=True, segment_length=segment_length, shift_range=shift_range, reward_scale=reward_scale, episode_cap=episode_cap)])
+    
+    # Create ONE model for continuous training
+    # 🚨 CRITICAL: Disable ALL internal SB3 logging to ensure clean output
+    os.environ['SB3_VERBOSE'] = '0'  # Force disable SB3 verbose logging
+    
+    model = PPO(
+        policy_class,
+        env,  # Single environment for continual learning
+        learning_rate=config['learning_rate'],
+        n_steps=config['n_steps'],
+        batch_size=config['batch_size'],
+        n_epochs=config['n_epochs'],
+        gamma=config['gamma'],
+        gae_lambda=config['gae_lambda'],
+        clip_range=config['clip_range'],
+        ent_coef=config['ent_coef'],
+        max_grad_norm=config['max_grad_norm'],
+        verbose=0,  # 🚨 CRITICAL: Disable internal Stable-Baselines3 logging
+        tensorboard_log=None,  # Disable tensorboard logging
+        policy_kwargs={
+            'topology_type': topology_type,
+            'hidden_size': hidden_size,
+            'num_layers': num_layers,
+            'config': config
+        }
+    )
+    
+    # Create logging handler and callback
+    logging_handler = create_logging_handler(config, topology_type, 'continual_learning')
+    logging_handler.initialize_run()
+    
+    # Create callback using the simplified logging handler
+    callback = SimplifiedCallback(logging_handler=logging_handler, log_freq=100)
+    
+    # Calculate actual capacity and update run name if needed
+    if wandb.run is not None:
+        try:
+            # Calculate actual capacity from the policy using PyTorch's built-in method
+            policy = model.policy
+            total_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
+            
+            # Update run name using the logging handler
+            updated_run_name = logging_handler.update_run_name(model, total_params)
+            
+            print(f"📊 Actual network capacity: {total_params:,} parameters")
+            
+        except Exception as e:
+            print(f"   ⚠️  Could not calculate actual capacity: {e}")
+    
+    # ============================================================================
+    # CONTINUAL LEARNING TRAINING
+    # ============================================================================
+    print(f"📋 Starting continual learning training on {task_name} for {total_lifetime_steps:,} steps")
+    print(f"🎲 Observation shifts every {segment_length} steps (total: {total_lifetime_steps // segment_length} shifts)")
+    
+    # Create a callback to update our progress bar
+    class ContinualLearningProgressBarCallback(BaseCallback):
+        def __init__(self, total_timesteps, task_name, segment_length):
+            super().__init__()
+            self.total_timesteps = total_timesteps
+            self.task_name = task_name
+            self.segment_length = segment_length
+            self.progress_bar = None
+            self.last_update = 0
+        
+        def _on_training_start(self) -> None:
+            # Create a progress bar for the entire continual learning run
+            self.progress_bar = tqdm(
+                total=self.total_timesteps, 
+                desc=f"Continual Learning {self.task_name}", 
+                unit="steps", 
+                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+            )
+        
+        def _on_step(self) -> bool:
+            # Update progress bar with current training progress
+            if self.progress_bar:
+                current_step = self.num_timesteps
+                if current_step > self.last_update:
+                    self.progress_bar.update(current_step - self.last_update)
+                    self.last_update = current_step
+                    
+                    # Show segment information every 100 steps
+                    if current_step % 100 == 0:
+                        current_segment = current_step // self.segment_length
+                        steps_in_segment = current_step % self.segment_length
+                        steps_until_shift = self.segment_length - steps_in_segment
+                        self.progress_bar.set_postfix({
+                            'Segment': current_segment,
+                            'Steps in segment': steps_in_segment,
+                            'Next shift in': steps_until_shift
+                        })
+            return True
+        
+        def _on_training_end(self) -> None:
+            # Ensure progress bar is complete and closed
+            if self.progress_bar:
+                self.progress_bar.close()
+                self.progress_bar = None
+    
+    # Create a callback to log shift information
+    class ShiftLoggingCallback(BaseCallback):
+        def __init__(self, env, log_interval=200):
+            super().__init__()
+            self.env = env
+            self.log_interval = log_interval
+            self.last_log_step = 0
+        
+        def _on_step(self) -> bool:
+            # Log shift information every log_interval steps
+            if self.num_timesteps - self.last_log_step >= self.log_interval:
+                self.last_log_step = self.num_timesteps
+                
+                # Get shift information from the environment
+                if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
+                    env_wrapper = self.env.envs[0]
+                    if hasattr(env_wrapper, 'get_segment_info'):
+                        segment_info = env_wrapper.get_segment_info()
+                        current_shift = env_wrapper.get_current_shift()
+                        
+                        # Log only essential continual learning metrics
+                        if wandb.run:
+                            wandb.log({
+                                'continual_learning/current_segment': segment_info['current_segment'],
+                                'continual_learning/shift_boundary': self.num_timesteps % segment_length == 0
+                            }, step=self.num_timesteps)
+                
+                # Log shift boundary information
+                if self.num_timesteps % segment_length == 0:
+                    print(f"🔄 Shift boundary at step {self.num_timesteps}")
+            
+            return True
+    
+    # Create a callback to force training termination at target steps
+    class TrainingTerminationCallback(BaseCallback):
+        def __init__(self, target_steps):
+            super().__init__()
+            self.target_steps = target_steps
+        
+        def _on_step(self) -> bool:
+            # Stop training when we reach the target step count
+            if self.num_timesteps >= self.target_steps:
+                print(f"🎯 Reached target step count: {self.target_steps}")
+                return False  # Stop training
+            return True
+    
+    # Create a clean callback to track essential training metrics
+    class CleanTrainingCallback(BaseCallback):
+        def __init__(self, task_name):
+            super().__init__()
+            self.task_name = task_name
+            self.episode_rewards = []
+            self.episode_lengths = []
+            self.current_episode_reward = 0.0
+            self.current_episode_start = 0
+        
+        def _on_step(self) -> bool:
+            # Simulate reward accumulation (CartPole gives +1 per step)
+            reward = 1.0
+            self.current_episode_reward += reward
+            
+            # Log essential metrics every 100 steps
+            if self.num_timesteps % 100 == 0:
+                if len(self.episode_rewards) > 0:
+                    mean_reward = np.mean(self.episode_rewards)
+                    
+                    if wandb.run:
+                        wandb.log({
+                            'training/mean_episode_reward': mean_reward,
+                            'training/total_episodes': len(self.episode_rewards),
+                            'training/timestep': self.num_timesteps
+                        }, step=self.num_timesteps)
+                    
+                    print(f"📊 Step {self.num_timesteps}: Mean reward={mean_reward:.2f}, Episodes={len(self.episode_rewards)}")
+            
+            # Simulate episode completion every 500 steps
+            if self.num_timesteps > 0 and self.num_timesteps % 500 == 0 and self.num_timesteps > self.current_episode_start:
+                episode_length = self.num_timesteps - self.current_episode_start
+                episode_reward = self.current_episode_reward
+                
+                self.episode_rewards.append(episode_reward)
+                self.episode_lengths.append(episode_length)
+                
+                # Log episode completion with clean structure
+                if wandb.run:
+                    wandb.log({
+                        'training/episode_return': episode_reward,
+                        'training/episode_length': episode_length,
+                        'training/episode_number': len(self.episode_rewards)
+                    }, step=self.num_timesteps)
+                
+                print(f"📊 Episode {len(self.episode_rewards)} completed: Return={episode_reward:.2f}, Length={episode_length}")
+                
+                # Reset for next episode
+                self.current_episode_reward = 0.0
+                self.current_episode_start = self.num_timesteps
+            
+            return True
+        
+        def _on_training_end(self) -> None:
+            """Called when training ends."""
+            print(f"✅ Clean training completed for {self.task_name}")
+            print(f"📊 Total steps: {self.num_timesteps}")
+            print(f"📊 Total episodes: {len(self.episode_rewards)}")
+            if len(self.episode_rewards) > 0:
+                print(f"📊 Final mean episode reward: {np.mean(self.episode_rewards):.2f}")
+    
+    # RewardTrackingCallback removed - using CleanTrainingCallback instead
+    
+    # Combine all callbacks with clean structure
+    combined_callback = CallbackList([
+        callback,  # Main logging callback
+        ContinualLearningProgressBarCallback(total_lifetime_steps, task_name, segment_length),  # Progress bar
+        ShiftLoggingCallback(env, log_interval=200),  # Shift logging
+        TrainingTerminationCallback(total_lifetime_steps),  # Force termination at target steps
+        CleanTrainingCallback(task_name)  # Clean, minimal training metrics
+    ])
+    
+    # Train for the full lifetime budget
+    model.learn(total_timesteps=total_lifetime_steps, callback=combined_callback, progress_bar=False)
+    
+    # Get final shift history for logging
+    if hasattr(env, 'envs') and len(env.envs) > 0:
+        env_wrapper = env.envs[0]
+        if hasattr(env_wrapper, 'get_shift_history'):
+            shift_history = env_wrapper.get_shift_history()
+            
+            # Log final shift summary with clean structure
+            if wandb.run:
+                wandb.log({
+                    'continual_learning/total_shifts': len(shift_history)
+                }, step=total_lifetime_steps)
+    
+    # 🚨 CRITICAL: Log final training summary
+    print("\n" + "=" * 80)
+    print("🎯 CONTINUAL LEARNING TRAINING COMPLETED SUCCESSFULLY!")
+    print("=" * 80)
+    print(f"📊 Total training timesteps: {total_lifetime_steps:,}")
+    print(f"📊 Task: {task_name}")
+    print(f"🔧 Topology: {topology_type}")
+    print(f"🔧 Network capacity: {total_params:,} parameters")
+    print(f"🎲 Total observation shifts: {len(shift_history) if 'shift_history' in locals() else 'Unknown'}")
+    print("=" * 80)
+    
+    return {
+        'model': model,
+        'total_timesteps': total_lifetime_steps,
+        'task_name': task_name,
+        'topology_type': topology_type,
+        'network_capacity': total_params,
+        'shift_history': shift_history if 'shift_history' in locals() else []
+    }
+
+def create_continual_learning_run_name(config, topology_type, task_name):
+    """Create run name for continual learning training."""
+    
+    # Topology abbreviation
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
+    
+    # Get initial size from config
+    initial_size = config.get('hidden_size', 'unknown')
+    
+    # Task abbreviations
+    task_abbrev = {
+        'LunarLander-v2': 'LL',
+        'Acrobot-v1': 'AC', 
+        'CartPole-v1': 'CP',
+        'MountainCar-v0': 'MC'
+    }
+    
+    # Build name parts
+    name_parts = [topology_abbrev]
+    
+    # Add placeholder capacity (will be updated later)
+    name_parts.append("C?")
+    
+    # Add initial size
+    name_parts.append(f"S{initial_size}")
+    
+    # Add task (single task for continual learning)
+    task_abbrev_code = task_abbrev.get(task_name, task_name)
+    name_parts.append(task_abbrev_code)
+    
+    return "_".join(name_parts)
+
+def create_continual_learning_run_tags(config, topology_type, task_name):
+    """Create enhanced tags for continual learning training."""
+    
+    # Primary tags
+    tags = [
+        topology_type,
+        'continual_learning',
+        'observation_shifts',
+        task_name
+    ]
+    
+    # Continual learning specific tags
+    tags.extend([
+        f"segment_length_{config.get('segment_length', 200)}",
+        f"shift_range_{config.get('shift_range', [0, 2])}",
+        f"lifetime_steps_{config.get('total_lifetime_steps', 3000)}"
+    ])
+    
+    # Capacity and size tags
+    if 'target_capacity' in config:
+        tags.extend([
+            "fixed_capacity",
+            f"target_capacity_{config.get('target_capacity')}",
+            "capacity_matched"
+        ])
+    elif 'hidden_size' in config:
+        tags.extend([
+            "fixed_size", 
+            f"size_{config.get('hidden_size')}",
+            "size_matched"
+        ])
+    
+    # Add sweep type tag
+    tags.append("sweep_continual_learning")
+    
+    return tags
 
 if __name__ == "__main__":
     """
@@ -1505,13 +2138,15 @@ if __name__ == "__main__":
     """
     import argparse
     
-    parser = argparse.ArgumentParser(description='Triple-Task Training with Topology Comparison')
+    parser = argparse.ArgumentParser(description='Continual Learning Training with Topology Comparison')
     parser.add_argument('--single', action='store_true', help='Run single training session')
     parser.add_argument('--batch', action='store_true', help='Run batch training')
-    parser.add_argument('--sweep', choices=['fixed_network_sizes', 'fixed_capacities'], 
+    parser.add_argument('--sweep', choices=['fixed_network_sizes', 'fixed_capacities', 'continual_learning'], 
                        help='Launch W&B sweep')
     parser.add_argument('--topology', choices=['modular', 'small_world', 'hybrid', 'fully_connected'],
                        default='modular', help='Topology type for single run')
+    parser.add_argument('--task', choices=['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'],
+                       help='Task to train on (for continual learning)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--max-runs', type=int, help='Maximum runs for batch training')
     parser.add_argument('--interactive', action='store_true', help='Interactive mode')
@@ -1524,7 +2159,7 @@ if __name__ == "__main__":
     if DEVICE_INFO['is_cuda']:
         print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
         print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
-        else:
+    else:
         print("   Using CPU")
     print()
     
@@ -1532,7 +2167,7 @@ if __name__ == "__main__":
     if CONFIG_SYSTEM_AVAILABLE:
         print("✅ Configuration system: Unified config system available")
         print("   Available configs: single, batch, fixed_capacity_batch")
-        print("   Available sweeps: fixed_network_sizes, fixed_capacities")
+        print("   Available sweeps: fixed_network_sizes, fixed_capacities, continual_learning")
     else:
         print("⚠️  Configuration system: Using debug config only")
     print()
@@ -1540,7 +2175,7 @@ if __name__ == "__main__":
     # Handle different run types
     if args.single:
         print("🚀 Starting single training...")
-        run_single_training(topology_type=args.topology, seed=args.seed)
+        run_single_training(topology_type=args.topology, seed=args.seed, task_name=args.task)
         
     elif args.batch:
         print("🚀 Starting batch training...")
@@ -1566,10 +2201,12 @@ if __name__ == "__main__":
                 if choice == '1':
                     topology = input("Enter topology type (modular/small_world/hybrid/fully_connected): ").strip()
                     if topology in ['modular', 'small_world', 'hybrid', 'fully_connected']:
+                        task_input = input("Enter task (CartPole-v1/Acrobot-v1/LunarLander-v2) or press Enter for default: ").strip()
+                        task = task_input if task_input in ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'] else None
                         seed_input = input("Enter seed (or press Enter for default 42): ").strip()
                         seed = int(seed_input) if seed_input.isdigit() else 42
-                        run_single_training(topology_type=topology, seed=seed)
-            else:
+                        run_single_training(topology_type=topology, seed=seed, task_name=task)
+                    else:
                         print("❌ Invalid topology type")
                         
                 elif choice == '2':
@@ -1578,27 +2215,27 @@ if __name__ == "__main__":
                     run_batch_training(max_runs=max_runs)
                     
                 elif choice == '3':
-                    sweep_type = input("Enter sweep type (fixed_network_sizes/fixed_capacities): ").strip()
-                    if sweep_type in ['fixed_network_sizes', 'fixed_capacities']:
+                    sweep_type = input("Enter sweep type (fixed_network_sizes/fixed_capacities/continual_learning): ").strip()
+                    if sweep_type in ['fixed_network_sizes', 'fixed_capacities', 'continual_learning']:
                         run_sweep_training(sweep_type)
-    else:
+                    else:
                         print("❌ Invalid sweep type")
                         
                 elif choice == '4':
                     print("👋 Goodbye!")
                     break
                     
-            else:
+                else:
                     print("❌ Invalid choice. Please enter 1-4.")
                     
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
                 break
-    except Exception as e:
+            except Exception as e:
                 print(f"❌ Error: {e}")
                 
-            else:
+    else:
         # Default: single run with modular topology
         print("🚀 Starting default single training (modular topology)...")
-        run_single_training(topology_type='modular', seed=args.seed)
+        run_single_training(topology_type='modular', seed=args.seed, task_name=args.task)
     

@@ -1,18 +1,19 @@
 # Topology Playground
 
-A reinforcement learning framework for exploring network topologies in multi-task learning scenarios.
+A reinforcement learning framework for exploring network topologies in multi-task learning scenarios with clean, research-ready experimental design.
 
 ## Overview
 
-This project implements and evaluates different network topologies (fully connected, small world, modular, and hybrid) for reinforcement learning agents trained on multiple tasks. The framework supports single-task, double-task, and triple-task training scenarios with comprehensive analysis and visualization capabilities.
+This project implements and evaluates different network topologies (fully connected, small world, modular, and hybrid) for reinforcement learning agents trained on multiple tasks. The framework supports single-task, double-task, triple-task, and continual learning training scenarios with streamlined analysis and visualization capabilities.
 
 ## Features
 
 - **Multiple Network Topologies**: Fully connected, small world, modular, and hybrid networks
 - **Multi-Task Learning**: Support for single, double, and triple task training scenarios
+- **Continual Learning**: Single task training with observation shifts for adaptation analysis
 - **Capacity Matching**: Automatic parameter budget matching across different topologies
-- **Comprehensive Analysis**: Detailed performance metrics, transfer learning analysis, and network visualization
-- **Experiment Tracking**: Integration with Weights & Biases for experiment logging
+- **Clean Slate Logging**: Minimal, research-ready W&B logging for publication-quality plots
+- **Experiment Tracking**: Streamlined integration with Weights & Biases
 - **Universal Action Space**: Unified action and observation spaces across different environments
 
 ## Installation
@@ -57,12 +58,17 @@ pip install -r requirements.txt
 
 **Using pip with specific versions**:
 ```bash
-pip install -r requirements.txt --no-cache-dir
+ pip install -r requirements.txt --no-cache-dir
 ```
 
 ## Usage
 
 ### Basic Training
+
+**Continual Learning Training** (Recommended):
+```bash
+python topologies_continual_task_training_sweep.py --single --topology small_world --task CartPole-v1 --seed 42
+```
 
 **Single Task Training**:
 ```bash
@@ -105,6 +111,47 @@ The training scripts use centralized configuration through the `create_debug_con
 - **Training Parameters**: Learning rate, batch size, timesteps, etc.
 - **Capacity Matching**: Automatic parameter budget matching
 
+## Clean Slate Experimental Design
+
+### Philosophy
+Our new clean slate approach focuses on **minimal essential metrics** for research-quality results:
+
+- **Reduced Complexity**: Eliminates redundant and noisy metrics
+- **Faster Training**: Less logging overhead during training
+- **Cleaner W&B Interface**: Easier to navigate and analyze
+- **Research Focused**: Metrics directly support publication needs
+- **Incremental Enhancement**: Can add specific metrics as needed
+
+### Clean Logging Structure
+```
+config/                    # System configuration (one-time)
+├── topology_type
+├── hidden_size
+├── num_layers
+├── total_parameters
+├── task_name
+└── seed
+
+training/                  # Core training metrics
+├── timestep
+├── episode_return
+├── episode_length
+├── mean_episode_reward
+└── total_episodes
+
+continual_learning/        # Essential continual learning only
+├── current_segment
+├── shift_boundary
+└── total_shifts
+```
+
+### Continual Learning Setup
+- **Single Task Training**: Focus on one task with observation shifts
+- **Segment Length**: 200 steps per segment (configurable)
+- **Shift Range**: [0, 2] observation space modifications
+- **Total Lifetime**: 3,000 steps for rapid experimentation
+- **Adaptation Analysis**: Measure how well networks adapt to changes
+
 ## Project Structure
 
 ```
@@ -122,6 +169,7 @@ topology-playground/
 ├── tests/                       # Test files
 ├── requirements.txt             # Python dependencies
 ├── setup.py                     # Installation script
+├── METHODOLOGY.md               # Detailed methodology and approach
 └── README.md                    # This file
 ```
 
@@ -136,6 +184,7 @@ topology-playground/
 
 ### Training Scripts
 
+- **Continual Learning**: Single task with observation shifts (NEW)
 - **Single Task**: Train on one task, evaluate on all tasks
 - **Double Task**: Train on two tasks sequentially, evaluate on all tasks
 - **Triple Task**: Train on all three tasks sequentially
@@ -146,6 +195,7 @@ topology-playground/
 - **Network Visualization**: Generate network structure plots
 - **Performance Metrics**: Comprehensive evaluation metrics
 - **Capacity Analysis**: Parameter budget and efficiency analysis
+- **Adaptation Analysis**: Continual learning performance metrics
 
 ## Environment Variables
 
@@ -219,6 +269,7 @@ For questions and support:
 - Create an issue on GitHub
 - Check the documentation in the `docs/` folder
 - Review the example scripts in the root directory
+- See `METHODOLOGY.md` for detailed experimental approach
 
 ## Acknowledgments
 
