@@ -17,54 +17,54 @@ def create_fixed_network_sizes_triple_task_sweep():
         dict: Fixed network sizes comparison sweep configuration
     """
     
-        return {
+    return {
         'program': 'topologies_triple_task_training_sweep.py',
-            'method': 'grid',  # Grid search for systematic comparison
-            'metric': {
+        'method': 'grid',  # Grid search for systematic comparison
+        'metric': {
             'name': 'fixed_network_sizes_triple_task/normalized/final_normalized_score',
-                'goal': 'maximize'
-            },
-            'parameters': {
-                # ============================================================================
+            'goal': 'maximize'
+        },
+        'parameters': {
+            # ============================================================================
             # PRIMARY VARIABLES: TOPOLOGY TYPE AND NETWORK SIZE
-                # ============================================================================
-                'topology_type': {
+            # ============================================================================
+            'topology_type': {
                 'values': ['modular', 'small_world', 'hybrid', 'fully_connected']
-                },
+            },
             'hidden_size': {
                 'values': [64, 128, 256]  # 3 sizes as requested
-                },
-                
-                # ============================================================================
+            },
+            
+            # ============================================================================
             # TASK SEQUENCE VARIATION (3 orders as requested)
-                # ============================================================================
+            # ============================================================================
             'task_order': {
                 'values': [
                     'CartPole-v1_Acrobot-v1_LunarLander-v2',
                     'Acrobot-v1_LunarLander-v2_CartPole-v1',
                     'LunarLander-v2_CartPole-v1_Acrobot-v1'
                 ]
-                },
-                
-                # ============================================================================
+            },
+            
+            # ============================================================================
             # FIXED TRAINING PARAMETERS (Single values for faster evaluation)
-                # ============================================================================
-                'learning_rate': {'value': 3e-4},
-                'batch_size': {'value': 64},
-                'n_steps': {'value': 2048},
+            # ============================================================================
+            'learning_rate': {'value': 3e-4},
+            'batch_size': {'value': 64},
+            'n_steps': {'value': 2048},
             'n_epochs': {'value': 10},
-                'gamma': {'value': 0.99},
-                'gae_lambda': {'value': 0.95},
-                'clip_range': {'value': 0.2},
+            'gamma': {'value': 0.99},
+            'gae_lambda': {'value': 0.95},
+            'clip_range': {'value': 0.2},
             'ent_coef': {'value': 0.01},
-                'max_grad_norm': {'value': 0.5},
+            'max_grad_norm': {'value': 0.5},
             'activation': {'value': 'relu'},
             'dropout': {'value': 0.0},
             'num_layers': {'value': 3},
 
-# ============================================================================
+            # ============================================================================
             # FIXED TOPOLOGY PARAMETERS
-# ============================================================================
+            # ============================================================================
             'small_world_k': {'value': 4},
             'small_world_p': {'value': 0.1},
             'modular_num_modules': {'value': 4},
@@ -75,20 +75,20 @@ def create_fixed_network_sizes_triple_task_sweep():
             'hybrid_p': {'value': 0.1},
             'hybrid_inter_module_prob': {'value': 0.05},
             
-                # ============================================================================
+            # ============================================================================
             # SEED PARAMETER FOR REPRODUCIBILITY
-                # ============================================================================
+            # ============================================================================
             'seed': {
                 'values': [42, 123, 456, 789, 101112]  # 5 seeds for statistical robustness
-                },
-                
-                # ============================================================================
+            },
+            
+            # ============================================================================
             # EVALUATION PARAMETERS
-                # ============================================================================
-                'total_timesteps': {'value': 600000},
-                'n_eval_episodes': {'value': 15},
-            }
+            # ============================================================================
+            'total_timesteps': {'value': 600000},
+            'n_eval_episodes': {'value': 15},
         }
+    }
     
 def create_fixed_capacities_triple_task_sweep():
     """

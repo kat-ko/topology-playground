@@ -83,9 +83,9 @@ except Exception as e:
 
 # 🚨 CONFIGURATION INTEGRATION: Import unified configuration system
 try:
-    from wandb_sweep_config import get_config_by_name, generate_parameter_combinations
-    print("🔧 Configuration system: Unified config system available")
-    CONFIG_SYSTEM_AVAILABLE = True
+    # from wandb_sweep_config import get_config_by_name, generate_parameter_combinations
+    print("🔧 Configuration system: Temporarily disabled for Phase 1 testing")
+    CONFIG_SYSTEM_AVAILABLE = False
 except ImportError as e:
     print(f"⚠️  Configuration system: Failed to import unified config: {e}")
     CONFIG_SYSTEM_AVAILABLE = False
