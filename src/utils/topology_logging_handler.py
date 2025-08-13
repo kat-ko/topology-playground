@@ -101,18 +101,25 @@ class SimplifiedLoggingHandler:
             wandb.log(standard_metrics, step=safe_step)
 
     def update_run_name(self, model, total_params):
-        """Update the run name with actual network capacity, preserving task order and adding num_layers."""
+        """Update the run name with actual network capacity, preserving task order and adding effective num_layers and seed."""
         if wandb.run:
             # Create a comprehensive run name with all information
             topology_abbr = TOPOLOGY_ABBREVIATIONS.get(self.topology_type, self.topology_type.upper())
             hidden_size = self.config.get('hidden_size', 'unknown')
-            num_layers = self.config.get('num_layers', 'unknown')
+            seed = self.config.get('seed', 'unknown')
+            
+            # Get effective number of layers from the model (accounts for topology differences)
+            if hasattr(model, 'policy') and hasattr(model.policy, 'get_effective_num_layers'):
+                effective_layers = model.policy.get_effective_num_layers()
+            else:
+                # Fallback to config value
+                effective_layers = self.config.get('num_layers', 'unknown')
             
             # Include task order for triple-task training
             if self.training_type == 'triple_task':
-                run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{num_layers}_CP-AC-LL"
+                run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{effective_layers}_S{seed}_CP-AC-LL"
             else:
-                run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{num_layers}"
+                run_name = f"{topology_abbr}_C{total_params}_S{hidden_size}_L{effective_layers}_S{seed}"
             
             # Update the run name
             wandb.run.name = run_name

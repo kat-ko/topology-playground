@@ -251,6 +251,13 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         else:
             raise ValueError(f"Unknown topology type: {self.topology_type}")
     
+    def get_effective_num_layers(self):
+        """Get the effective number of layers for the current topology."""
+        if self.topology_type == 'fully_connected':
+            return self.num_layers  # Fully connected supports variable layers
+        else:
+            return 1  # Other topologies always create single-layer networks
+    
     def _get_topology_params(self, topology_network):
         """Get topology-specific parameters."""
         if hasattr(topology_network, 'get_parameters'):
@@ -259,20 +266,8 @@ class DebugTopologyPolicy(ActorCriticPolicy):
     
     def _debug_network_structure(self):
         """Debug and log network structure."""
-        if wandb.run:
-            actor_params = self._get_topology_params(self.actor_topology)
-            critic_params = self._get_topology_params(self.critic_topology)
-            
-            wandb.log({
-                'network/actor_topology_type': self.topology_type,
-                'network/critic_topology_type': self.topology_type,
-                'network/hidden_size': self.hidden_size,
-                'network/num_layers': self.num_layers,
-                'network/activation': self.activation,
-                'network/dropout': self.dropout,
-                'network/actor_params': actor_params,
-                'network/critic_params': critic_params
-            })
+        # Removed all W&B logging - keeping only standard training metrics
+        pass
     
     def _create_input_mask(self, x: torch.Tensor) -> torch.Tensor:
         """Create input mask for universal observation space."""
@@ -619,13 +614,14 @@ def create_debug_config():
     }
 
 # 🚨 CONVENIENT TRAINING FUNCTIONS: Using unified configuration system
-def run_single_training(config_name='single', topology_type=None, **overrides):
+def run_single_training(config_name='single', topology_type=None, seed=42, **overrides):
     """
     Run a single training session using unified configuration.
     
     Args:
         config_name (str): 'single', 'batch', or 'fixed_capacity_batch'
         topology_type (str): Override topology type if specified
+        seed (int): Random seed for reproducibility
         **overrides: Additional parameter overrides
     """
     if not CONFIG_SYSTEM_AVAILABLE:
@@ -634,7 +630,11 @@ def run_single_training(config_name='single', topology_type=None, **overrides):
         if topology_type:
             config['topology_type'] = topology_type
         config.update(overrides)
-        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config)
+        
+        # Add seed to config for proper run naming
+        config['seed'] = seed
+        
+        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
     
     print(f"🚀 Starting single training with config: {config_name}")
     
@@ -646,10 +646,13 @@ def run_single_training(config_name='single', topology_type=None, **overrides):
         config['topology_type'] = topology_type
     config.update(overrides)
     
+    # Add seed to config for proper run naming
+    config['seed'] = seed
+    
     print(f"📋 Configuration: {config}")
     
     # Run training
-    return triple_task_training(DebugTopologyPolicy, config['topology_type'], config)
+    return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
 
 def run_batch_training(config_name='batch', max_runs=None, **overrides):
     """
@@ -660,6 +663,7 @@ def run_batch_training(config_name='batch', max_runs=None, **overrides):
         max_runs (int): Maximum number of runs to execute
         **overrides: Additional parameter overrides
     """
+
     if not CONFIG_SYSTEM_AVAILABLE:
         print("❌ Configuration system not available. Cannot run batch training.")
         return
@@ -688,9 +692,12 @@ def run_batch_training(config_name='batch', max_runs=None, **overrides):
         print(f"   Topology: {combo_config['topology_type']}")
         print(f"   Hidden size: {combo_config.get('hidden_size', 'N/A')}")
         print(f"   Task order: {combo_config.get('task_order', 'N/A')}")
+        print(f"   Seed: {combo_config.get('seed', 'N/A')}")
         
         try:
-            result = triple_task_training(DebugTopologyPolicy, combo_config['topology_type'], combo_config)
+            # Ensure seed is in the config for proper run naming
+            combo_config['seed'] = combo_config.get('seed', 42)
+            result = triple_task_training(DebugTopologyPolicy, combo_config['topology_type'], combo_config, seed=combo_config['seed'])
             results.append(result)
             print(f"✅ Combination {i+1} completed successfully")
         except Exception as e:
@@ -736,10 +743,37 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
         print(f"❌ Failed to launch sweep: {e}")
         return None
 
-def make_env(env_name):
-    """Create environment with universal action wrapper."""
+def make_env(env_name, seed=None):
+    """Create environment with universal action wrapper and comprehensive seeding."""
     def _make_env():
-        env = gym.make(env_name)
+        # Create environment with seed in constructor (modern Gymnasium API)
+        if seed is not None:
+            env = gym.make(env_name, render_mode=None)
+        else:
+            env = gym.make(env_name)
+        
+        # Apply comprehensive seeding if seed is provided
+        if seed is not None:
+            # Set the seed using the modern reset method
+            env.reset(seed=seed)
+            
+            # Seed action and observation spaces
+            env.action_space.seed(seed)
+            env.observation_space.seed(seed)
+            
+            # Seed numpy random state
+            np.random.seed(seed)
+            
+            # Seed Python random state
+            import random
+            random.seed(seed)
+            
+            # Seed gym's random state (for older versions)
+            try:
+                gym.utils.seeding.np_random(seed)
+            except:
+                pass  # Some gym versions don't have this function
+        
         return UniversalActionWrapper(env, env_name)
     return _make_env
 
@@ -798,17 +832,8 @@ def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
     # Calculate both success rate and completion percentage
     success_rate, completion_pct = calculate_success_rate_with_completion(episode_rewards, episode_lengths, task_name)
     
-    # Log evaluation metrics
-    if wandb.run:
-        wandb.log({
-            f'evaluation/{task_name}/mean_reward': np.mean(episode_rewards),
-            f'evaluation/{task_name}/std_reward': np.std(episode_rewards),
-            f'evaluation/{task_name}/mean_length': np.mean(episode_lengths),
-            f'evaluation/{task_name}/success_rate': success_rate,
-            f'evaluation/{task_name}/completion_percentage': completion_pct,
-            f'evaluation/{task_name}/episode_rewards': episode_rewards,
-            f'evaluation/{task_name}/episode_lengths': episode_lengths
-        })
+    # Evaluation metrics logging removed - keeping only standard training metrics
+    pass
     
     return episode_rewards, episode_lengths, success_rate, completion_pct
 
@@ -981,7 +1006,7 @@ def calculate_reward_completion_percentage(rewards, task_name):
 # MAIN TRAINING FUNCTION
 # ============================================================================
 
-def triple_task_training(policy_class, topology_type, config, num_layers=2, hidden_size=None, train_task_1=None, train_task_2=None, train_task_3=None):
+def triple_task_training(policy_class, topology_type, config, seed=42, num_layers=2, hidden_size=None, train_task_1=None, train_task_2=None, train_task_3=None):
     """
     Triple-task training function with intermediate testing after each phase.
     
@@ -991,6 +1016,7 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         policy_class: Policy class to use
         topology_type: Type of topology network
         config: Configuration dictionary
+        seed (int): Random seed for reproducibility
         num_layers: Number of layers
         hidden_size: Hidden layer size
         train_task_1: First training task
@@ -1032,6 +1058,33 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
     print("=" * 80)
     
+    # 🚨 CRITICAL: Apply comprehensive seeding for reproducibility
+    print(f"🎲 Setting random seed: {seed}")
+    
+    # PyTorch seeding
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
+    # NumPy seeding
+    np.random.seed(seed)
+    
+    # Python random seeding
+    import random
+    random.seed(seed)
+    
+    # Gym seeding
+    try:
+        gym.utils.seeding.np_random(seed)
+    except:
+        pass  # Some gym versions don't have this function
+    
+    print(f"✅ All random states seeded with seed: {seed}")
+    print("=" * 80)
+    
     # Initialize wandb if not already done
     if wandb.run is None:
         # Create proper naming for this specific training run
@@ -1053,8 +1106,7 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         if wandb.run and hasattr(wandb.run, 'step'):
             # Force W&B to start at step 1 instead of 0
             try:
-                # Log a dummy metric at step 1 to initialize W&B's step counter
-                wandb.log({"initialization": True}, step=1)
+                # Initialization logging removed - keeping only standard training metrics
                 print("🔧 W&B Step Fix: Initialized internal step counter at step 1")
             except Exception as e:
                 print(f"⚠️  W&B Step Fix: Could not initialize step counter: {e}")
@@ -1063,8 +1115,7 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     # This prevents step 0 warnings throughout training
     if wandb.run and hasattr(wandb.run, 'step') and wandb.run.step <= 0:
         try:
-            # Force W&B to use step 1 if it somehow got reset to 0
-            wandb.log({"step_reset": True}, step=1)
+            # Step reset logging removed - keeping only standard training metrics
             print("🔧 W&B Step Fix: Reset internal step counter from 0 to 1")
         except Exception as e:
             print(f"⚠️  W&B Step Fix: Could not reset step counter: {e}")
@@ -1078,9 +1129,9 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     task_order = f"{train_task_1}_{train_task_2}_{train_task_3}"
     
     # Create environments for sequential training
-    env1 = DummyVecEnv([make_env(train_task_1)])
-    env2 = DummyVecEnv([make_env(train_task_2)])
-    env3 = DummyVecEnv([make_env(train_task_3)])
+    env1 = DummyVecEnv([make_env(train_task_1, seed=seed)])
+    env2 = DummyVecEnv([make_env(train_task_2, seed=seed)])
+    env3 = DummyVecEnv([make_env(train_task_3, seed=seed)])
     
     # Create ONE model for sequential training
     # 🚨 CRITICAL: Disable ALL internal SB3 logging to ensure clean output
@@ -1238,7 +1289,7 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
                         pass  # Silent early stopping
                 
                 except Exception as e:
-                    # If evaluation fails, continue training (silent)
+                    # Silent error handling
                     pass
             
             return True
@@ -1283,27 +1334,15 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         print(f"\n📊 Evaluating on {task_name} after CartPole-v1 training...")
         try:
             # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name)])
+            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
             
             # Evaluate model performance
             rewards, lengths, success, completion = evaluate_model_enhanced(
                 model, eval_env, task_name, config['n_eval_episodes']
             )
             
-            # Log evaluation results
-            eval_metrics = {
-                'eval/task': task_name,
-                'eval/phase': 1,
-                'eval/mean_reward': np.mean(rewards),
-                'eval/mean_length': np.mean(lengths),
-                'eval/success_rate': success,
-                'eval/completion_rate': completion,
-                'eval/global_timesteps': logging_handler.global_timesteps
-            }
-            
-            # Log to W&B with validated step
-            if wandb.run:
-                wandb.log(eval_metrics, step=max(1, logging_handler.global_timesteps))
+            # Evaluation logging removed - keeping only standard training metrics
+            pass
             
             print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
             
@@ -1350,27 +1389,15 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         print(f"\n📊 Evaluating on {task_name} after Acrobot-v1 training...")
         try:
             # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name)])
+            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
             
             # Evaluate model performance
             rewards, lengths, success, completion = evaluate_model_enhanced(
                 model, eval_env, task_name, config['n_eval_episodes']
             )
             
-            # Log evaluation results
-            eval_metrics = {
-                'eval/task': task_name,
-                'eval/phase': 2,
-                'eval/mean_reward': np.mean(rewards),
-                'eval/mean_length': np.mean(lengths),
-                'eval/success_rate': success,
-                'eval/completion_rate': completion,
-                'eval/global_timesteps': logging_handler.global_timesteps
-            }
-            
-            # Log to W&B with validated step
-            if wandb.run:
-                wandb.log(eval_metrics, step=max(1, logging_handler.global_timesteps))
+            # Evaluation logging removed - keeping only standard training metrics
+            pass
             
             print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
             
@@ -1417,27 +1444,15 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
         print(f"\n📊 Final evaluation on {task_name}...")
         try:
             # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name)])
+            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
             
             # Evaluate model performance
             rewards, lengths, success, completion = evaluate_model_enhanced(
                 model, eval_env, task_name, config['n_eval_episodes']
             )
             
-            # Log evaluation results
-            eval_metrics = {
-                'eval/task': task_name,
-                'eval/phase': 'final',
-                'eval/mean_reward': np.mean(rewards),
-                'eval/mean_length': np.mean(lengths),
-                'eval/success_rate': success,
-                'eval/completion_rate': completion,
-                'eval/global_timesteps': logging_handler.global_timesteps
-            }
-            
-            # Log to W&B with validated step
-            if wandb.run:
-                wandb.log(eval_metrics, step=max(1, logging_handler.global_timesteps))
+            # Evaluation logging removed - keeping only standard training metrics
+            pass
             
             print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
             
@@ -1456,22 +1471,8 @@ def triple_task_training(policy_class, topology_type, config, num_layers=2, hidd
     print(f"🔧 Network capacity: {total_params:,} parameters")
     print("=" * 80)
     
-    # Log final training summary to W&B
-    if wandb.run:
-        final_summary = {
-            'train/global/final_summary': {
-                'total_timesteps': logging_handler.global_timesteps,
-                'task1_timesteps': actual_task1_duration,
-                'task2_timesteps': actual_task2_duration,
-                'task3_timesteps': actual_task3_duration,
-                'topology_type': topology_type,
-                'network_capacity': total_params,
-                'training_completed': True
-            }
-        }
-        
-        # Log with validated step
-        wandb.log(final_summary, step=max(1, logging_handler.global_timesteps))
+    # Final summary logging removed - keeping only standard training metrics
+    pass
     
     return {
         'model': model,
@@ -1511,6 +1512,7 @@ if __name__ == "__main__":
                        help='Launch W&B sweep')
     parser.add_argument('--topology', choices=['modular', 'small_world', 'hybrid', 'fully_connected'],
                        default='modular', help='Topology type for single run')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--max-runs', type=int, help='Maximum runs for batch training')
     parser.add_argument('--interactive', action='store_true', help='Interactive mode')
     
@@ -1538,7 +1540,7 @@ if __name__ == "__main__":
     # Handle different run types
     if args.single:
         print("🚀 Starting single training...")
-        run_single_training(topology_type=args.topology)
+        run_single_training(topology_type=args.topology, seed=args.seed)
         
     elif args.batch:
         print("🚀 Starting batch training...")
@@ -1564,7 +1566,9 @@ if __name__ == "__main__":
                 if choice == '1':
                     topology = input("Enter topology type (modular/small_world/hybrid/fully_connected): ").strip()
                     if topology in ['modular', 'small_world', 'hybrid', 'fully_connected']:
-                        run_single_training(topology_type=topology)
+                        seed_input = input("Enter seed (or press Enter for default 42): ").strip()
+                        seed = int(seed_input) if seed_input.isdigit() else 42
+                        run_single_training(topology_type=topology, seed=seed)
                     else:
                         print("❌ Invalid topology type")
                         
@@ -1596,5 +1600,5 @@ if __name__ == "__main__":
     else:
         # Default: single run with modular topology
         print("🚀 Starting default single training (modular topology)...")
-        run_single_training(topology_type='modular')
+        run_single_training(topology_type='modular', seed=args.seed)
     

@@ -76,6 +76,13 @@ def create_fixed_network_sizes_triple_task_sweep():
             'hybrid_inter_module_prob': {'value': 0.05},
             
             # ============================================================================
+            # SEED PARAMETER FOR REPRODUCIBILITY
+            # ============================================================================
+            'seed': {
+                'values': [42, 123, 456, 789, 101112]  # 5 seeds for statistical robustness
+            },
+            
+            # ============================================================================
             # EVALUATION PARAMETERS
             # ============================================================================
             'total_timesteps': {'value': 600000},
@@ -149,6 +156,13 @@ def create_fixed_capacities_triple_task_sweep():
             'hybrid_k': {'value': 4},
             'hybrid_p': {'value': 0.1},
             'hybrid_inter_module_prob': {'value': 0.05},
+            
+            # ============================================================================
+            # SEED PARAMETER FOR REPRODUCIBILITY
+            # ============================================================================
+            'seed': {
+                'values': [42, 123, 456, 789, 101112]  # 5 seeds for statistical robustness
+            },
             
             # ============================================================================
             # EVALUATION PARAMETERS
