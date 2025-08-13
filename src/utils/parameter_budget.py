@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import torch
 import numpy as np
 from dataclasses import dataclass
@@ -54,13 +54,13 @@ class ParameterBudgetCalculator:
                 multiplier = EMPIRICAL_SCALING_MODELS[topology]['dynamic_multipliers'][capacity_range](base_params)
                 base_params = int(base_params * multiplier)
             
-            # Adjust for number of layers
-            if num_layers > 1:
-                # For multi-layer networks, add inter-layer connections
-                # This is a simplified approximation
-                inter_layer_params = size * size * (num_layers - 1) * 0.1  # 10% connectivity between layers
-                return int(base_params + inter_layer_params)
-            return base_params
+                    # Adjust for number of layers (only fully_connected actually uses num_layers)
+        if topology == 'fully_connected' and num_layers > 1:
+            # For multi-layer fully-connected networks, add inter-layer connections
+            # This is a simplified approximation
+            inter_layer_params = size * size * (num_layers - 1) * 0.1  # 10% connectivity between layers
+            return int(base_params + inter_layer_params)
+        return base_params
         
         # Fallback to original calculations
         if topology == 'small_world':
@@ -174,6 +174,10 @@ class ParameterBudgetCalculator:
         Designed to work robustly across all network sizes and topologies.
         Optimized for performance with early termination and adaptive search.
         """
+        # Special handling for Small World networks with enhanced algorithm
+        if topology == 'small_world':
+            return self._find_small_world_matching_size(target_capacity, network_type, num_layers)
+        
         # Allow config override for min/max size
         min_size = self.config.get('min_search_size', 10)
         max_size = self.config.get('max_search_size', 2000)
@@ -181,24 +185,19 @@ class ParameterBudgetCalculator:
         min_size = max(min_size, self._get_minimum_viable_size(topology))
 
         # Start with a reasonable estimate based on topology type and number of layers
-        if num_layers > 1:
-            # For multi-layer networks, use different scaling
-            if topology == 'fully_connected':
-                # Adjust scaling for small target capacities (like matching to small_world)
-                if target_capacity < 1000:
-                    # For small capacities, use more conservative scaling
-                    estimated_size = int((target_capacity / (1.8 * num_layers)) ** 0.5)
-                else:
-                    estimated_size = int((target_capacity / (2.05 * num_layers)) ** 0.5)
-            elif topology in ['small_world', 'modular', 'hybrid']:
-                estimated_size = int((target_capacity / (1.5 * num_layers)) ** 0.67)
+        if topology == 'fully_connected' and num_layers > 1:
+            # For multi-layer fully-connected networks, use different scaling
+            # Adjust scaling for small target capacities (like matching to small_world)
+            if target_capacity < 1000:
+                # For small capacities, use more conservative scaling
+                estimated_size = int((target_capacity / (1.8 * num_layers)) ** 0.5)
             else:
-                estimated_size = min_size
+                estimated_size = int((target_capacity / (2.05 * num_layers)) ** 0.5)
         else:
-            # Single layer networks use original scaling
+            # Single layer networks or non-FC topologies use original scaling
             if topology == 'fully_connected':
                 estimated_size = int((target_capacity / 2.05) ** 0.5)
-            elif topology in ['small_world', 'modular', 'hybrid']:
+            elif topology in ['modular', 'hybrid']:
                 estimated_size = int((target_capacity / 1.5) ** 0.67)
             else:
                 estimated_size = min_size
@@ -206,26 +205,8 @@ class ParameterBudgetCalculator:
         start_size = max(min_size, estimated_size)
         
         # ADAPTIVE SEARCH PARAMETERS based on target capacity and topology
-        # For small world topology, we need much larger search ranges due to acyclicity constraint
-        if topology == 'small_world':
-            # Small world has highly variable parameter scaling due to acyclicity
-            if target_capacity > 10000:
-                search_range = max(2000, start_size * 4)  # Very large range for high capacity
-                step_size = 20
-                fine_step = 5
-            elif target_capacity > 5000:
-                search_range = max(1500, start_size * 3)  # Large range for medium-high capacity
-                step_size = 15
-                fine_step = 3
-            elif target_capacity > 1000:
-                search_range = max(1000, start_size * 2.5)  # Large range for medium capacity
-                step_size = 10
-                fine_step = 2
-            else:
-                search_range = max(500, start_size * 2)  # Medium range for low capacity
-                step_size = 3  # Much finer step size for small capacities
-                fine_step = 1  # Very fine step for small capacities
-        elif topology == 'modular':
+        # For modular topology, we need much larger search ranges due to acyclicity constraint
+        if topology == 'modular':
             # Modular has more predictable scaling
             if target_capacity > 10000:
                 search_range = max(1000, start_size * 2)
@@ -281,8 +262,8 @@ class ParameterBudgetCalculator:
                 step_size = 3  # Much finer step size for small targets
                 fine_step = 1  # Very fine step for small targets
         
-        # Adjust for multi-layer networks
-        if num_layers > 1:
+        # Adjust for multi-layer networks (only fully_connected actually uses num_layers)
+        if topology == 'fully_connected' and num_layers > 1:
             search_range = int(search_range * 1.5)  # Increase search range for multi-layer
             step_size = max(step_size // 2, 5)  # Use finer steps for multi-layer
             fine_step = max(fine_step // 2, 1)  # Use even finer steps for multi-layer
@@ -427,6 +408,160 @@ class ParameterBudgetCalculator:
             except Exception:
                 continue
         return optimal_size
+
+    def _find_small_world_matching_size(self, target_capacity: int, network_type: str = 'ffn', num_layers: int = 1) -> int:
+        """
+        Enhanced Small World capacity matching with multi-stage adaptive search.
+        Uses empirical scaling factors and topology-specific heuristics.
+        """
+        # Get Small World parameters
+        k_param = self.config['small_world_params']['k']
+        p_param = self.config['small_world_params']['p']
+        
+        # Empirical scaling factors based on capacity ranges and rewiring probability
+        scaling_factors = self._get_small_world_scaling_factors(target_capacity, k_param, p_param, num_layers)
+        
+        # Multi-stage search strategy
+        stages = [
+            {'name': 'empirical', 'step_size': 50, 'range_multiplier': 3.0},
+            {'name': 'coarse', 'step_size': 20, 'range_multiplier': 2.0},
+            {'name': 'medium', 'step_size': 10, 'range_multiplier': 1.5},
+            {'name': 'fine', 'step_size': 5, 'range_multiplier': 1.2},
+            {'name': 'ultra_fine', 'step_size': 1, 'range_multiplier': 1.1}
+        ]
+        
+        # Stage 1: Empirical estimation
+        estimated_size = self._estimate_small_world_size(target_capacity, scaling_factors)
+        best_size = estimated_size
+        best_divergence = float('inf')
+        
+        # Test estimated size first
+        try:
+            network = self._create_test_network('small_world', estimated_size, network_type, num_layers)
+            if network is not None:
+                metrics = network.get_network_metrics()
+                actual_capacity = sum(metrics.get(key, 0) for key in metrics if key.startswith('num_'))
+                best_divergence = abs(actual_capacity - target_capacity) / target_capacity
+                if best_divergence < 0.01:  # 1% threshold
+                    return estimated_size
+        except Exception:
+            pass
+        
+        # Multi-stage adaptive search
+        current_size = estimated_size
+        for stage in stages:
+            stage_result = self._small_world_stage_search(
+                target_capacity, current_size, stage, network_type, num_layers
+            )
+            
+            if stage_result is not None:
+                current_size = stage_result['size']
+                if stage_result['divergence'] < best_divergence:
+                    best_size = current_size
+                    best_divergence = stage_result['divergence']
+                
+                # Early termination for excellent matches
+                if best_divergence < 0.005:  # 0.5% threshold
+                    break
+        
+        return best_size
+
+    def _get_small_world_scaling_factors(self, target_capacity: int, k: int, p: float, num_layers: int = 1) -> Dict[str, float]:
+        """Calculate empirical scaling factors for Small World networks."""
+        # Base scaling considering acyclicity constraint (~45% efficiency)
+        base_factor = 3.0  # Small World typically needs 3x more nodes
+        
+        # Adjust for rewiring probability (optimal p ~ 0.15)
+        p_factor = 1.0 + (p - 0.15) * 2.0
+        
+        # Adjust for local neighborhood size
+        k_factor = 1.0 + (k - 4) * 0.1  # Optimal k ~ 4
+        
+        # Adjust for capacity range
+        if target_capacity > 10000:
+            capacity_factor = 1.3  # Higher capacities need more nodes
+        elif target_capacity > 5000:
+            capacity_factor = 1.2
+        elif target_capacity > 1000:
+            capacity_factor = 1.1
+        else:
+            capacity_factor = 1.0
+        
+        # Adjust for multi-layer networks (only fully_connected actually uses num_layers)
+        if topology == 'fully_connected':
+            layer_factor = 1.0 + (num_layers - 1) * 0.2
+        else:
+            layer_factor = 1.0  # Non-FC topologies ignore num_layers
+        
+        return {
+            'base': base_factor,
+            'p': p_factor,
+            'k': k_factor,
+            'capacity': capacity_factor,
+            'layer': layer_factor,
+            'total': base_factor * p_factor * k_factor * capacity_factor * layer_factor
+        }
+
+    def _estimate_small_world_size(self, target_capacity: int, scaling_factors: Dict[str, float]) -> int:
+        """Estimate Small World size using empirical scaling factors."""
+        total_factor = scaling_factors['total']
+        
+        # Estimate size based on scaling factor and target capacity
+        estimated_size = int((target_capacity / total_factor) ** 0.67)
+        
+        # Ensure minimum viable size
+        min_size = max(10, self.config['small_world_params']['k'] + 1)
+        return max(min_size, estimated_size)
+
+    def _small_world_stage_search(self, target_capacity: int, start_size: int, stage: Dict[str, Any], 
+                                 network_type: str, num_layers: int) -> Optional[Dict[str, Any]]:
+        """Perform a single stage of Small World search."""
+        step_size = stage['step_size']
+        range_multiplier = stage['range_multiplier']
+        
+        # Calculate search range
+        search_range = int(start_size * range_multiplier)
+        min_size = max(10, self.config['small_world_params']['k'] + 1)
+        max_size = self._get_topology_specific_max_size('small_world', target_capacity)
+        
+        # Adaptive binary search within this stage
+        left = max(min_size, start_size - search_range)
+        right = min(max_size, start_size + search_range)
+        
+        best_size = start_size
+        best_divergence = float('inf')
+        
+        while left < right - step_size:
+            mid = (left + right) // 2
+            
+            try:
+                network = self._create_test_network('small_world', mid, network_type, num_layers)
+                if network is None:
+                    right = mid
+                    continue
+                
+                metrics = network.get_network_metrics()
+                actual_capacity = sum(metrics.get(key, 0) for key in metrics if key.startswith('num_'))
+                divergence = abs(actual_capacity - target_capacity) / target_capacity
+                
+                if divergence < best_divergence:
+                    best_divergence = divergence
+                    best_size = mid
+                
+                # Early termination for excellent matches
+                if divergence < 0.01:  # 1% threshold
+                    return {'size': best_size, 'divergence': best_divergence}
+                
+                # Adaptive direction
+                if actual_capacity < target_capacity:
+                    left = mid
+                else:
+                    right = mid
+                    
+            except Exception:
+                right = mid
+        
+        return {'size': best_size, 'divergence': best_divergence} if best_divergence < float('inf') else None
     
     def _create_test_network(self, topology: str, size: int, network_type: str = 'ffn', num_layers: int = 1) -> torch.nn.Module:
         """
@@ -671,7 +806,7 @@ class ParameterBudgetCalculator:
             # FullyConnectedTopology.generate() always returns a single unified graph
             graphs = [topo_map[topology].generate(num_layers)]
         else:
-            # Non-FC topologies generate a single graph
+            # Non-FC topologies generate a single graph (ignore num_layers parameter)
             graphs = [topo_map[topology].generate()]
         
         # Select input/output nodes for each layer
@@ -839,6 +974,26 @@ class ParameterBudgetCalculator:
             
         else:
             return 10  # Default minimum reduced from 50 to 10
+
+    def _get_topology_specific_max_size(self, topology: str, target_capacity: int) -> int:
+        """Get topology-specific maximum search size based on target capacity."""
+        base_max_size = self.config.get('max_search_size', 2000)
+        
+        if topology == 'small_world':
+            # Small World needs larger search ranges due to acyclicity constraint
+            if target_capacity > 50000:
+                return max(base_max_size, 50000)  # Very large for high capacities
+            elif target_capacity > 20000:
+                return max(base_max_size, 30000)  # Large for medium-high capacities
+            elif target_capacity > 10000:
+                return max(base_max_size, 20000)  # Medium-large for medium capacities
+            elif target_capacity > 5000:
+                return max(base_max_size, 15000)  # Medium for medium-low capacities
+            else:
+                return max(base_max_size, 10000)  # Standard for low capacities
+        else:
+            # Other topologies use standard max size
+            return base_max_size
 
 @dataclass
 class ParameterBudget:

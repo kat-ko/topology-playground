@@ -1,174 +1,131 @@
 #!/usr/bin/env python3
 """
-Launch Weights & Biases Sweep for Topology Network Hyperparameter Optimization
+Launch Weights & Biases Sweep for Triple-Task Training
 
-This script launches wandb sweeps to optimize hyperparameters for the topology training scripts.
+This script launches wandb sweeps for triple-task training with topology comparison.
+Focusing on sweeps 4-5 (fixed network sizes) and 4-6 (fixed capacities).
 """
 
 import wandb
 from wandb_sweep_config import (
-    create_sweep_config,
-    create_focused_sweep_config,
-    create_task_specific_sweep_config,
-    create_sweep_agent_config
+    create_fixed_network_sizes_triple_task_sweep,
+    create_fixed_capacities_triple_task_sweep
 )
 
-def launch_comprehensive_sweep():
-    """Launch a comprehensive sweep over all hyperparameters."""
-    print("🚀 Launching comprehensive hyperparameter sweep...")
+def create_sweep_agent_config():
+    """Create configuration for the sweep agent."""
+    return {
+        'entity': 'katko-it-universitetet-i-k-benhavn',
+        'project': 'topologies--triple-task-training'
+    }
+
+def launch_fixed_network_sizes_triple_task_sweep():
+    """Launch sweep 4-5: Fixed network sizes comparison for triple-task training."""
+    print("🚀 Launching Fixed Network Sizes Triple-Task Sweep (4-5)...")
     
     # Create sweep configuration
-    sweep_config = create_sweep_config()
-    sweep_config['name'] = 'comprehensive_topology_optimization'
+    sweep_config = create_fixed_network_sizes_triple_task_sweep()
+    sweep_config['name'] = 'fixed_network_sizes_triple_task_comparison'
     
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
     
-    # Initialize wandb
-    wandb.login()
+    # Calculate total runs
+    topology_count = len(sweep_config['parameters']['topology_type']['values'])
+    size_count = len(sweep_config['parameters']['hidden_size']['values'])
+    task_count = len(sweep_config['parameters']['task_order']['values'])
+    total_runs = topology_count * size_count * task_count
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Topology types: {topology_count} ({', '.join(sweep_config['parameters']['topology_type']['values'])})")
+    print(f"   • Hidden sizes: {size_count} ({', '.join(map(str, sweep_config['parameters']['hidden_size']['values']))})")
+    print(f"   • Task orders: {task_count}")
+    print(f"   • Total runs: {total_runs}")
     
     # Create sweep
     sweep_id = wandb.sweep(sweep_config, **agent_config)
     
-    print(f"✅ Comprehensive sweep created with ID: {sweep_id}")
+    print(f"✅ Fixed Network Sizes Triple-Task sweep created with ID: {sweep_id}")
     print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
     
     return sweep_id
 
-def launch_focused_sweep(focus_area='ppo'):
-    """Launch a focused sweep on specific hyperparameter areas."""
-    print(f"🚀 Launching {focus_area}-focused hyperparameter sweep...")
+def launch_fixed_capacities_triple_task_sweep():
+    """Launch sweep 4-6: Fixed capacities comparison for triple-task training."""
+    print("🚀 Launching Fixed Capacities Triple-Task Sweep (4-6)...")
     
-    # Create focused sweep configuration
-    sweep_config = create_focused_sweep_config(focus_area)
-    sweep_config['name'] = f'{focus_area}_focused_optimization'
-    
-    # Create sweep agent configuration
-    agent_config = create_sweep_agent_config()
-    
-    # Initialize wandb
-    wandb.login()
-    
-    # Create sweep
-    sweep_id = wandb.sweep(sweep_config, **agent_config)
-    
-    print(f"✅ {focus_area}-focused sweep created with ID: {sweep_id}")
-    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
-    
-    return sweep_id
-
-def launch_task_specific_sweep(task='CartPole-v1'):
-    """Launch a task-specific sweep optimized for particular environments."""
-    print(f"🚀 Launching {task}-specific hyperparameter sweep...")
-    
-    # Create task-specific sweep configuration
-    sweep_config = create_task_specific_sweep_config(task)
-    sweep_config['name'] = f'{task}_optimization'
+    # Create sweep configuration
+    sweep_config = create_fixed_capacities_triple_task_sweep()
+    sweep_config['name'] = 'fixed_capacities_triple_task_comparison'
     
     # Create sweep agent configuration
     agent_config = create_sweep_agent_config()
     
-    # Initialize wandb
-    wandb.login()
+    # Calculate total runs
+    topology_count = len(sweep_config['parameters']['topology_type']['values'])
+    capacity_count = len(sweep_config['parameters']['target_capacity']['values'])
+    task_count = len(sweep_config['parameters']['task_order']['values'])
+    total_runs = topology_count * capacity_count * task_count
+    
+    print(f"   • Project: {agent_config['project']}")
+    print(f"   • Entity: {agent_config['entity']}")
+    print(f"   • Method: {sweep_config['method']}")
+    print(f"   • Topology types: {topology_count} ({', '.join(sweep_config['parameters']['topology_type']['values'])})")
+    print(f"   • Target capacities: {capacity_count} ({', '.join(map(str, sweep_config['parameters']['target_capacity']['values']))})")
+    print(f"   • Task orders: {task_count}")
+    print(f"   • Total runs: {total_runs}")
     
     # Create sweep
     sweep_id = wandb.sweep(sweep_config, **agent_config)
     
-    print(f"✅ {task}-specific sweep created with ID: {sweep_id}")
-    print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
-    
-    return sweep_id
-
-def launch_custom_sweep(sweep_config, name="custom_optimization"):
-    """Launch a custom sweep with user-defined configuration."""
-    print(f"🚀 Launching custom hyperparameter sweep: {name}...")
-    
-    # Add name to sweep configuration
-    sweep_config['name'] = name
-    
-    # Create sweep agent configuration
-    agent_config = create_sweep_agent_config()
-    
-    # Initialize wandb
-    wandb.login()
-    
-    # Create sweep
-    sweep_id = wandb.sweep(sweep_config, **agent_config)
-    
-    print(f"✅ Custom sweep '{name}' created with ID: {sweep_id}")
+    print(f"✅ Fixed Capacities Triple-Task sweep created with ID: {sweep_id}")
     print(f"🔗 View sweep at: https://wandb.ai/{agent_config['entity']}/{agent_config['project']}/sweeps/{sweep_id}")
     
     return sweep_id
 
 def main():
-    """Main function to launch sweeps based on user input."""
-    print("🎯 Weights & Biases Sweep Launcher for Topology Networks")
-    print("=" * 60)
+    """Main function to launch sweeps."""
+    print("🎯 Triple-Task Training Sweep Launcher")
+    print("=" * 50)
+    print("Available sweeps:")
+    print("1. Fixed Network Sizes Triple-Task Sweep (4-5)")
+    print("2. Fixed Capacities Triple-Task Sweep (4-6)")
+    print("3. Launch both sweeps")
+    print("4. Exit")
     
-    print("\nAvailable sweep types:")
-    print("1. Comprehensive sweep (all hyperparameters)")
-    print("2. PPO-focused sweep (training parameters + all topologies/architectures)")
-    print("3. Architecture-focused sweep (network structure + all topologies/tasks)")
-    print("4. Topology-focused sweep (topology parameters + all architectures/tasks)")
-    print("5. Task-specific sweep (CartPole-v1)")
-    print("6. Task-specific sweep (Acrobot-v1)")
-    print("7. Task-specific sweep (MountainCar-v0)")
-    print("8. Task-specific comprehensive (all tasks, topologies, architectures)")
-    print("9. Custom sweep")
-    
-    choice = input("\nEnter your choice (1-9): ").strip()
-    
-    if choice == '1':
-        launch_comprehensive_sweep()
-    elif choice == '2':
-        launch_focused_sweep('ppo')
-    elif choice == '3':
-        launch_focused_sweep('architecture')
-    elif choice == '4':
-        launch_focused_sweep('topology')
-    elif choice == '5':
-        launch_task_specific_sweep('CartPole-v1')
-    elif choice == '6':
-        launch_task_specific_sweep('Acrobot-v1')
-    elif choice == '7':
-        launch_task_specific_sweep('MountainCar-v0')
-    elif choice == '8':
-        launch_focused_sweep('task_specific')
-    elif choice == '9':
-        print("\nCustom sweep configuration:")
-        print("You can modify the sweep configuration in wandb_sweep_config.py")
-        print("or create a custom configuration here.")
-        
-        # Example custom configuration
-        custom_config = {
-            'method': 'bayes',
-            'metric': {
-                'name': 'testing/mean_reward',
-                'goal': 'maximize'
-            },
-            'parameters': {
-                'learning_rate': {
-                    'distribution': 'log_uniform',
-                    'min': -5,
-                    'max': -3,
-                },
-                'hidden_size': {
-                    'values': [64, 128, 256]
-                },
-                'topology_type': {
-                    'values': ['small_world', 'modular']
-                },
-                'train_task': {
-                    'value': 'CartPole-v1'
-                },
-                # Add more parameters as needed
-            }
-        }
-        
-        name = input("Enter sweep name: ").strip() or "custom_optimization"
-        launch_custom_sweep(custom_config, name)
-    else:
-        print("❌ Invalid choice. Please run the script again.")
+    while True:
+        try:
+            choice = input("\nEnter your choice (1-4): ").strip()
+            
+            if choice == '1':
+                launch_fixed_network_sizes_triple_task_sweep()
+                break
+            elif choice == '2':
+                launch_fixed_capacities_triple_task_sweep()
+                break
+            elif choice == '3':
+                print("\n🚀 Launching both sweeps...")
+                sweep1_id = launch_fixed_network_sizes_triple_task_sweep()
+                print()
+                sweep2_id = launch_fixed_capacities_triple_task_sweep()
+                print(f"\n✅ Both sweeps launched successfully!")
+                print(f"   • Fixed Network Sizes: {sweep1_id}")
+                print(f"   • Fixed Capacities: {sweep2_id}")
+                break
+            elif choice == '4':
+                print("👋 Exiting...")
+                break
+        else:
+                print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
+                
+        except KeyboardInterrupt:
+            print("\n👋 Exiting...")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            print("Please try again.")
 
 if __name__ == "__main__":
     main() 
