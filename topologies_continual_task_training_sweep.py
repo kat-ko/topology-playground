@@ -24,6 +24,7 @@ import seaborn as sns
 from typing import Dict, List, Tuple, Any, Optional
 import json
 import os
+import sys
 import time
 import pandas as pd
 from datetime import datetime
@@ -107,7 +108,7 @@ class ContinualLearningWrapper(gym.Wrapper):
     - Episode capping at 400 steps maximum
     """
     
-    def __init__(self, env, task_name, segment_length=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400):
+    def __init__(self, env, task_name, segment_length=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None):
         super().__init__(env)
         self.task_name = task_name
         self.segment_length = segment_length
@@ -115,6 +116,7 @@ class ContinualLearningWrapper(gym.Wrapper):
         self.seed = seed
         self.reward_scale = reward_scale
         self.episode_cap = episode_cap
+        self.logging_callback = logging_callback
         
         # Initialize shift state
         self.current_shift = None
@@ -143,6 +145,8 @@ class ContinualLearningWrapper(gym.Wrapper):
         print(f"   Reward scale: {reward_scale}")
         print(f"   Episode cap: {episode_cap} steps")
         print(f"   Initial shift: {self.current_shift}")
+        if logging_callback:
+            print(f"   Enhanced logging: Enabled")
     
     def _sample_new_shift(self):
         """Sample new per-dimension shift vector from Uniform[shift_range[0], shift_range[1]]."""
@@ -202,13 +206,26 @@ class ContinualLearningWrapper(gym.Wrapper):
     
     def _log_episode(self):
         """Log episode completion with both raw and scaled returns."""
-        self.episode_returns.append({
+        episode_data = {
             'step_end': self.steps_in_segment,
             'episode_return': self.episode_reward,                    # Scaled return
             'raw_episode_return': self.episode_reward / self.reward_scale,  # Raw return
             'episode_length': self.episode_step,
             'shift_id': len(self.shift_history) - 1
-        })
+        }
+        
+        # Store episode data
+        self.episode_returns.append(episode_data)
+        
+        # Use enhanced logging callback if available
+        if self.logging_callback and hasattr(self.logging_callback, '_log_episode_completion'):
+            try:
+                self.logging_callback._log_episode_completion(episode_data)
+                print(f"📊 Episode logged via callback: Scaled={episode_data['episode_return']:.2f}, Raw={episode_data['raw_episode_return']:.2f}")
+            except Exception as e:
+                print(f"⚠️  Episode logging callback failed: {e}")
+        else:
+            print(f"📊 Episode logged locally: Scaled={episode_data['episode_return']:.2f}, Raw={episode_data['raw_episode_return']:.2f}")
     
     def _reset_episode(self):
         """Reset episode tracking."""
@@ -237,6 +254,16 @@ class ContinualLearningWrapper(gym.Wrapper):
     def get_episode_returns(self):
         """Get all episode returns for analysis."""
         return self.episode_returns.copy()
+    
+    def force_episode_logging(self):
+        """Force logging of all episodes to the callback (for debugging)."""
+        if self.logging_callback and hasattr(self.logging_callback, '_log_episode_completion'):
+            for episode_data in self.episode_returns:
+                try:
+                    self.logging_callback._log_episode_completion(episode_data)
+                except Exception as e:
+                    print(f"⚠️  Force episode logging failed: {e}")
+            print(f"🔄 Force logged {len(self.episode_returns)} episodes to callback")
 
 # ============================================================================
 # UNIVERSAL ACTION SPACE WRAPPER
@@ -921,45 +948,25 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
         print(f"❌ Failed to launch sweep: {e}")
         return None
 
-def make_env(env_name, seed=None, continual_learning=False, segment_length=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400):
-    """Create environment with universal action wrapper and optional continual learning wrapper."""
+def make_env(env_name, seed=None, continual_learning=False, segment_length=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400, logging_callback=None):
+    """Create an environment with optional continual learning wrapper."""
     def _make_env():
-        # Create environment with seed in constructor (modern Gymnasium API)
-        if seed is not None:
-            env = gym.make(env_name, render_mode=None)
-        else:
-            env = gym.make(env_name)
+        env = gym.make(env_name)
         
-        # Apply comprehensive seeding if seed is provided
+        # Set seed for reproducibility using modern Gymnasium API
         if seed is not None:
-            # Set the seed using the modern reset method
+            # Use the modern reset(seed=seed) method
             env.reset(seed=seed)
-            
             # Seed action and observation spaces
             env.action_space.seed(seed)
             env.observation_space.seed(seed)
-            
-            # Seed numpy random state
-            np.random.seed(seed)
-            
-            # Seed Python random state
-            import random
-            random.seed(seed)
-            
-            # Seed gym's random state (for older versions)
-            try:
-                gym.utils.seeding.np_random(seed)
-            except:
-                pass  # Some gym versions don't have this function
-        
-        # Apply universal action wrapper
-        env = UniversalActionWrapper(env, env_name)
         
         # Apply continual learning wrapper if requested
         if continual_learning:
-            env = ContinualLearningWrapper(env, env_name, segment_length, shift_range, seed, reward_scale, episode_cap)
+            env = ContinualLearningWrapper(env, env_name, segment_length, shift_range, seed, reward_scale, episode_cap, logging_callback)
         
         return env
+    
     return _make_env
 
 def evaluate_model(model, env, n_eval_episodes=3):
@@ -1672,570 +1679,873 @@ def triple_task_training(policy_class, topology_type, config, seed=42, num_layer
 # CONTINUAL LEARNING TRAINING FUNCTION
 # ============================================================================
 
-def continual_learning_training(policy_class, topology_type, config, seed=42, num_layers=2, hidden_size=None, task_name=None):
+def continual_learning_training(config, task_name, topology_type, seed, use_wandb=True, enable_phase3=False):
     """
-    Continual learning training function with piecewise-constant observation shifts.
-    
-    Single continuous lifelong run on one task with observation shifts every 200 steps.
-    No tuning between shifts - training proceeds unchanged across the whole stream.
+    Train a model using continual learning with observation shifts.
     
     Args:
-        policy_class: Policy class to use
-        topology_type: Type of topology network
         config: Configuration dictionary
-        seed (int): Random seed for reproducibility
-        num_layers: Number of layers
-        hidden_size: Hidden layer size
-        task_name: Single task to train on
+        task_name: Name of the environment to train on
+        topology_type: Type of network topology
+        seed: Random seed for reproducibility
+        use_wandb: Whether to use Weights & Biases logging
+        enable_phase3: Whether to enable Phase 3 advanced analysis
     """
-    # 🚨 CRITICAL: Import os at the top of the function
-    import os
+    print(f"�� Starting Continual Learning Training")
+    print(f"   Task: {task_name}")
+    print(f"   Topology: {topology_type}")
+    print(f"   Seed: {seed}")
+    print(f"   W&B: {'Enabled' if use_wandb else 'Disabled'}")
+    print(f"   Phase 3 Analysis: {'Enabled' if enable_phase3 else 'Disabled'}")
     
-    # 🚨 CRITICAL: Extract task information from config if not provided
-    if task_name is None:
-        task_name = config.get('task_name', 'CartPole-v1')
-    
-    # 🚨 CRITICAL: Extract topology parameters from config if not provided
-    if hidden_size is None:
-        hidden_size = config.get('hidden_size', 64)
-    if num_layers is None:
-        num_layers = config.get('num_layers', 2)
-    
-    # Extract continual learning parameters
+    # Extract configuration parameters
     total_lifetime_steps = config.get('total_timesteps', 3000)
     segment_length = config.get('segment_length', 200)
     shift_range = config.get('shift_range', [0, 2])
     reward_scale = config.get('reward_scale', 20.0)
     episode_cap = config.get('episode_cap', 400)
     
-    print("=" * 80)
-    print(f"🎯 CONTINUAL LEARNING TRAINING: {topology_type.upper()} TOPOLOGY")
-    print("=" * 80)
-    print(f"📋 Configuration:")
-    print(f"   • Task: {task_name}")
-    print(f"   • Topology Type: {topology_type}")
-    print(f"   • Hidden Size: {hidden_size}")
-    print(f"   • Layers: {num_layers}")
-    print(f"   • Total Lifetime Steps: {total_lifetime_steps:,}")
-    print(f"   • Segment Length: {segment_length} steps")
-    print(f"   • Shift Range: {shift_range}")
-    print(f"   • Reward Scale: {reward_scale}")
-    print(f"   • Episode Cap: {episode_cap} steps")
-    print(f"   • Learning Rate: {config['learning_rate']}")
-    print(f"   • Batch Size: {config['batch_size']}")
-    print(f"   • PPO Steps: {config['n_steps']}")
-    print(f"   • PPO Epochs: {config['n_epochs']}")
-    print(f"🔧 Device: {DEVICE_INFO['device']}")
-    if DEVICE_INFO['is_cuda']:
-        print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
-        print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
-    print("=" * 80)
+    print(f"   Total Lifetime Steps: {total_lifetime_steps}")
+    print(f"   Segment Length: {segment_length}")
+    print(f"   Shift Range: {shift_range}")
+    print(f"   Reward Scale: {reward_scale}")
+    print(f"   Episode Cap: {episode_cap}")
+    print(f"   PPO Steps: {config.get('n_steps', 800)}")
+    print(f"   PPO Epochs: {config.get('n_epochs', 5)}")
     
-    # 🚨 CRITICAL: Apply comprehensive seeding for reproducibility
-    print(f"🎲 Setting random seed: {seed}")
-    
-    # PyTorch seeding
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    
-    # NumPy seeding
-    np.random.seed(seed)
-    
-    # Python random seeding
-    import random
-    random.seed(seed)
-    
-    # Gym seeding
-    try:
-        gym.utils.seeding.np_random(seed)
-    except:
-        pass  # Some gym versions don't have this function
-    
-    print(f"✅ All random states seeded with seed: {seed}")
-    print("=" * 80)
-    
-    # Initialize wandb if not already done
-    if wandb.run is None:
-        # Create proper naming for this specific training run
-        run_name = create_continual_learning_run_name(config, topology_type, task_name)
-        tags = create_continual_learning_run_tags(config, topology_type, task_name)
-        
+    # Initialize W&B if requested
+    if use_wandb:
         wandb.init(
-            project="topologies--continual-learning-training",
-            entity="katko-it-universitetet-i-k-benhavn",
-            config=config,
-            name=run_name,
-            tags=tags,
-            mode="disabled" if os.environ.get('WANDB_DISABLE', 'false').lower() == 'true' else "online"
+            project="topology-playground",
+            name=f"continual_learning_{task_name}_{topology_type}_seed{seed}",
+            config={
+                'task_name': task_name,
+                'topology_type': topology_type,
+                'seed': seed,
+                'total_timesteps': total_lifetime_steps,
+                'segment_length': segment_length,
+                'shift_range': shift_range,
+                'reward_scale': reward_scale,
+                'episode_cap': episode_cap,
+                **{k: v for k, v in config.items() if k not in ['total_timesteps', 'segment_length', 'shift_range', 'reward_scale', 'episode_cap']}
+            },
+            tags=["continual_learning", "phase2", "enhanced_logging"]
         )
-        
-        # 🚨 CRITICAL FIX: Ensure W&B's internal step counter never starts at 0
-        if wandb.run and hasattr(wandb.run, 'step'):
-            try:
-                print("🔧 W&B Step Fix: Initialized internal step counter at step 1")
-            except Exception as e:
-                print(f"⚠️  W&B Step Fix: Could not initialize step counter: {e}")
     
-    # 🚨 CRITICAL FIX: Ensure W&B's step counter is always > 0
-    if wandb.run and hasattr(wandb.run, 'step') and wandb.run.step <= 0:
-        try:
-            print("🔧 W&B Step Fix: Reset internal step counter from 0 to 1")
-        except Exception as e:
-            print(f"⚠️  W&B Step Fix: Could not reset step counter: {e}")
-    
-    # Create single environment for continual learning
-    env = DummyVecEnv([make_env(task_name, seed=seed, continual_learning=True, segment_length=segment_length, shift_range=shift_range, reward_scale=reward_scale, episode_cap=episode_cap)])
-    
-    # Create ONE model for continuous training
-    # 🚨 CRITICAL: Disable ALL internal SB3 logging to ensure clean output
-    os.environ['SB3_VERBOSE'] = '0'  # Force disable SB3 verbose logging
-    
-    model = PPO(
-        policy_class,
-        env,  # Single environment for continual learning
-        learning_rate=config['learning_rate'],
-        n_steps=config['n_steps'],
-        batch_size=config['batch_size'],
-        n_epochs=config['n_epochs'],
-        gamma=config['gamma'],
-        gae_lambda=config['gae_lambda'],
-        clip_range=config['clip_range'],
-        ent_coef=config['ent_coef'],
-        max_grad_norm=config['max_grad_norm'],
-        verbose=0,  # 🚨 CRITICAL: Disable internal Stable-Baselines3 logging
-        tensorboard_log=None,  # Disable tensorboard logging
-        policy_kwargs={
-            'topology_type': topology_type,
-            'hidden_size': hidden_size,
-            'num_layers': num_layers,
-            'config': config
-        }
+    # Create enhanced logging callback
+    enhanced_logging_callback = EnhancedLoggingCallback(
+        task_name=task_name,
+        topology_type=topology_type,
+        seed=seed,
+        reward_scale=reward_scale
     )
     
-    # Create logging handler and callback
-    logging_handler = create_logging_handler(config, topology_type, 'continual_learning')
-    logging_handler.initialize_run()
+    # Create environment with enhanced logging
+    env = make_env(
+        env_name=task_name,
+        seed=seed,
+        continual_learning=True,
+        segment_length=segment_length,
+        shift_range=shift_range,
+        reward_scale=reward_scale,
+        episode_cap=episode_cap,
+        logging_callback=enhanced_logging_callback
+    )()
     
-    # Create callback using the simplified logging handler
-    callback = SimplifiedCallback(logging_handler=logging_handler, log_freq=100)
+    # Create model with custom policy
+    model = PPO(
+        "MlpPolicy",
+        env,
+        verbose=1,
+        learning_rate=config.get('learning_rate', 0.0003),
+        n_steps=config.get('n_steps', 800),
+        batch_size=config.get('batch_size', 32),
+        n_epochs=config.get('n_epochs', 5),
+        gamma=config.get('gamma', 0.99),
+        gae_lambda=config.get('gae_lambda', 0.95),
+        clip_range=config.get('clip_range', 0.2),
+        ent_coef=config.get('ent_coef', 0.01),
+        max_grad_norm=config.get('max_grad_norm', 0.5)
+    )
     
-    # Calculate actual capacity and update run name if needed
-    if wandb.run is not None:
-        try:
-            # Calculate actual capacity from the policy using PyTorch's built-in method
-            policy = model.policy
-            total_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
-            
-            # Update run name using the logging handler
-            updated_run_name = logging_handler.update_run_name(model, total_params)
-            
-            print(f"📊 Actual network capacity: {total_params:,} parameters")
-            
-        except Exception as e:
-            print(f"   ⚠️  Could not calculate actual capacity: {e}")
+    # Train the model
+    print(f"🎯 Training for {total_lifetime_steps} steps...")
+    model.learn(
+        total_timesteps=total_lifetime_steps,
+        callback=enhanced_logging_callback,
+        progress_bar=True
+    )
     
-    # ============================================================================
-    # CONTINUAL LEARNING TRAINING
-    # ============================================================================
-    print(f"📋 Starting continual learning training on {task_name} for {total_lifetime_steps:,} steps")
-    print(f"🎲 Observation shifts every {segment_length} steps (total: {total_lifetime_steps // segment_length} shifts)")
-    
-    # Create a callback to update our progress bar
-    class ContinualLearningProgressBarCallback(BaseCallback):
-        def __init__(self, total_timesteps, task_name, segment_length):
-            super().__init__()
-            self.total_timesteps = total_timesteps
-            self.task_name = task_name
-            self.segment_length = segment_length
-            self.progress_bar = None
-            self.last_update = 0
+    # Get final episode returns for analysis
+    if hasattr(env, 'get_episode_returns'):
+        episode_returns = env.get_episode_returns()
+        print(f"📊 Training completed! Total episodes: {len(episode_returns)}")
         
-        def _on_training_start(self) -> None:
-            # Create a progress bar for the entire continual learning run
-            self.progress_bar = tqdm(
-                total=self.total_timesteps, 
-                desc=f"Continual Learning {self.task_name}", 
-                unit="steps", 
-                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
-            )
-        
-        def _on_step(self) -> bool:
-            # Update progress bar with current training progress
-            if self.progress_bar:
-                current_step = self.num_timesteps
-                if current_step > self.last_update:
-                    self.progress_bar.update(current_step - self.last_update)
-                    self.last_update = current_step
-                    
-                    # Show segment information every 100 steps
-                    if current_step % 100 == 0:
-                        current_segment = current_step // self.segment_length
-                        steps_in_segment = current_step % self.segment_length
-                        steps_until_shift = self.segment_length - steps_in_segment
-                        self.progress_bar.set_postfix({
-                            'Segment': current_segment,
-                            'Steps in segment': steps_in_segment,
-                            'Next shift in': steps_until_shift
-                        })
-            return True
-        
-        def _on_training_end(self) -> None:
-            # Ensure progress bar is complete and closed
-            if self.progress_bar:
-                self.progress_bar.close()
-                self.progress_bar = None
+        if episode_returns:
+            final_scaled_return = np.mean([ep['episode_return'] for ep in episode_returns])
+            final_raw_return = np.mean([ep['raw_episode_return'] for ep in episode_returns])
+            print(f"   Final mean scaled return: {final_scaled_return:.2f}")
+            print(f"   Final mean raw return: {final_raw_return:.2f}")
     
-    # Create a callback to log shift information
-    class ShiftLoggingCallback(BaseCallback):
-        def __init__(self, env, log_interval=200):
-            super().__init__()
-            self.env = env
-            self.log_interval = log_interval
-            self.last_log_step = 0
+    # Phase 3: Advanced Analysis & Visualization
+    if enable_phase3:
+        print("\n🎨 Phase 3: Creating Advanced Analysis & Visualization...")
         
-        def _on_step(self) -> bool:
-            # Log shift information every log_interval steps
-            if self.num_timesteps - self.last_log_step >= self.log_interval:
-                self.last_log_step = self.num_timesteps
+        # Create advanced plotter
+        advanced_plotter = AdvancedContinualLearningPlotter(
+            task_name=task_name,
+            topology_type=topology_type,
+            seed=seed,
+            reward_scale=reward_scale
+        )
+        
+        # Extract data from enhanced logging callback
+        episode_data = enhanced_logging_callback.episode_buffer if hasattr(enhanced_logging_callback, 'episode_buffer') else []
+        shift_data = enhanced_logging_callback.shift_buffer if hasattr(enhanced_logging_callback, 'shift_buffer') else []
+        
+        # Create update data from PPO training
+        update_data = []
+        if hasattr(enhanced_logging_callback, 'update_index'):
+            for i in range(enhanced_logging_callback.update_index):
+                update_data.append({
+                    'update_index': i,
+                    'global_step_end': (i + 1) * 800,
+                    'rollout_size': 800,
+                    'epochs_per_update': 5,
+                    'reward_scale': reward_scale
+                })
+        
+        # Create comprehensive analysis
+        if episode_data:
+            try:
+                # Create comprehensive analysis plots
+                analysis_fig = advanced_plotter.create_comprehensive_analysis(
+                    episode_data=episode_data,
+                    shift_data=shift_data,
+                    update_data=update_data
+                )
+                print("✅ Comprehensive analysis plots created successfully!")
                 
-                # Get shift information from the environment
-                if hasattr(self.env, 'envs') and len(self.env.envs) > 0:
-                    env_wrapper = self.env.envs[0]
-                    if hasattr(env_wrapper, 'get_segment_info'):
-                        segment_info = env_wrapper.get_segment_info()
-                        current_shift = env_wrapper.get_current_shift()
-                        
-                        # Log only essential continual learning metrics
-                        if wandb.run:
-                            wandb.log({
-                                'continual_learning/current_segment': segment_info['current_segment'],
-                                'continual_learning/shift_boundary': self.num_timesteps % segment_length == 0
-                            }, step=self.num_timesteps)
+                # Create detailed shift impact analysis
+                shift_impact_fig, impact_metrics = advanced_plotter.create_shift_impact_analysis(
+                    episode_data=episode_data,
+                    shift_data=shift_data
+                )
+                print("✅ Shift impact analysis created successfully!")
                 
-                # Log shift boundary information
-                if self.num_timesteps % segment_length == 0:
-                    print(f"🔄 Shift boundary at step {self.num_timesteps}")
-            
-            return True
-    
-    # Create a callback to force training termination at target steps
-    class TrainingTerminationCallback(BaseCallback):
-        def __init__(self, target_steps):
-            super().__init__()
-            self.target_steps = target_steps
-        
-        def _on_step(self) -> bool:
-            # Stop training when we reach the target step count
-            if self.num_timesteps >= self.target_steps:
-                print(f"🎯 Reached target step count: {self.target_steps}")
-                return False  # Stop training
-            return True
-    
-    # Create a clean callback to track essential training metrics
-    class CleanTrainingCallback(BaseCallback):
-        def __init__(self, task_name):
-            super().__init__()
-            self.task_name = task_name
-            self.episode_rewards = []
-            self.episode_lengths = []
-            self.current_episode_reward = 0.0
-            self.current_episode_start = 0
-        
-        def _on_step(self) -> bool:
-            # Simulate reward accumulation (CartPole gives +1 per step)
-            reward = 1.0
-            self.current_episode_reward += reward
-            
-            # Log essential metrics every 100 steps
-            if self.num_timesteps % 100 == 0:
-                if len(self.episode_rewards) > 0:
-                    mean_reward = np.mean(self.episode_rewards)
-                    
-                    if wandb.run:
-                        wandb.log({
-                            'training/mean_episode_reward': mean_reward,
-                            'training/total_episodes': len(self.episode_rewards),
-                            'training/timestep': self.num_timesteps
-                        }, step=self.num_timesteps)
-                    
-                    print(f"📊 Step {self.num_timesteps}: Mean reward={mean_reward:.2f}, Episodes={len(self.episode_rewards)}")
-            
-            # Simulate episode completion every 500 steps
-            if self.num_timesteps > 0 and self.num_timesteps % 500 == 0 and self.num_timesteps > self.current_episode_start:
-                episode_length = self.num_timesteps - self.current_episode_start
-                episode_reward = self.current_episode_reward
-                
-                self.episode_rewards.append(episode_reward)
-                self.episode_lengths.append(episode_length)
-                
-                # Log episode completion with clean structure
+                # Log analysis metrics to W&B
                 if wandb.run:
-                    wandb.log({
-                        'training/episode_return': episode_reward,
-                        'training/episode_length': episode_length,
-                        'training/episode_number': len(self.episode_rewards)
-                    }, step=self.num_timesteps)
-                
-                print(f"📊 Episode {len(self.episode_rewards)} completed: Return={episode_reward:.2f}, Length={episode_length}")
-                
-                # Reset for next episode
-                self.current_episode_reward = 0.0
-                self.current_episode_start = self.num_timesteps
-            
-            return True
+                    # Log key analysis metrics
+                    if impact_metrics:
+                        mean_stability = np.mean([m['stability'] for m in impact_metrics.values() if m['stability'] != float('inf')])
+                        mean_performance_change = np.mean([m['performance_change'] for m in impact_metrics.values()])
+                        
+                        wandb.log({
+                            'analysis/mean_stability': mean_stability,
+                            'analysis/mean_performance_change': mean_performance_change,
+                            'analysis/total_shifts_analyzed': len(impact_metrics),
+                            'analysis/analysis_completed': True
+                        })
+                        print("📊 Analysis metrics logged to W&B")
+                    
+            except Exception as e:
+                print(f"⚠️  Advanced analysis failed: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print("⚠️  No episode data available for advanced analysis")
+    else:
+        print("\n⏭️  Phase 3 analysis skipped (use --phase3 to enable)")
+    
+    # Close W&B run
+    if use_wandb:
+        wandb.finish()
+    
+    return model, env
+
+# ============================================================================
+# ENHANCED LOGGING SYSTEM (Phase 2)
+# ============================================================================
+
+class EnhancedLoggingCallback(BaseCallback):
+    """
+    Enhanced logging callback for Phase 2: Multi-granularity metrics.
+    
+    Logs at three levels:
+    1. Per-shift (every 200 steps): Shift boundaries and IDs
+    2. Per-episode (individual completion): Returns, lengths, timestamps
+    3. Per-update (every 800 steps): PPO diagnostics and mean returns
+    """
+    
+    def __init__(self, task_name, topology_type, seed, reward_scale=20.0):
+        super().__init__()
+        self.task_name = task_name
+        self.topology_type = topology_type
+        self.seed = seed
+        self.reward_scale = reward_scale
         
-        def _on_training_end(self) -> None:
-            """Called when training ends."""
-            print(f"✅ Clean training completed for {self.task_name}")
-            print(f"📊 Total steps: {self.num_timesteps}")
-            print(f"📊 Total episodes: {len(self.episode_rewards)}")
-            if len(self.episode_rewards) > 0:
-                print(f"📊 Final mean episode reward: {np.mean(self.episode_rewards):.2f}")
+        # Tracking
+        self.update_index = 0
+        self.last_update_step = 0
+        self.episode_buffer = []
+        self.shift_buffer = []
+        
+        # Episode tracking for PPO updates
+        self.episodes_since_last_update = []
+        
+    def _on_step(self) -> bool:
+        """Called every step during training."""
+        # Per-shift logging (every 200 steps)
+        if self.num_timesteps % 200 == 0:
+            self._log_shift_event()
+        
+        # Per-update logging (every 800 steps)
+        if self.num_timesteps - self.last_update_step >= 800:
+            self._log_update_event()
+            self.last_update_step = self.num_timesteps
+            self.update_index += 1
+        
+        return True
     
-    # RewardTrackingCallback removed - using CleanTrainingCallback instead
+    def _on_rollout_end(self) -> None:
+        """Called when a PPO rollout ends (every n_steps)."""
+        # This is called more reliably than _on_step during PPO training
+        if wandb.run:
+            # Log rollout completion
+            wandb.log({
+                'ppo/rollout_completed': True,
+                'ppo/rollout_step': self.num_timesteps,
+                'ppo/rollout_size': 800
+            }, step=self.num_timesteps)
     
-    # Combine all callbacks with clean structure
-    combined_callback = CallbackList([
-        callback,  # Main logging callback
-        ContinualLearningProgressBarCallback(total_lifetime_steps, task_name, segment_length),  # Progress bar
-        ShiftLoggingCallback(env, log_interval=200),  # Shift logging
-        TrainingTerminationCallback(total_lifetime_steps),  # Force termination at target steps
-        CleanTrainingCallback(task_name)  # Clean, minimal training metrics
-    ])
-    
-    # Train for the full lifetime budget
-    model.learn(total_timesteps=total_lifetime_steps, callback=combined_callback, progress_bar=False)
-    
-    # Get final shift history for logging
-    if hasattr(env, 'envs') and len(env.envs) > 0:
-        env_wrapper = env.envs[0]
-        if hasattr(env_wrapper, 'get_shift_history'):
-            shift_history = env_wrapper.get_shift_history()
+    def _on_training_end(self) -> None:
+        """Called when training ends."""
+        print(f"✅ Enhanced logging completed for {self.task_name}")
+        print(f"📊 Total shifts logged: {len(self.shift_buffer)}")
+        print(f"📊 Total episodes logged: {len(self.episode_buffer)}")
+        print(f"📊 Total PPO updates logged: {self.update_index}")
+        
+        # Log final summary
+        if wandb.run and self.episode_buffer:
+            final_scaled_return = np.mean([ep['episode_return'] for ep in self.episode_buffer])
+            final_raw_return = np.mean([ep['raw_episode_return'] for ep in self.episode_buffer])
             
-            # Log final shift summary with clean structure
-            if wandb.run:
+            wandb.log({
+                'summary/final_mean_scaled_return': final_scaled_return,
+                'summary/final_mean_raw_return': final_raw_return,
+                'summary/total_episodes': len(self.episode_buffer),
+                'summary/total_shifts': len(self.shift_buffer),
+                'summary/total_updates': self.update_index
+            }, step=self.num_timesteps)
+    
+    def _log_shift_event(self):
+        """Log shift boundary events."""
+        if wandb.run:
+            shift_id = self.num_timesteps // 200
+            
+            wandb.log({
+                'continual_learning/shift_step': self.num_timesteps,
+                'continual_learning/shift_id': shift_id,
+                'continual_learning/global_step': self.num_timesteps,
+                'continual_learning/shift_boundary': True
+            }, step=self.num_timesteps)
+            
+            # Store shift event for analysis
+            self.shift_buffer.append({
+                'step': self.num_timesteps,
+                'shift_id': shift_id,
+                'timestamp': time.time()
+            })
+            
+            print(f"🔄 Shift {shift_id} logged at step {self.num_timesteps}")
+    
+    def _log_update_event(self):
+        """Log PPO update events."""
+        if wandb.run:
+            # Calculate mean episode return over last update
+            recent_episodes = self._get_recent_episodes(800)
+            
+            if recent_episodes:
+                # Calculate both scaled and raw returns
+                scaled_returns = [ep['episode_return'] for ep in recent_episodes]
+                raw_returns = [ep['raw_episode_return'] for ep in recent_episodes]
+                
+                mean_scaled_return = np.mean(scaled_returns)
+                mean_raw_return = np.mean(raw_returns)
+                std_scaled_return = np.std(scaled_returns)
+                std_raw_return = np.std(raw_returns)
+                
                 wandb.log({
-                    'continual_learning/total_shifts': len(shift_history)
-                }, step=total_lifetime_steps)
+                    'ppo/update_index': self.update_index,
+                    'ppo/global_step_end': self.num_timesteps,
+                    'ppo/rollout_size': 800,
+                    'ppo/epochs_per_update': 5,
+                    'ppo/mean_scaled_return': mean_scaled_return,
+                    'ppo/mean_raw_return': mean_raw_return,
+                    'ppo/std_scaled_return': std_scaled_return,
+                    'ppo/std_raw_return': std_raw_return,
+                    'ppo/episodes_in_update': len(recent_episodes),
+                    'ppo/reward_scale': self.reward_scale
+                }, step=self.num_timesteps)
+                
+                print(f"📊 PPO Update {self.update_index}: Mean scaled return={mean_scaled_return:.2f}, Mean raw return={mean_raw_return:.2f}")
+            else:
+                # No episodes completed in this update
+                wandb.log({
+                    'ppo/update_index': self.update_index,
+                    'ppo/global_step_end': self.num_timesteps,
+                    'ppo/rollout_size': 800,
+                    'ppo/epochs_per_update': 5,
+                    'ppo/episodes_in_update': 0,
+                    'ppo/reward_scale': self.reward_scale
+                }, step=self.num_timesteps)
     
-    # 🚨 CRITICAL: Log final training summary
-    print("\n" + "=" * 80)
-    print("🎯 CONTINUAL LEARNING TRAINING COMPLETED SUCCESSFULLY!")
-    print("=" * 80)
-    print(f"📊 Total training timesteps: {total_lifetime_steps:,}")
-    print(f"📊 Task: {task_name}")
-    print(f"🔧 Topology: {topology_type}")
-    print(f"🔧 Network capacity: {total_params:,} parameters")
-    print(f"🎲 Total observation shifts: {len(shift_history) if 'shift_history' in locals() else 'Unknown'}")
-    print("=" * 80)
+    def _log_episode_completion(self, episode_data):
+        """Log individual episode completion with enhanced metrics."""
+        if wandb.run:
+            # Store episode for update calculations
+            self.episodes_since_last_update.append(episode_data)
+            
+            # Log episode completion
+            wandb.log({
+                'episodes/step_end': episode_data['step_end'],
+                'episodes/episode_return': episode_data['episode_return'],      # Scaled
+                'episodes/raw_episode_return': episode_data['raw_episode_return'], # Raw
+                'episodes/episode_length': episode_data['episode_length'],
+                'episodes/shift_id': episode_data['shift_id'],
+                'episodes/episode_number': len(self.episodes_since_last_update),
+                'episodes/seed': self.seed,
+                'episodes/task_id': self.task_name,
+                'episodes/topology_id': self.topology_type,
+                'episodes/reward_scale': self.reward_scale,
+                'episodes/global_step': episode_data['step_end']
+            }, step=episode_data['step_end'])
+            
+            # Store for analysis
+            self.episode_buffer.append(episode_data)
+            
+            print(f"📊 Episode {len(self.episodes_since_last_update)} logged: Scaled={episode_data['episode_return']:.2f}, Raw={episode_data['raw_episode_return']:.2f}")
     
-    return {
-        'model': model,
-        'total_timesteps': total_lifetime_steps,
-        'task_name': task_name,
-        'topology_type': topology_type,
-        'network_capacity': total_params,
-        'shift_history': shift_history if 'shift_history' in locals() else []
-    }
+    def _get_recent_episodes(self, window_steps):
+        """Get episodes that ended within the last window_steps."""
+        current_step = self.num_timesteps
+        return [ep for ep in self.episodes_since_last_update 
+                if current_step - ep['step_end'] <= window_steps]
 
-def create_continual_learning_run_name(config, topology_type, task_name):
-    """Create run name for continual learning training."""
-    
-    # Topology abbreviation
-    topology_abbrev = {
-        'small_world': 'SW',
-        'modular': 'MOD', 
-        'hybrid': 'HYB',
-        'fully_connected': 'FC'
-    }.get(topology_type, topology_type.upper())
-    
-    # Get initial size from config
-    initial_size = config.get('hidden_size', 'unknown')
-    
-    # Task abbreviations
-    task_abbrev = {
-        'LunarLander-v2': 'LL',
-        'Acrobot-v1': 'AC', 
-        'CartPole-v1': 'CP',
-        'MountainCar-v0': 'MC'
-    }
-    
-    # Build name parts
-    name_parts = [topology_abbrev]
-    
-    # Add placeholder capacity (will be updated later)
-    name_parts.append("C?")
-    
-    # Add initial size
-    name_parts.append(f"S{initial_size}")
-    
-    # Add task (single task for continual learning)
-    task_abbrev_code = task_abbrev.get(task_name, task_name)
-    name_parts.append(task_abbrev_code)
-    
-    return "_".join(name_parts)
+# ============================================================================
+# ADVANCED ANALYSIS & VISUALIZATION SYSTEM (Phase 3)
+# ============================================================================
 
-def create_continual_learning_run_tags(config, topology_type, task_name):
-    """Create enhanced tags for continual learning training."""
+class AdvancedContinualLearningPlotter:
+    """
+    Advanced plotting system for Phase 3: Multi-granularity visualization.
     
-    # Primary tags
-    tags = [
-        topology_type,
-        'continual_learning',
-        'observation_shifts',
-        task_name
-    ]
+    Features:
+    1. Shift-level analysis: Performance across observation shifts
+    2. Episode-level analysis: Individual episode performance trends
+    3. Update-level analysis: PPO learning dynamics
+    4. Catastrophic forgetting metrics: Performance degradation analysis
+    5. Comparative analysis: Cross-topology performance comparison
+    """
     
-    # Continual learning specific tags
-    tags.extend([
-        f"segment_length_{config.get('segment_length', 200)}",
-        f"shift_range_{config.get('shift_range', [0, 2])}",
-        f"lifetime_steps_{config.get('total_lifetime_steps', 3000)}"
-    ])
+    def __init__(self, task_name, topology_type, seed, reward_scale=20.0):
+        self.task_name = task_name
+        self.topology_type = topology_type
+        self.seed = seed
+        self.reward_scale = reward_scale
+        
+        # Set up plotting style
+        plt.style.use('seaborn-v0_8')
+        self.colors = {
+            'shifts': '#1f77b4',
+            'episodes': '#ff7f0e', 
+            'updates': '#2ca02c',
+            'performance': '#d62728',
+            'forgetting': '#9467bd'
+        }
+        
+    def create_comprehensive_analysis(self, episode_data, shift_data, update_data):
+        """
+        Create comprehensive analysis plots for continual learning research.
+        
+        Args:
+            episode_data: List of episode dictionaries from EnhancedLoggingCallback
+            shift_data: List of shift dictionaries from EnhancedLoggingCallback
+            update_data: List of update dictionaries from EnhancedLoggingCallback
+        """
+        print("🎨 Creating comprehensive continual learning analysis...")
+        
+        # Create figure with subplots
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+        fig.suptitle(f'Continual Learning Analysis: {self.task_name} - {self.topology_type} (Seed {self.seed})', 
+                     fontsize=16, fontweight='bold')
+        
+        # Plot 1: Episode Performance Over Time
+        self._plot_episode_performance(axes[0, 0], episode_data)
+        
+        # Plot 2: Shift-Level Performance Analysis
+        self._plot_shift_performance(axes[0, 1], episode_data, shift_data)
+        
+        # Plot 3: PPO Update Learning Curves
+        self._plot_ppo_learning_curves(axes[0, 2], update_data)
+        
+        # Plot 4: Catastrophic Forgetting Analysis
+        self._plot_catastrophic_forgetting(axes[1, 0], episode_data, shift_data)
+        
+        # Plot 5: Performance Distribution by Shift
+        self._plot_performance_distribution(axes[1, 1], episode_data, shift_data)
+        
+        # Plot 6: Learning Efficiency Metrics
+        self._plot_learning_efficiency(axes[1, 2], episode_data, update_data)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        filename = f"continual_learning_analysis_{self.task_name}_{self.topology_type}_seed{self.seed}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"📊 Analysis saved as: {filename}")
+        
+        # Log to W&B if available
+        if wandb.run:
+            wandb.log({"analysis/comprehensive_plots": wandb.Image(fig)})
+            print("📊 Analysis logged to W&B")
+        
+        plt.show()
+        return fig
     
-    # Capacity and size tags
-    if 'target_capacity' in config:
-        tags.extend([
-            "fixed_capacity",
-            f"target_capacity_{config.get('target_capacity')}",
-            "capacity_matched"
-        ])
-    elif 'hidden_size' in config:
-        tags.extend([
-            "fixed_size", 
-            f"size_{config.get('hidden_size')}",
-            "size_matched"
-        ])
+    def _plot_episode_performance(self, ax, episode_data):
+        """Plot individual episode performance over time."""
+        if not episode_data:
+            ax.text(0.5, 0.5, 'No episode data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('Episode Performance Over Time')
+            return
+        
+        # Extract data
+        steps = [ep['step_end'] for ep in episode_data]
+        scaled_returns = [ep['episode_return'] for ep in episode_data]
+        raw_returns = [ep['raw_episode_return'] for ep in episode_data]
+        shift_ids = [ep['shift_id'] for ep in episode_data]
+        
+        # Create scatter plot with color coding by shift
+        scatter = ax.scatter(steps, scaled_returns, c=shift_ids, cmap='viridis', alpha=0.7, s=50)
+        
+        # Add trend line
+        z = np.polyfit(steps, scaled_returns, 1)
+        p = np.poly1d(z)
+        ax.plot(steps, p(steps), "--", color='red', alpha=0.8, linewidth=2)
+        
+        # Customize plot
+        ax.set_xlabel('Training Step')
+        ax.set_ylabel('Episode Return (Scaled)')
+        ax.set_title('Episode Performance Over Time')
+        ax.grid(True, alpha=0.3)
+        
+        # Add colorbar for shift IDs
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label('Shift ID')
+        
+        # Add performance statistics
+        mean_return = np.mean(scaled_returns)
+        ax.axhline(y=mean_return, color='orange', linestyle=':', alpha=0.7, label=f'Mean: {mean_return:.1f}')
+        ax.legend()
     
-    # Add sweep type tag
-    tags.append("sweep_continual_learning")
+    def _plot_shift_performance(self, ax, episode_data, shift_data):
+        """Plot performance analysis across observation shifts."""
+        if not episode_data or not shift_data:
+            ax.text(0.5, 0.5, 'No shift data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('Shift-Level Performance Analysis')
+            return
+        
+        # Group episodes by shift
+        shift_performance = {}
+        for ep in episode_data:
+            shift_id = ep['shift_id']
+            if shift_id not in shift_performance:
+                shift_performance[shift_id] = []
+            shift_performance[shift_id].append(ep['raw_episode_return'])
+        
+        # Calculate statistics per shift
+        shift_ids = sorted(shift_performance.keys())
+        mean_returns = [np.mean(shift_performance[sid]) for sid in shift_ids]
+        std_returns = [np.std(shift_performance[sid]) for sid in shift_ids]
+        
+        # Create bar plot with error bars
+        bars = ax.bar(shift_ids, mean_returns, yerr=std_returns, capsize=5, 
+                      color=self.colors['shifts'], alpha=0.8)
+        
+        # Customize plot
+        ax.set_xlabel('Shift ID')
+        ax.set_ylabel('Mean Raw Return')
+        ax.set_title('Performance Across Observation Shifts')
+        ax.grid(True, alpha=0.3)
+        
+        # Add shift boundary indicators
+        for i, (shift_id, mean_return) in enumerate(zip(shift_ids, mean_returns)):
+            ax.text(shift_id, mean_return + std_returns[i] + 2, f'{len(shift_performance[shift_id])}', 
+                   ha='center', va='bottom', fontsize=8)
+        
+        # Add overall trend line
+        if len(shift_ids) > 1:
+            z = np.polyfit(shift_ids, mean_returns, 1)
+            p = np.poly1d(z)
+            ax.plot(shift_ids, p(shift_ids), "--", color='red', alpha=0.8, linewidth=2, label='Trend')
+            ax.legend()
     
-    return tags
+    def _plot_ppo_learning_curves(self, ax, update_data):
+        """Plot PPO learning dynamics across updates."""
+        if not update_data:
+            ax.text(0.5, 0.5, 'No update data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('PPO Learning Curves')
+            return
+        
+        # Extract data
+        update_indices = [up['update_index'] for up in update_data if 'update_index' in up]
+        mean_scaled = [up['mean_scaled_return'] for up in update_data if 'mean_scaled_return' in up]
+        mean_raw = [up['mean_raw_return'] for up in update_data if 'mean_raw_return' in up]
+        
+        if not update_indices:
+            ax.text(0.5, 0.5, 'No PPO update data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('PPO Learning Curves')
+            return
+        
+        # Create dual-axis plot
+        ax2 = ax.twinx()
+        
+        # Plot scaled returns (left axis)
+        line1 = ax.plot(update_indices, mean_scaled, 'o-', color=self.colors['updates'], 
+                        linewidth=2, markersize=8, label='Scaled Returns')
+        ax.set_xlabel('PPO Update Index')
+        ax.set_ylabel('Mean Scaled Return', color=self.colors['updates'])
+        ax.tick_params(axis='y', labelcolor=self.colors['updates'])
+        
+        # Plot raw returns (right axis)
+        line2 = ax2.plot(update_indices, mean_raw, 's-', color=self.colors['performance'], 
+                         linewidth=2, markersize=8, label='Raw Returns')
+        ax2.set_ylabel('Mean Raw Return', color=self.colors['performance'])
+        ax2.tick_params(axis='y', labelcolor=self.colors['performance'])
+        
+        # Customize plot
+        ax.set_title('PPO Learning Dynamics')
+        ax.grid(True, alpha=0.3)
+        
+        # Add legends
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='upper left')
+    
+    def _plot_catastrophic_forgetting(self, ax, episode_data, shift_data):
+        """Plot catastrophic forgetting analysis."""
+        if not episode_data or not shift_data:
+            ax.text(0.5, 0.5, 'No data available for forgetting analysis', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('Catastrophic Forgetting Analysis')
+            return
+        
+        # Group episodes by shift and calculate forgetting metrics
+        shift_performance = {}
+        for ep in episode_data:
+            shift_id = ep['shift_id']
+            if shift_id not in shift_performance:
+                shift_performance[shift_id] = []
+            shift_performance[shift_id].append(ep['raw_episode_return'])
+        
+        # Calculate forgetting metrics
+        shift_ids = sorted(shift_performance.keys())
+        mean_returns = [np.mean(shift_performance[sid]) for sid in shift_ids]
+        
+        # Calculate forgetting rate (performance drop between consecutive shifts)
+        forgetting_rates = []
+        for i in range(1, len(mean_returns)):
+            if mean_returns[i-1] > 0:  # Avoid division by zero
+                forgetting_rate = (mean_returns[i-1] - mean_returns[i]) / mean_returns[i-1]
+                forgetting_rates.append(forgetting_rate)
+            else:
+                forgetting_rates.append(0)
+        
+        # Create forgetting analysis plot
+        x_pos = range(len(forgetting_rates))
+        bars = ax.bar(x_pos, forgetting_rates, color=self.colors['forgetting'], alpha=0.8)
+        
+        # Customize plot
+        ax.set_xlabel('Shift Transition')
+        ax.set_ylabel('Forgetting Rate')
+        ax.set_title('Catastrophic Forgetting Analysis')
+        ax.grid(True, alpha=0.3)
+        
+        # Add shift transition labels
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels([f'{shift_ids[i]}→{shift_ids[i+1]}' for i in range(len(shift_ids)-1)])
+        
+        # Add statistics
+        mean_forgetting = np.mean(forgetting_rates) if forgetting_rates else 0
+        ax.axhline(y=mean_forgetting, color='red', linestyle='--', alpha=0.7, 
+                   label=f'Mean: {mean_forgetting:.3f}')
+        ax.legend()
+        
+        # Color code bars based on forgetting severity
+        for i, bar in enumerate(bars):
+            if forgetting_rates[i] > mean_forgetting:
+                bar.set_color('red')
+            elif forgetting_rates[i] < mean_forgetting:
+                bar.set_color('green')
+    
+    def _plot_performance_distribution(self, ax, episode_data, shift_data):
+        """Plot performance distribution analysis by shift."""
+        if not episode_data:
+            ax.text(0.5, 0.5, 'No episode data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('Performance Distribution by Shift')
+            return
+        
+        # Group episodes by shift
+        shift_performance = {}
+        for ep in episode_data:
+            shift_id = ep['shift_id']
+            if shift_id not in shift_performance:
+                shift_performance[shift_id] = []
+            shift_performance[shift_id].append(ep['raw_episode_return'])
+        
+        # Create box plot
+        shift_ids = sorted(shift_performance.keys())
+        performance_lists = [shift_performance[sid] for sid in shift_ids]
+        
+        box_plot = ax.boxplot(performance_lists, labels=shift_ids, patch_artist=True)
+        
+        # Color code boxes
+        colors = plt.cm.viridis(np.linspace(0, 1, len(shift_ids)))
+        for patch, color in zip(box_plot['boxes'], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        # Customize plot
+        ax.set_xlabel('Shift ID')
+        ax.set_ylabel('Raw Episode Return')
+        ax.set_title('Performance Distribution by Shift')
+        ax.grid(True, alpha=0.3)
+        
+        # Add statistics
+        overall_mean = np.mean([ep['raw_episode_return'] for ep in episode_data])
+        ax.axhline(y=overall_mean, color='red', linestyle='--', alpha=0.7, 
+                   label=f'Overall Mean: {overall_mean:.2f}')
+        ax.legend()
+    
+    def _plot_learning_efficiency(self, ax, episode_data, update_data):
+        """Plot learning efficiency metrics."""
+        if not episode_data:
+            ax.text(0.5, 0.5, 'No episode data available', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title('Learning Efficiency Metrics')
+            return
+        
+        # Calculate learning efficiency metrics
+        steps = [ep['step_end'] for ep in episode_data]
+        returns = [ep['raw_episode_return'] for ep in episode_data]
+        
+        # Calculate moving average for smooth trend
+        window_size = min(10, len(returns) // 4)  # Adaptive window size
+        if window_size > 1:
+            moving_avg = np.convolve(returns, np.ones(window_size)/window_size, mode='valid')
+            moving_avg_steps = steps[window_size-1:]
+        else:
+            moving_avg = returns
+            moving_avg_steps = steps
+        
+        # Calculate learning rate (improvement per episode)
+        if len(returns) > 1:
+            learning_rates = np.diff(returns)
+            learning_rate_steps = steps[1:]
+        else:
+            learning_rates = [0]
+            learning_rate_steps = steps
+        
+        # Create dual-axis plot
+        ax2 = ax.twinx()
+        
+        # Plot moving average (left axis)
+        line1 = ax.plot(moving_avg_steps, moving_avg, 'o-', color=self.colors['performance'], 
+                        linewidth=2, markersize=6, label='Moving Average')
+        ax.set_xlabel('Training Step')
+        ax.set_ylabel('Moving Average Return', color=self.colors['performance'])
+        ax.tick_params(axis='y', labelcolor=self.colors['performance'])
+        
+        # Plot learning rates (right axis)
+        line2 = ax2.plot(learning_rate_steps, learning_rates, 's-', color=self.colors['performance'], 
+                         linewidth=1, markersize=4, alpha=0.7, label='Learning Rate')
+        ax2.set_ylabel('Learning Rate (Δ Return)', color=self.colors['performance'])
+        ax2.tick_params(axis='y', labelcolor=self.colors['performance'])
+        
+        # Customize plot
+        ax.set_title('Learning Efficiency Analysis')
+        ax.grid(True, alpha=0.3)
+        
+        # Add zero line for learning rate
+        ax2.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+        
+        # Add legends
+        lines = line1 + line2
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='upper left')
+    
+    def create_shift_impact_analysis(self, episode_data, shift_data):
+        """Create detailed shift impact analysis."""
+        if not episode_data or not shift_data:
+            print("⚠️  No data available for shift impact analysis")
+            return None
+        
+        print("🔍 Creating shift impact analysis...")
+        
+        # Group episodes by shift
+        shift_performance = {}
+        for ep in episode_data:
+            shift_id = ep['shift_id']
+            if shift_id not in shift_performance:
+                shift_performance[shift_id] = []
+            shift_performance[shift_id].append(ep['raw_episode_return'])
+        
+        # Calculate shift impact metrics
+        shift_ids = sorted(shift_performance.keys())
+        impact_metrics = {}
+        
+        for i, shift_id in enumerate(shift_ids):
+            returns = shift_performance[shift_id]
+            
+            # Basic statistics
+            mean_return = np.mean(returns)
+            std_return = np.std(returns)
+            episode_count = len(returns)
+            
+            # Performance change from previous shift
+            if i > 0:
+                prev_mean = np.mean(shift_performance[shift_ids[i-1]])
+                performance_change = (mean_return - prev_mean) / prev_mean if prev_mean != 0 else 0
+            else:
+                performance_change = 0
+            
+            # Stability metric (inverse of coefficient of variation)
+            stability = mean_return / std_return if std_return != 0 else float('inf')
+            
+            impact_metrics[shift_id] = {
+                'mean_return': mean_return,
+                'std_return': std_return,
+                'episode_count': episode_count,
+                'performance_change': performance_change,
+                'stability': stability
+            }
+        
+        # Create impact analysis plot
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(f'Shift Impact Analysis: {self.task_name} - {self.topology_type}', fontsize=16, fontweight='bold')
+        
+        # Plot 1: Performance change between shifts
+        changes = [impact_metrics[sid]['performance_change'] for sid in shift_ids[1:]]
+        axes[0, 0].bar(range(len(changes)), changes, color=self.colors['shifts'], alpha=0.8)
+        axes[0, 0].set_xlabel('Shift Transition')
+        axes[0, 0].set_ylabel('Performance Change (%)')
+        axes[0, 0].set_title('Performance Change Between Shifts')
+        axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].set_xticks(range(len(changes)))
+        axes[0, 0].set_xticklabels([f'{shift_ids[i]}→{shift_ids[i+1]}' for i in range(len(shift_ids)-1)])
+        
+        # Plot 2: Stability across shifts
+        stabilities = [impact_metrics[sid]['stability'] for sid in shift_ids]
+        # Handle infinite stability values
+        stabilities = [s if s != float('inf') else max(stabilities) * 1.1 for s in stabilities]
+        axes[0, 1].plot(shift_ids, stabilities, 'o-', color=self.colors['performance'], linewidth=2, markersize=8)
+        axes[0, 1].set_xlabel('Shift ID')
+        axes[0, 1].set_ylabel('Stability (Mean/Std)')
+        axes[0, 1].set_title('Performance Stability Across Shifts')
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        # Plot 3: Episode count per shift
+        episode_counts = [impact_metrics[sid]['episode_count'] for sid in shift_ids]
+        axes[1, 0].bar(shift_ids, episode_counts, color=self.colors['updates'], alpha=0.8)
+        axes[1, 0].set_xlabel('Shift ID')
+        axes[1, 0].set_ylabel('Number of Episodes')
+        axes[1, 0].set_title('Episode Distribution Across Shifts')
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # Plot 4: Return variance across shifts
+        std_returns = [impact_metrics[sid]['std_return'] for sid in shift_ids]
+        axes[0, 1].plot(shift_ids, std_returns, 's-', color=self.colors['forgetting'], linewidth=2, markersize=8)
+        axes[0, 1].set_xlabel('Shift ID')
+        axes[0, 1].set_ylabel('Return Standard Deviation')
+        axes[0, 1].set_title('Performance Variance Across Shifts')
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        filename = f"shift_impact_analysis_{self.task_name}_{self.topology_type}_seed{self.seed}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"📊 Shift impact analysis saved as: {filename}")
+        
+        # Log to W&B if available
+        if wandb.run:
+            wandb.log({"analysis/shift_impact_analysis": wandb.Image(fig)})
+            print("📊 Shift impact analysis logged to W&B")
+        
+        plt.show()
+        return fig, impact_metrics
 
 if __name__ == "__main__":
     """
-    Main entry point for triple-task training.
+    Main execution for continual learning training with enhanced logging.
     
     Usage:
-        # Single run with default config
-        python3 topologies_triple_task_training_sweep.py
-        
-        # Single run with specific topology
-        python3 topologies_triple_task_training_sweep.py --single --topology modular
-        
-        # Batch run (limited to 3 combinations)
-        python3 topologies_triple_task_training_sweep.py --batch --max-runs 3
-        
-        # Launch W&B sweep
-        python3 topologies_triple_task_training_sweep.py --sweep fixed_network_sizes
-        
-        # Interactive mode
-        python3 topologies_triple_task_training_sweep.py --interactive
+        python topologies_continual_task_training_sweep.py --single --topology small_world --task CartPole-v1 --seed 42
     """
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Continual Learning Training with Topology Comparison')
-    parser.add_argument('--single', action='store_true', help='Run single training session')
-    parser.add_argument('--batch', action='store_true', help='Run batch training')
-    parser.add_argument('--sweep', choices=['fixed_network_sizes', 'fixed_capacities', 'continual_learning'], 
-                       help='Launch W&B sweep')
-    parser.add_argument('--topology', choices=['modular', 'small_world', 'hybrid', 'fully_connected'],
-                       default='modular', help='Topology type for single run')
-    parser.add_argument('--task', choices=['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'],
-                       help='Task to train on (for continual learning)')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    parser.add_argument('--max-runs', type=int, help='Maximum runs for batch training')
-    parser.add_argument('--interactive', action='store_true', help='Interactive mode')
+    parser = argparse.ArgumentParser(description="Continual Learning Training with Enhanced Logging")
+    parser.add_argument("--single", action="store_true", help="Run single training instead of sweep")
+    parser.add_argument("--topology", type=str, default="small_world", 
+                       choices=["small_world", "modular", "hybrid", "fully_connected"],
+                       help="Network topology type")
+    parser.add_argument("--task", type=str, default="CartPole-v1",
+                       choices=["CartPole-v1", "Acrobot-v1", "LunarLander-v2"],
+                       help="Environment to train on")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--no_wandb", action="store_true", help="Disable W&B logging")
+    parser.add_argument("--phase3", action="store_true", help="Enable Phase 3 advanced analysis")
     
     args = parser.parse_args()
     
-    # Show device information
-    print("🔧 Device Information:")
-    print(f"   Device: {DEVICE_INFO['device']}")
-    if DEVICE_INFO['is_cuda']:
-        print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
-        print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
-    else:
-        print("   Using CPU")
-    print()
+    print("🚀 Topology Playground - Continual Learning Training (Phase 2)")
+    print("=" * 80)
+    print(f"🎯 Configuration:")
+    print(f"   Topology: {args.topology}")
+    print(f"   Task: {args.task}")
+    print(f"   Seed: {args.seed}")
+    print(f"   W&B: {'Disabled' if args.no_wandb else 'Enabled'}")
+    print(f"   Phase 3 Analysis: {'Enabled' if args.phase3 else 'Disabled'}")
+    print(f"   Mode: {'Single Training' if args.single else 'Sweep'}")
+    print("=" * 80)
     
-    # Configuration system status
-    if CONFIG_SYSTEM_AVAILABLE:
-        print("✅ Configuration system: Unified config system available")
-        print("   Available configs: single, batch, fixed_capacity_batch")
-        print("   Available sweeps: fixed_network_sizes, fixed_capacities, continual_learning")
-    else:
-        print("⚠️  Configuration system: Using debug config only")
-    print()
+    # Create debug configuration
+    config = create_debug_config()
     
-    # Handle different run types
     if args.single:
-        print("🚀 Starting single training...")
-        run_single_training(topology_type=args.topology, seed=args.seed, task_name=args.task)
+        # Single training run with enhanced logging
+        print("🎯 Starting single training run...")
         
-    elif args.batch:
-        print("🚀 Starting batch training...")
-        run_batch_training(max_runs=args.max_runs)
-        
-    elif args.sweep:
-        print("🚀 Launching W&B sweep...")
-        run_sweep_training(args.sweep)
-        
-    elif args.interactive:
-        print("🎯 Interactive Training Mode")
-        print("=" * 50)
-        print("Available options:")
-        print("1. Single run")
-        print("2. Batch run")
-        print("3. Launch W&B sweep")
-        print("4. Exit")
-        
-        while True:
-            try:
-                choice = input("\nEnter your choice (1-4): ").strip()
-                
-                if choice == '1':
-                    topology = input("Enter topology type (modular/small_world/hybrid/fully_connected): ").strip()
-                    if topology in ['modular', 'small_world', 'hybrid', 'fully_connected']:
-                        task_input = input("Enter task (CartPole-v1/Acrobot-v1/LunarLander-v2) or press Enter for default: ").strip()
-                        task = task_input if task_input in ['CartPole-v1', 'Acrobot-v1', 'LunarLander-v2'] else None
-                        seed_input = input("Enter seed (or press Enter for default 42): ").strip()
-                        seed = int(seed_input) if seed_input.isdigit() else 42
-                        run_single_training(topology_type=topology, seed=seed, task_name=task)
-                    else:
-                        print("❌ Invalid topology type")
-                        
-                elif choice == '2':
-                    max_runs = input("Enter max runs (or press Enter for all): ").strip()
-                    max_runs = int(max_runs) if max_runs.isdigit() else None
-                    run_batch_training(max_runs=max_runs)
-                    
-                elif choice == '3':
-                    sweep_type = input("Enter sweep type (fixed_network_sizes/fixed_capacities/continual_learning): ").strip()
-                    if sweep_type in ['fixed_network_sizes', 'fixed_capacities', 'continual_learning']:
-                        run_sweep_training(sweep_type)
-                    else:
-                        print("❌ Invalid sweep type")
-                        
-                elif choice == '4':
-                    print("👋 Goodbye!")
-                    break
-                    
-                else:
-                    print("❌ Invalid choice. Please enter 1-4.")
-                    
-            except KeyboardInterrupt:
-                print("\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"❌ Error: {e}")
-                
+        try:
+            model, env = continual_learning_training(
+                config=config,
+                task_name=args.task,
+                topology_type=args.topology,
+                seed=args.seed,
+                use_wandb=not args.no_wandb,
+                enable_phase3=args.phase3
+            )
+            
+            print("✅ Single training completed successfully!")
+            print(f"📊 Model: {type(model).__name__}")
+            print(f"📊 Environment: {type(env).__name__}")
+            
+        except Exception as e:
+            print(f"❌ Training failed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+    
     else:
-        # Default: single run with modular topology
-        print("🚀 Starting default single training (modular topology)...")
-        run_single_training(topology_type='modular', seed=args.seed, task_name=args.task)
+        # Sweep mode (placeholder for future implementation)
+        print("🔄 Sweep mode not yet implemented in Phase 2")
+        print("   Use --single flag for individual training runs")
+        sys.exit(1)
     
