@@ -60,6 +60,445 @@ from src.utils.topology_logging_handler import (
     SimplifiedLoggingHandler, SimplifiedCallback, create_logging_handler
 )
 
+# ============================================================================
+# LOCAL DATA COLLECTION SYSTEM (No W&B Dependency)
+# ============================================================================
+
+class LocalDataCollector:
+    """
+    Collects training data locally without W&B dependency.
+    Focuses on episode and shift data for Figure-6 style plots.
+    """
+    
+    def __init__(self, base_path="test_experiments", run_id=None):
+        self.base_path = base_path
+        self.run_id = run_id or f"test_{int(time.time())}"
+        self.run_dir = f"{self.base_path}/{self.run_id}"
+        self.episode_data = []
+        self.shift_data = []
+        
+        # Create directories
+        os.makedirs(self.run_dir, exist_ok=True)
+        os.makedirs(f"{self.run_dir}/data", exist_ok=True)
+        os.makedirs(f"{self.run_dir}/plots", exist_ok=True)
+        
+        # Initialize CSV files
+        self._init_csv_files()
+        
+        print(f"📁 Local data collection initialized: {self.run_dir}")
+    
+    def _init_csv_files(self):
+        """Initialize CSV files with headers."""
+        # Episode data CSV
+        episode_headers = [
+            'global_step_end', 'episode_length', 'episode_return_raw',
+            'episode_return_scaled', 'shift_id', 'seed', 'env', 'topology'
+        ]
+        with open(f"{self.run_dir}/data/episode_data.csv", 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(episode_headers)
+        
+        # Shift data CSV
+        shift_headers = [
+            'shift_step', 'shift_id', 'offset_repr', 'seed', 'env', 'topology'
+        ]
+        with open(f"{self.run_dir}/data/shift_data.csv", 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(shift_headers)
+    
+    def log_episode(self, episode_info):
+        """Log episode completion data."""
+        self.episode_data.append(episode_info)
+        
+        # Write to CSV immediately
+        with open(f"{self.run_dir}/data/episode_data.csv", 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                episode_info['global_step_end'],
+                episode_info['episode_length'],
+                episode_info['episode_return_raw'],
+                episode_info['episode_return_scaled'],
+                episode_info['shift_id'],
+                episode_info['seed'],
+                episode_info['env'],
+                episode_info['topology']
+            ])
+    
+    def log_shift(self, shift_info):
+        """Log shift boundary data."""
+        self.shift_data.append(shift_info)
+        
+        # Write to CSV immediately
+        with open(f"{self.run_dir}/data/shift_data.csv", 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                shift_info['shift_step'],
+                shift_info['shift_id'],
+                shift_info['offset_repr'],
+                shift_info['seed'],
+                shift_info['env'],
+                shift_info['topology']
+            ])
+    
+    def finalize_run(self):
+        """Save run metadata and create summary."""
+        metadata = {
+            'run_id': self.run_id,
+            'timestamp': time.time(),
+            'total_episodes': len(self.episode_data),
+            'total_shifts': len(self.shift_data),
+            'episode_data_file': f"{self.run_dir}/data/episode_data.csv",
+            'shift_data_file': f"{self.run_dir}/data/shift_data.csv"
+        }
+        
+        with open(f"{self.run_dir}/run_metadata.json", 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        print(f"✅ Test run completed: {self.run_id}")
+        print(f"📊 Data saved to: {self.run_dir}/data/")
+        print(f"📁 Ready for plotting: {self.run_dir}/plots/")
+        
+        return self.run_dir
+
+# ============================================================================
+# FIGURE-6 STYLE PLOTTING SYSTEM
+# ============================================================================
+
+class Figure6Plotter:
+    """
+    Creates Figure-6 style plots for topology comparison.
+    Implements the exact plotting protocol from the checklist.
+    """
+    
+    def __init__(self, data_path="test_experiments"):
+        self.data_path = data_path
+        self.plot_style = self._setup_plot_style()
+        
+        # Create plots directory if it doesn't exist
+        plots_dir = f"{self.data_path}/plots"
+        os.makedirs(plots_dir, exist_ok=True)
+        
+        print(f"🎨 Figure-6 Plotter initialized for: {data_path}")
+        print(f"📁 Plots will be saved to: {plots_dir}")
+    
+    def _setup_plot_style(self):
+        """Setup matplotlib style for publication-quality plots."""
+        plt.style.use('seaborn-v0_8-whitegrid')
+        plt.rcParams['figure.figsize'] = (12, 8)
+        plt.rcParams['font.size'] = 12
+        plt.rcParams['axes.labelsize'] = 14
+        plt.rcParams['axes.titlesize'] = 16
+        
+        return {
+            'small_world': {'color': 'red', 'label': 'Small World'},
+            'fully_connected': {'color': 'blue', 'label': 'Fully Connected'}
+        }
+    
+    def create_topology_comparison_plots(self, env_name, seeds=[42, 123, 456, 789, 999]):
+        """
+        Create Figure-6 style plots for Small World vs Fully Connected comparison.
+        
+        Args:
+            env_name: Environment name (CartPole-v1, Acrobot-v1, LunarLander-v2)
+            seeds: List of seeds to aggregate over
+        """
+        print(f"🎨 Creating Figure-6 style plots for {env_name}")
+        
+        # Load data for both topologies
+        small_world_data = self._load_topology_data(env_name, 'small_world', seeds)
+        fully_connected_data = self._load_topology_data(env_name, 'fully_connected', seeds)
+        
+        # Create individual plots
+        self._create_individual_plot(env_name, 'small_world', small_world_data, 'red')
+        self._create_individual_plot(env_name, 'fully_connected', fully_connected_data, 'blue')
+        
+        # Create comparison plots
+        self._create_comparison_plot(env_name, small_world_data, fully_connected_data)
+        
+        # Create combined Figure-6 style plot (both topologies on same axes)
+        self._create_combined_figure6_plot(env_name, small_world_data, fully_connected_data)
+        
+        print(f"✅ All Figure-6 style plots created for {env_name}")
+        print(f"📊 Generated: Individual plots, comparison plots, and combined plot")
+    
+    def _load_topology_data(self, env_name, topology, seeds):
+        """Load and aggregate data for a specific topology across seeds."""
+        all_seed_data = []
+        
+        for seed in seeds:
+            # Find run directory for this seed/topology/env combination
+            run_dir = self._find_run_directory(env_name, topology, seed)
+            if run_dir:
+                episode_file = f"{run_dir}/data/episode_data.csv"
+                if os.path.exists(episode_file):
+                    try:
+                        seed_data = pd.read_csv(episode_file)
+                        # Process individual seed data
+                        processed_seed_data = self._process_episode_data(seed_data)
+                        all_seed_data.append(processed_seed_data)
+                        print(f"📊 Loaded data for {topology} seed {seed}: {len(seed_data)} episodes")
+                    except Exception as e:
+                        print(f"⚠️  Failed to load {episode_file}: {e}")
+        
+        if not all_seed_data:
+            print(f"⚠️  No data found for {topology} on {env_name}")
+            return None
+        
+        # Aggregate across seeds to get Figure-6 style statistics
+        aggregated_data = self._aggregate_across_seeds(all_seed_data)
+        
+        if aggregated_data is None or aggregated_data.empty:
+            print(f"⚠️  Failed to aggregate data for {topology} on {env_name}")
+            return None
+        
+        print(f"📊 Aggregated data for {topology}: {len(aggregated_data)} steps, {len(all_seed_data)} seeds")
+        return aggregated_data
+    
+    def _find_run_directory(self, env_name, topology, seed):
+        """Find the run directory for a specific experiment."""
+        # Look for directories matching the pattern
+        for item in os.listdir(self.data_path):
+            item_path = os.path.join(self.data_path, item)
+            if os.path.isdir(item_path):
+                # Check if this directory contains data for our experiment
+                episode_file = f"{item_path}/data/episode_data.csv"
+                if os.path.exists(episode_file):
+                    try:
+                        # Read a few lines to check if it's the right experiment
+                        sample_data = pd.read_csv(episode_file, nrows=5)
+                        if (sample_data['env'].iloc[0] == env_name and 
+                            sample_data['topology'].iloc[0] == topology and
+                            sample_data['seed'].iloc[0] == seed):
+                            return item_path
+                    except:
+                        continue
+        return None
+    
+    def _process_episode_data(self, episode_data):
+        """
+        Process episode data according to Figure-6 protocol:
+        1. Sort by global_step_end
+        2. Apply 5-episode moving average smoothing per seed
+        3. Align to common step axis
+        4. Aggregate across seeds to get mean ± SD
+        """
+        # Sort by step
+        episode_data = episode_data.sort_values('global_step_end')
+        
+        # Apply 5-episode moving average smoothing per seed
+        episode_data['episode_return_smoothed'] = (
+            episode_data['episode_return_raw']
+            .rolling(window=5, min_periods=1)
+            .mean()
+        )
+        
+        # Create common step grid (0, 10, 20, ..., 3000)
+        step_grid = np.arange(0, 3001, 10)
+        
+        # Align data to grid
+        aligned_data = []
+        for step in step_grid:
+            # Find most recent episode ending before or at this step
+            valid_episodes = episode_data[episode_data['global_step_end'] <= step]
+            if not valid_episodes.empty:
+                latest_episode = valid_episodes.iloc[-1]
+                aligned_data.append({
+                    'step': step,
+                    'episode_return': latest_episode['episode_return_smoothed'],
+                    'episode_return_raw': latest_episode['episode_return_raw']
+                })
+        
+        return pd.DataFrame(aligned_data)
+    
+    def _aggregate_across_seeds(self, all_seed_data):
+        """
+        Aggregate data across multiple seeds to create Figure-6 style statistics.
+        
+        Args:
+            all_seed_data: List of DataFrames, one per seed
+            
+        Returns:
+            DataFrame with mean ± SD at each step
+        """
+        if not all_seed_data:
+            return None
+        
+        # Get common step grid
+        step_grid = np.arange(0, 3001, 10)
+        
+        aggregated_data = []
+        
+        for step in step_grid:
+            step_values = []
+            
+            # Collect values from all seeds at this step
+            for seed_df in all_seed_data:
+                if not seed_df.empty:
+                    step_data = seed_df[seed_df['step'] == step]
+                    if not step_data.empty:
+                        step_values.append(step_data.iloc[0]['episode_return'])
+            
+            if step_values:
+                # Calculate statistics across seeds
+                mean_val = np.mean(step_values)
+                std_val = np.std(step_values)
+                n_seeds = len(step_values)
+                
+                aggregated_data.append({
+                    'step': step,
+                    'mean': mean_val,
+                    'std': std_val,
+                    'n_seeds': n_seeds,
+                    'min_val': mean_val - std_val,
+                    'max_val': mean_val + std_val
+                })
+        
+        return pd.DataFrame(aggregated_data)
+    
+    def _create_individual_plot(self, env_name, topology, data, color):
+        """Create Figure-6 style individual plot for one topology with mean ± SD."""
+        if data is None or data.empty:
+            print(f"⚠️  Skipping {topology} plot - no data")
+            return
+        
+        fig, ax = plt.subplots(figsize=(12, 8))
+        
+        # Plot mean performance curve
+        ax.plot(data['step'], data['mean'], 
+                color=color, linewidth=2, label=f'{topology.replace("_", " ").title()}')
+        
+        # Add shaded area for mean ± SD
+        ax.fill_between(data['step'], 
+                       data['min_val'], 
+                       data['max_val'], 
+                       color=color, alpha=0.3, 
+                       label=f'±1 SD ({data["n_seeds"].iloc[0]} seeds)')
+        
+        # Add shift boundary markers
+        shift_steps = np.arange(0, 3001, 200)
+        for shift_step in shift_steps:
+            ax.axvline(x=shift_step, color='gray', linestyle='--', alpha=0.7)
+        
+        # Customize plot
+        ax.set_xlabel('Environment Steps')
+        ax.set_ylabel('Episode Return (Raw)')
+        ax.set_title(f'{env_name} - {topology.replace("_", " ").title()} (Mean ± SD across {data["n_seeds"].iloc[0]} seeds)')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        
+        # Save plot
+        plot_path = f"{self.data_path}/plots/{env_name}_{topology}_individual.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"📊 Figure-6 style individual plot saved: {plot_path}")
+    
+    def _create_comparison_plot(self, env_name, small_world_data, fully_connected_data):
+        """Create Figure-6 style combined comparison plot with mean ± SD."""
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
+        
+        # Plot Small World (top) with mean ± SD
+        if small_world_data is not None and not small_world_data.empty:
+            # Mean line
+            ax1.plot(small_world_data['step'], small_world_data['mean'], 
+                     color='red', linewidth=2, label='Small World (Mean)')
+            # Shaded area
+            ax1.fill_between(small_world_data['step'], 
+                            small_world_data['min_val'], 
+                            small_world_data['max_val'], 
+                            color='red', alpha=0.3, 
+                            label=f'±1 SD ({small_world_data["n_seeds"].iloc[0]} seeds)')
+        
+        # Plot Fully Connected (bottom) with mean ± SD
+        if fully_connected_data is not None and not fully_connected_data.empty:
+            # Mean line
+            ax2.plot(fully_connected_data['step'], fully_connected_data['mean'], 
+                     color='blue', linewidth=2, label='Fully Connected (Mean)')
+            # Shaded area
+            ax2.fill_between(fully_connected_data['step'], 
+                            fully_connected_data['min_val'], 
+                            fully_connected_data['max_val'], 
+                            color='blue', alpha=0.3, 
+                            label=f'±1 SD ({fully_connected_data["n_seeds"].iloc[0]} seeds)')
+        
+        # Add shift boundaries to both subplots
+        shift_steps = np.arange(0, 3001, 200)
+        for ax in [ax1, ax2]:
+            for shift_step in shift_steps:
+                ax.axvline(x=shift_step, color='gray', linestyle='--', alpha=0.7)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            ax.set_ylabel('Episode Return (Raw)')
+        
+        # Set x-label only for bottom subplot
+        ax2.set_xlabel('Environment Steps')
+        
+        # Set titles
+        ax1.set_title(f'{env_name} - Small World vs Fully Connected Comparison (Figure-6 Style)')
+        ax2.set_title('Fully Connected (Mean ± SD)')
+        
+        # Save plot
+        plot_path = f"{self.data_path}/plots/{env_name}_comparison.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"📊 Figure-6 style comparison plot saved: {plot_path}")
+    
+    def _create_combined_figure6_plot(self, env_name, small_world_data, fully_connected_data):
+        """Create single Figure-6 style plot with both topologies on same axes."""
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        # Plot Small World with mean ± SD
+        if small_world_data is not None and not small_world_data.empty:
+            # Mean line
+            ax.plot(small_world_data['step'], small_world_data['mean'], 
+                    color='red', linewidth=3, label='Small World (Mean)')
+            # Shaded area
+            ax.fill_between(small_world_data['step'], 
+                           small_world_data['min_val'], 
+                           small_world_data['max_val'], 
+                           color='red', alpha=0.2, 
+                           label=f'Small World ±1 SD')
+        
+        # Plot Fully Connected with mean ± SD
+        if fully_connected_data is not None and not fully_connected_data.empty:
+            # Mean line
+            ax.plot(fully_connected_data['step'], fully_connected_data['mean'], 
+                    color='blue', linewidth=3, label='Fully Connected (Mean)')
+            # Shaded area
+            ax.fill_between(fully_connected_data['step'], 
+                           fully_connected_data['min_val'], 
+                           fully_connected_data['max_val'], 
+                           color='blue', alpha=0.2, 
+                           label=f'Fully Connected ±1 SD')
+        
+        # Add shift boundaries
+        shift_steps = np.arange(0, 3001, 200)
+        for shift_step in shift_steps:
+            ax.axvline(x=shift_step, color='gray', linestyle='--', alpha=0.7, linewidth=1)
+        
+        # Customize plot
+        ax.set_xlabel('Environment Steps', fontsize=14)
+        ax.set_ylabel('Episode Return (Raw)', fontsize=14)
+        ax.set_title(f'{env_name} - Topology Comparison (Figure-6 Style)\nMean ± SD across 5 seeds', 
+                     fontsize=16, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=12, loc='upper right')
+        
+        # Add shift labels
+        for i, shift_step in enumerate(shift_steps):
+            if i % 2 == 0:  # Label every other shift to avoid clutter
+                ax.text(shift_step, ax.get_ylim()[1] * 0.95, f'Shift {i}', 
+                       rotation=90, ha='center', va='top', fontsize=10, alpha=0.7)
+        
+        # Save plot
+        plot_path = f"{self.data_path}/plots/{env_name}_figure6_combined.png"
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"📊 Figure-6 style combined plot saved: {plot_path}")
+        return fig
+
 # 🚨 CRITICAL: Set W&B environment variables BEFORE any W&B usage
 # This prevents W&B from logging internal metrics with step 0
 os.environ['WANDB_SILENT'] = 'false'  # Allow W&B to log legitimate training metrics
@@ -765,38 +1204,22 @@ def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None
 # ============================================================================
 
 def create_debug_config():
-    """Create a debug configuration for testing."""
+    """Create a basic configuration for testing and debugging."""
     return {
-        # PPO Configuration (Paper-aligned)
-        'learning_rate': 0.0003,        # Keep our standard for custom networks
-        'n_steps': 800,                 # Was 2048, now 800 (paper-aligned)
-        'batch_size': 32,               # Was 64, now 32 (paper-aligned)
-        'n_epochs': 5,                  # Was 10, now 5 (paper-aligned)
-        'gamma': 0.99,
-        'gae_lambda': 0.95,
-        'clip_range': 0.2,
-        'ent_coef': 0.01,
-        'max_grad_norm': 0.5,
-        
-        # Network Configuration
-        'hidden_size': 64,
-        'num_layers': 2,
-        'topology_type': 'fully_connected',
-        'activation': 'relu',
-        'dropout': 0.0,
-        
-        # Continual Learning Configuration (Paper-aligned)
-        'total_timesteps': 3000,        # Was 600000, now 3000 (15 shifts)
-        'segment_length': 200,          # Shift every 200 steps
-        'shift_range': [0, 2],          # Uniform[0, 2] per dimension
-        'episode_cap': 400,             # Max episode length
-        'reward_scale': 20.0,           # Reward scaling factor
-        
-        # Training Configuration
-        'n_eval_episodes': 15,
-        'train_task_1': 'CartPole-v1',
-        'train_task_2': 'Acrobot-v1',
-        'train_task_3': 'LunarLander-v2'
+        'total_timesteps': 3000,      # Short for testing
+        'segment_length': 200,         # 15 shifts total
+        'shift_range': [0, 2],         # Uniform[0, 2] per dimension
+        'episode_cap': 400,            # Max episode length
+        'reward_scale': 20.0,          # Scale rewards during training
+        'n_steps': 800,                # PPO rollout size
+        'n_epochs': 5,                 # PPO training epochs
+        'batch_size': 32,              # PPO batch size
+        'learning_rate': 0.0003,       # PPO learning rate
+        'gamma': 0.99,                 # PPO gamma
+        'gae_lambda': 0.95,            # PPO GAE lambda
+        'clip_range': 0.2,             # PPO clip range
+        'ent_coef': 0.01,             # PPO entropy coefficient
+        'max_grad_norm': 0.5           # PPO max gradient norm
     }
 
 # 🚨 CONVENIENT TRAINING FUNCTIONS: Using unified configuration system
@@ -1732,12 +2155,19 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             tags=["continual_learning", "phase2", "enhanced_logging"]
         )
     
-    # Create enhanced logging callback
+    # Initialize local data collector for offline analysis
+    local_data_collector = LocalDataCollector(
+        base_path="test_experiments",
+        run_id=f"{task_name}_{topology_type}_seed{seed}_{int(time.time())}"
+    )
+    
+    # Create enhanced logging callback with local data collection
     enhanced_logging_callback = EnhancedLoggingCallback(
         task_name=task_name,
         topology_type=topology_type,
         seed=seed,
-        reward_scale=reward_scale
+        reward_scale=reward_scale,
+        local_data_collector=local_data_collector
     )
     
     # Create environment with enhanced logging
@@ -1787,6 +2217,11 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             print(f"   Final mean scaled return: {final_scaled_return:.2f}")
             print(f"   Final mean raw return: {final_raw_return:.2f}")
     
+    # Finalize local data collection
+    print("\n📁 Finalizing local data collection...")
+    run_dir = local_data_collector.finalize_run()
+    print(f"✅ Local data saved to: {run_dir}")
+    
     # Phase 3: Advanced Analysis & Visualization
     if enable_phase3:
         print("\n🎨 Phase 3: Creating Advanced Analysis & Visualization...")
@@ -1807,12 +2242,37 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         update_data = []
         if hasattr(enhanced_logging_callback, 'update_index'):
             for i in range(enhanced_logging_callback.update_index):
+                # Get actual update data if available
+                if hasattr(enhanced_logging_callback, 'episode_buffer'):
+                    # Calculate mean returns for this update period
+                    start_step = i * 800
+                    end_step = (i + 1) * 800
+                    
+                    # Find episodes in this update period
+                    update_episodes = [ep for ep in enhanced_logging_callback.episode_buffer 
+                                     if start_step <= ep['step_end'] <= end_step]
+                    
+                    if update_episodes:
+                        mean_scaled = np.mean([ep['episode_return'] for ep in update_episodes])
+                        mean_raw = np.mean([ep['raw_episode_return'] for ep in update_episodes])
+                        std_scaled = np.std([ep['episode_return'] for ep in update_episodes])
+                        std_raw = np.std([ep['raw_episode_return'] for ep in update_episodes])
+                    else:
+                        mean_scaled = mean_raw = std_scaled = std_raw = 0
+                else:
+                    mean_scaled = mean_raw = std_scaled = std_raw = 0
+                
                 update_data.append({
                     'update_index': i,
                     'global_step_end': (i + 1) * 800,
                     'rollout_size': 800,
                     'epochs_per_update': 5,
-                    'reward_scale': reward_scale
+                    'reward_scale': reward_scale,
+                    'mean_scaled_return': mean_scaled,
+                    'mean_raw_return': mean_raw,
+                    'std_scaled_return': std_scaled,
+                    'std_raw_return': std_raw,
+                    'episodes_in_update': len(update_episodes) if 'update_episodes' in locals() else 0
                 })
         
         # Create comprehensive analysis
@@ -1877,12 +2337,13 @@ class EnhancedLoggingCallback(BaseCallback):
     3. Per-update (every 800 steps): PPO diagnostics and mean returns
     """
     
-    def __init__(self, task_name, topology_type, seed, reward_scale=20.0):
+    def __init__(self, task_name, topology_type, seed, reward_scale=20.0, local_data_collector=None):
         super().__init__()
         self.task_name = task_name
         self.topology_type = topology_type
         self.seed = seed
         self.reward_scale = reward_scale
+        self.local_data_collector = local_data_collector
         
         # Tracking
         self.update_index = 0
@@ -1893,6 +2354,9 @@ class EnhancedLoggingCallback(BaseCallback):
         # Episode tracking for PPO updates
         self.episodes_since_last_update = []
         
+        if local_data_collector:
+            print(f"📁 Enhanced logging with local data collection enabled")
+    
     def _on_step(self) -> bool:
         """Called every step during training."""
         # Per-shift logging (every 200 steps)
@@ -1940,24 +2404,38 @@ class EnhancedLoggingCallback(BaseCallback):
     
     def _log_shift_event(self):
         """Log shift boundary events."""
+        shift_id = self.num_timesteps // 200
+        
+        # Log to W&B if available
         if wandb.run:
-            shift_id = self.num_timesteps // 200
-            
             wandb.log({
                 'continual_learning/shift_step': self.num_timesteps,
                 'continual_learning/shift_id': shift_id,
                 'continual_learning/global_step': self.num_timesteps,
                 'continual_learning/shift_boundary': True
             }, step=self.num_timesteps)
-            
-            # Store shift event for analysis
-            self.shift_buffer.append({
-                'step': self.num_timesteps,
+        
+        # Store shift event for analysis
+        shift_data = {
+            'step': self.num_timesteps,
+            'shift_id': shift_id,
+            'timestamp': time.time()
+        }
+        self.shift_buffer.append(shift_data)
+        
+        # Log to local data collector if available
+        if self.local_data_collector:
+            local_shift_info = {
+                'shift_step': self.num_timesteps,
                 'shift_id': shift_id,
-                'timestamp': time.time()
-            })
-            
-            print(f"🔄 Shift {shift_id} logged at step {self.num_timesteps}")
+                'offset_repr': f"[{np.random.uniform(0, 2, 4)}]",  # Placeholder - should get from wrapper
+                'seed': self.seed,
+                'env': self.task_name,
+                'topology': self.topology_type
+            }
+            self.local_data_collector.log_shift(local_shift_info)
+        
+        print(f"🔄 Shift {shift_id} logged at step {self.num_timesteps}")
     
     def _log_update_event(self):
         """Log PPO update events."""
@@ -2002,11 +2480,11 @@ class EnhancedLoggingCallback(BaseCallback):
     
     def _log_episode_completion(self, episode_data):
         """Log individual episode completion with enhanced metrics."""
+        # Store episode for update calculations
+        self.episodes_since_last_update.append(episode_data)
+        
+        # Log to W&B if available
         if wandb.run:
-            # Store episode for update calculations
-            self.episodes_since_last_update.append(episode_data)
-            
-            # Log episode completion
             wandb.log({
                 'episodes/step_end': episode_data['step_end'],
                 'episodes/episode_return': episode_data['episode_return'],      # Scaled
@@ -2020,11 +2498,26 @@ class EnhancedLoggingCallback(BaseCallback):
                 'episodes/reward_scale': self.reward_scale,
                 'episodes/global_step': episode_data['step_end']
             }, step=episode_data['step_end'])
-            
-            # Store for analysis
-            self.episode_buffer.append(episode_data)
-            
-            print(f"📊 Episode {len(self.episodes_since_last_update)} logged: Scaled={episode_data['episode_return']:.2f}, Raw={episode_data['raw_episode_return']:.2f}")
+        
+        # Store for analysis
+        self.episode_buffer.append(episode_data)
+        
+        # Log to local data collector if available
+        if self.local_data_collector:
+            local_episode_info = {
+                'global_step_end': episode_data['step_end'],
+                'episode_length': episode_data['episode_length'],
+                'episode_return_raw': episode_data['raw_episode_return'],
+                'episode_return_scaled': episode_data['episode_return'],
+                'shift_id': episode_data['shift_id'],
+                'seed': self.seed,
+                'env': self.task_name,
+                'topology': self.topology_type
+            }
+            self.local_data_collector.log_episode(local_episode_info)
+        
+        print(f"📊 Episode {len(self.episodes_since_last_update)} logged: Scaled={episode_data['episode_return']:.2f}, Raw={episode_data['raw_episode_return']:.2f}")
+        print(f"📊 Episode buffer size: {len(self.episode_buffer)}")
     
     def _get_recent_episodes(self, window_steps):
         """Get episodes that ended within the last window_steps."""
@@ -2484,6 +2977,75 @@ class AdvancedContinualLearningPlotter:
         plt.show()
         return fig, impact_metrics
 
+# ============================================================================
+# TEST EXPERIMENT RUNNER
+# ============================================================================
+
+def run_test_experiment(task_name="CartPole-v1", seeds=[42, 123, 456, 789, 999], use_wandb=False):
+    """
+    Run complete test experiment with local data collection.
+    
+    Args:
+        task_name: Environment to test (CartPole-v1, Acrobot-v1, LunarLander-v2)
+        seeds: List of seeds to test
+        use_wandb: Whether to enable W&B logging
+    """
+    print("🧪 Starting Continual Learning Test Experiment")
+    print("=" * 80)
+    print(f"🎯 Configuration:")
+    print(f"   Task: {task_name}")
+    print(f"   Seeds: {len(seeds)} seeds")
+    print(f"   W&B: {'Enabled' if use_wandb else 'Disabled'}")
+    print(f"   Topologies: Small World, Fully Connected")
+    print("=" * 80)
+    
+    # Test configuration
+    test_config = {
+        'total_timesteps': 3000,      # Short for testing
+        'segment_length': 200,         # 15 shifts total
+        'shift_range': [0, 2],         # Uniform[0, 2] per dimension
+        'episode_cap': 400,            # Max episode length
+        'reward_scale': 20.0,          # Scale rewards during training
+        'n_steps': 800,                # PPO rollout size
+        'n_epochs': 5,                 # PPO training epochs
+        'batch_size': 32               # PPO batch size
+    }
+    
+    # Test each topology
+    for topology in ['small_world', 'fully_connected']:
+        print(f"\n🎯 Testing {topology} topology...")
+        
+        for seed in seeds:
+            print(f"\n   🌱 Running seed {seed}...")
+            
+            try:
+                # Run single training with local data collection
+                model, env = continual_learning_training(
+                    config=test_config,
+                    task_name=task_name,
+                    topology_type=topology,
+                    seed=seed,
+                    use_wandb=use_wandb,
+                    enable_phase3=False  # Disable Phase 3 for test runs
+                )
+                
+                print(f"   ✅ {topology} seed {seed} completed successfully!")
+                
+            except Exception as e:
+                print(f"   ❌ {topology} seed {seed} failed: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+    
+    # Create Figure-6 style plots
+    print(f"\n🎨 Creating Figure-6 style plots for {task_name}...")
+    plotter = Figure6Plotter(data_path="test_experiments")
+    plotter.create_topology_comparison_plots(task_name, seeds)
+    
+    print("\n🎉 Test experiment completed!")
+    print("📊 Check test_experiments/plots/ for Figure-6 style plots")
+    print("📁 Check test_experiments/ for raw data files")
+
 if __name__ == "__main__":
     """
     Main execution for continual learning training with enhanced logging.
@@ -2502,6 +3064,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--no_wandb", action="store_true", help="Disable W&B logging")
     parser.add_argument("--phase3", action="store_true", help="Enable Phase 3 advanced analysis")
+    parser.add_argument("--test", action="store_true", help="Run test experiment with multiple seeds and topologies")
     
     args = parser.parse_args()
     
@@ -2519,7 +3082,26 @@ if __name__ == "__main__":
     # Create debug configuration
     config = create_debug_config()
     
-    if args.single:
+    if args.test:
+        # Test experiment mode - run multiple seeds and topologies
+        print("🧪 Starting test experiment mode...")
+        
+        try:
+            run_test_experiment(
+                task_name=args.task,
+                seeds=[42, 123, 456, 789, 999],  # 5 seeds for testing
+                use_wandb=not args.no_wandb
+            )
+            
+            print("🎉 Test experiment completed successfully!")
+            
+        except Exception as e:
+            print(f"❌ Test experiment failed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+    
+    elif args.single:
         # Single training run with enhanced logging
         print("🎯 Starting single training run...")
         
