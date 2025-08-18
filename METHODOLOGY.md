@@ -69,27 +69,52 @@ continual_learning/        # Essential continual learning only
 
 ## Continual Learning with Observation Shifts
 
-### Experimental Setup
-- **Single Task Training**: Focus on one task with observation shifts
-- **Segment Length**: 200 steps per segment (configurable)
-- **Shift Range**: [0, 2] observation space modifications
-- **Total Lifetime**: 3,000 steps for rapid experimentation
+Our continual learning protocol follows the paper-accurate approach with **iteration-based training**:
 
-### Continual Learning Wrapper
-- **Observation Shifts**: Random modifications to input space every segment
-- **Segment Tracking**: Clear boundaries between learning phases
-- **Adaptation Analysis**: Measure how well networks adapt to changes
+### **Training Structure**
+- **Total Iterations**: 3,000 outer-loop iterations
+- **Iterations per Level**: 200 iterations per perturbation level
+- **Total Levels**: 15 perturbation levels (including clean baseline)
+- **Environment Steps per Iteration**: ~800 steps (2 episodes × 400 max steps)
+- **Total Environment Steps**: ~2.4 million steps (3,000 × 800)
+
+### **Perturbation Protocol**
+- **Level 0 (Iterations 0-199)**: Clean baseline with **NO NOISE** applied
+- **Level 1 (Iterations 200-399)**: First perturbation level
+- **Level 2 (Iterations 400-599)**: Second perturbation level
+- **...and so on...**
+
+**Key Insight**: Perturbation switches occur every **200 iterations**, not every 200 environment steps. This means each perturbation level lasts approximately **160,000 environment steps** (200 iterations × 800 steps), creating realistic continual learning scenarios.
+
+### **Reward Scaling Strategy**
+- **Training**: Rewards are **divided by 20** to create smaller gradients for stable learning
+- **Logging**: Raw returns are logged by **multiplying back by 20**, so plots show actual environment performance
+- **Net Effect**: Training uses down-scaled rewards, but analysis shows raw performance
+
+### **Pre-Generated Perturbations**
+All 15 perturbation vectors are generated at initialization using the run's seed, ensuring reproducibility. Each vector contains per-dimension additive offsets sampled from Uniform[0, 20].
 
 ### Training Configuration
 ```python
-CONTINUAL_LEARNING_CONFIG = {
-    'segment_length': 200,           # Steps per segment
-    'shift_range': [0, 2],          # Observation modification range
-    'total_lifetime_steps': 3000,    # Total training budget
-    'log_frequency': 100,            # Log every 100 steps
-    'episode_simulation': 500        # Simulate episodes every 500 steps
+CORRECTED_CONTINUAL_LEARNING_CONFIG = {
+    'max_iterations': 3000,          # Total iterations (maintained)
+    'level_switch': 200,             # Switch perturbation every 200 iterations
+    'levels': 15,                    # Total perturbation levels
+    'max_episodes_per_iteration': 2, # Episodes per iteration
+    'max_timesteps_per_episode': 400, # Max steps per episode
+    'total_env_steps': 2400000,      # ~2.4M total environment steps
+    'shift_boundaries': [0, 160000, 320000, 480000, 640000, 800000, 
+                         960000, 1120000, 1280000, 1440000, 1600000,
+                         1760000, 1920000, 2080000, 2240000, 2400000]
 }
 ```
+
+### Key Differences from Previous Implementation
+1. **Iteration-Based vs Step-Based**: Outer loop is iterations, not environment steps
+2. **Clean Baseline**: First 200 iterations have no perturbation
+3. **Proper Reward Scaling**: Division by 20, not multiplication
+4. **Correct Shift Timing**: Every 200 iterations ≈ 160K environment steps
+5. **Realistic Scale**: 2.4M total environment steps vs 3K steps
 
 ## Adaptive Training with Early Stopping
 

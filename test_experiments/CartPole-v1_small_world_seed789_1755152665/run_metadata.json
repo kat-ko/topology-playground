@@ -1,0 +1,8 @@
+{
+  "run_id": "CartPole-v1_small_world_seed789_1755152665",
+  "timestamp": 1755152671.2413876,
+  "total_episodes": 157,
+  "total_shifts": 16,
+  "episode_data_file": "test_experiments/CartPole-v1_small_world_seed789_1755152665/data/episode_data.csv",
+  "shift_data_file": "test_experiments/CartPole-v1_small_world_seed789_1755152665/data/shift_data.csv"
+}

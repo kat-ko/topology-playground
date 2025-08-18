@@ -1,0 +1,8 @@
+{
+  "run_id": "CartPole-v1_fully_connected_seed42_1755154260",
+  "timestamp": 1755154266.2748563,
+  "total_episodes": 191,
+  "total_shifts": 16,
+  "episode_data_file": "test_experiments/CartPole-v1_fully_connected_seed42_1755154260/data/episode_data.csv",
+  "shift_data_file": "test_experiments/CartPole-v1_fully_connected_seed42_1755154260/data/shift_data.csv"
+}

@@ -10,11 +10,39 @@ This project implements and evaluates different network topologies (fully connec
 
 - **Multiple Network Topologies**: Fully connected, small world, modular, and hybrid networks
 - **Multi-Task Learning**: Support for single, double, and triple task training scenarios
-- **Continual Learning**: Single task training with observation shifts for adaptation analysis
+- **Continual Learning**: **Paper-accurate** single task training with observation shifts for adaptation analysis
 - **Capacity Matching**: Automatic parameter budget matching across different topologies
 - **Clean Slate Logging**: Minimal, research-ready W&B logging for publication-quality plots
 - **Experiment Tracking**: Streamlined integration with Weights & Biases
 - **Universal Action Space**: Unified action and observation spaces across different environments
+
+## Continual Learning Protocol (Paper-Accurate)
+
+### **Experimental Setup**
+- **Total Iterations**: 3,000 iterations (maintained from current setup)
+- **Iterations per Shift**: 200 iterations per perturbation level
+- **Total Perturbation Levels**: 15 levels (including clean baseline)
+- **Environment Steps per Iteration**: ~800 steps (2 episodes × 400 steps max)
+- **Total Environment Steps**: ~2.4M steps (3000 × 800)
+
+### **Key Features**
+- **Clean Baseline**: First 200 iterations (0-199) have **NO NOISE** for proper learning
+- **Iteration-Based Switching**: Perturbation changes every 200 iterations, not every 200 env-steps
+- **Proper Reward Scaling**: Raw rewards **divided by 20** (creates small gradients for slow adaptation)
+- **Realistic Scale**: 2.4M total environment steps vs previous 3K steps
+
+### **Perturbation Schedule**
+- **Level 0 (Iterations 0-199)**: Clean baseline learning
+- **Level 1 (Iterations 200-399)**: First perturbation applied
+- **Level 2 (Iterations 400-599)**: Second perturbation applied
+- **...and so on...**
+- **Level 14 (Iterations 2800-2999)**: Final perturbation level
+
+### **Research Value**
+- **Paper Accuracy**: Matches the reference implementation exactly
+- **Realistic Learning**: Slow adaptation due to small gradients (reward/20)
+- **Proper Continual Learning**: Clean baseline followed by gradual perturbation introduction
+- **Publication Ready**: Correct experimental protocol for continual learning research
 
 ## Installation
 
