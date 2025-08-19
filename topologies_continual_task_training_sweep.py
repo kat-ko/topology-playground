@@ -42,6 +42,7 @@ from src.topologies.fully_connected import FullyConnectedTopology
 from src.topologies.small_world import SmallWorldTopology
 from src.topologies.modular import ModularTopology
 from src.topologies.hybrid import HybridTopology
+from src.topologies.standard_mlp import StandardMLPTopology
 from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
@@ -1001,16 +1002,22 @@ class DebugTopologyPolicy(ActorCriticPolicy):
     
     def _create_topology_network(self, network_type):
         """Create topology network based on type and parameters."""
+        # 1. Create topology object
         if self.topology_type == 'fully_connected':
-            return FullyConnectedTopology(
+            topology = FullyConnectedTopology(
                 size=self.hidden_size,  # Total network size (matches other topologies)
-                num_layers=self.num_layers,  # Number of layers (fully connected supports variable layers)
                 seed=42  # For reproducibility
+            )
+        elif self.topology_type == 'standard_mlp':
+            topology = StandardMLPTopology(
+                size=self.hidden_size,
+                num_layers=self.num_layers,  # MLP supports multiple layers
+                activation=self.activation
             )
         elif self.topology_type == 'small_world':
             k = getattr(wandb.config, 'small_world_k', 4) if wandb.run else 4
             p = getattr(wandb.config, 'small_world_p', 0.2) if wandb.run else 0.2
-            return SmallWorldTopology(
+            topology = SmallWorldTopology(
                 size=self.hidden_size,
                 k=k,
                 p=p
@@ -1019,7 +1026,7 @@ class DebugTopologyPolicy(ActorCriticPolicy):
             num_modules = getattr(wandb.config, 'modular_num_modules', 4) if wandb.run else 4
             inter_prob = getattr(wandb.config, 'modular_inter_module_prob', 0.1) if wandb.run else 0.1
             intra_prob = getattr(wandb.config, 'modular_intra_module_prob', 0.8) if wandb.run else 0.8
-            return ModularTopology(
+            topology = ModularTopology(
                 size=self.hidden_size,
                 num_modules=num_modules,
                 inter_module_prob=inter_prob,
@@ -1030,7 +1037,7 @@ class DebugTopologyPolicy(ActorCriticPolicy):
             k = getattr(wandb.config, 'hybrid_k', 4) if wandb.run else 4
             p = getattr(wandb.config, 'hybrid_p', 0.2) if wandb.run else 0.2
             inter_prob = getattr(wandb.config, 'hybrid_inter_module_prob', 0.1) if wandb.run else 0.1
-            return HybridTopology(
+            topology = HybridTopology(
                 size=self.hidden_size,
                 num_modules=num_modules,
                 k=k,
@@ -1039,19 +1046,130 @@ class DebugTopologyPolicy(ActorCriticPolicy):
             )
         else:
             raise ValueError(f"Unknown topology type: {self.topology_type}")
+        
+        # 2. Generate graph from topology
+        graph = topology.generate()
+        
+        # 3. Define input/output nodes (task-specific, no fallbacks)
+        try:
+            from stable_baselines3.common.preprocessing import get_flattened_obs_dim
+            # Observation dim - use actual observation space
+            if hasattr(self, 'observation_space') and self.observation_space is not None:
+                input_dim = int(get_flattened_obs_dim(self.observation_space))
+            else:
+                raise ValueError("Observation space not available - cannot create network")
+            
+            # Action dim - use actual action space
+            if hasattr(self, 'action_space') and self.action_space is not None:
+                action_space = self.action_space
+                if hasattr(action_space, 'n'):
+                    output_dim = int(action_space.n)
+                elif hasattr(action_space, 'shape') and len(action_space.shape) > 0:
+                    output_dim = int(action_space.shape[0])
+                else:
+                    raise ValueError("Action space not properly configured - cannot create network")
+            else:
+                raise ValueError("Action space not available - cannot create network")
+        except Exception as e:
+            # No fallbacks - fail explicitly if we can't determine dimensions
+            raise ValueError(f"Cannot determine network dimensions: {e}")
+        
+        input_nodes = list(range(input_dim))
+        output_nodes = list(range(input_dim + self.hidden_size, input_dim + self.hidden_size + output_dim))
+        
+        # 4. Create FeedForwardNetwork
+        network_params = {'learning_rate': 0.001, 'activation': 'tanh'}
+        network = FeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
+        
+        # 5. Return actual network (not topology object)
+        return network
     
     def get_effective_num_layers(self):
         """Get the effective number of layers for the current topology."""
-        if self.topology_type == 'fully_connected':
-            return self.num_layers  # Fully connected supports variable layers
+        if self.topology_type == 'standard_mlp':
+            return self.num_layers  # MLP supports multiple layers
         else:
-            return 1  # Other topologies always create single-layer networks
+            return 1  # All other topologies always create single-layer networks
     
     def _get_topology_params(self, topology_network):
-        """Get topology-specific parameters."""
-        if hasattr(topology_network, 'get_parameters'):
-            return topology_network.get_parameters()
-        return {}
+        """Get number of parameters in topology network."""
+        total_params = 0
+        try:
+            # For FeedForwardNetwork, count weights and biases from node_states
+            if hasattr(topology_network, 'node_states'):
+                for node, state in topology_network.node_states.items():
+                    # Count bias
+                    if 'bias' in state:
+                        total_params += 1
+                    # Count weights
+                    if 'weights' in state:
+                        total_params += len(state['weights'])
+            elif hasattr(topology_network, 'parameters'):
+                # Fallback to PyTorch parameters
+                for param in topology_network.parameters():
+                    total_params += param.numel()
+            else:
+                # For topology objects, create actual networks to count real parameters
+                if hasattr(topology_network, 'generate'):
+                    # Generate the actual graph from topology
+                    graph = topology_network.generate()
+                    
+                    # Define input/output nodes using TASK-SPECIFIC dimensions
+                    try:
+                        from stable_baselines3.common.preprocessing import get_flattened_obs_dim
+                        # Observation dim
+                        if hasattr(self, 'observation_space') and self.observation_space is not None:
+                            input_dim = int(get_flattened_obs_dim(self.observation_space))
+                        else:
+                            input_dim = 6  # safe fallback
+                        
+                        # Action dim (Discrete or Box)
+                        if hasattr(self, 'action_space') and self.action_space is not None:
+                            action_space = self.action_space
+                            if hasattr(action_space, 'n'):
+                                output_dim = int(action_space.n)
+                            elif hasattr(action_space, 'shape') and len(action_space.shape) > 0:
+                                output_dim = int(action_space.shape[0])
+                            else:
+                                output_dim = 1
+                        else:
+                            output_dim = 3  # safe fallback
+                    except Exception:
+                        # As a last resort, keep previous safe defaults
+                        input_dim = 6
+                        output_dim = 3
+                    
+                    hidden_size = getattr(topology_network, 'size', 128)
+                    
+                    input_nodes = list(range(input_dim))
+                    output_nodes = list(range(input_dim + hidden_size, input_dim + hidden_size + output_dim))
+                    
+                    # Create actual network to count real parameters
+                    from src.networks.ffn import FeedForwardNetwork
+                    network_params = {'learning_rate': 0.001, 'activation': 'tanh'}
+                    network = FeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
+                    
+                    # Now count actual parameters from the real network
+                    if hasattr(network, 'node_states'):
+                        for node, state in network.node_states.items():
+                            # Count bias
+                            if 'bias' in state:
+                                total_params += 1
+                            # Count weights
+                            if 'weights' in state:
+                                total_params += len(state['weights'])
+                    else:
+                        # Fallback to PyTorch parameters
+                        for param in network.parameters():
+                            total_params += param.numel()
+                else:
+                    # If we can't create a network, we can't count real parameters
+                    print(f"       ⚠️  Cannot create network from topology for parameter counting")
+                    total_params = 0
+        except Exception as e:
+            print(f"       ⚠️  Error counting parameters: {e}")
+            total_params = 0
+        return total_params
     
     def _debug_network_structure(self):
         """Debug and log network structure."""
@@ -1059,10 +1177,9 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         pass
     
     def _create_input_mask(self, x: torch.Tensor) -> torch.Tensor:
-        """Create input mask for universal observation space."""
-        # Create mask for 6-dimensional input (first 6 dimensions are valid)
-        mask = torch.ones(x.shape[0], 6, device=x.device)
-        return mask
+        """Create input mask matching current observation dimensionality."""
+        # Mask all observed dimensions (no universal padding)
+        return torch.ones_like(x, device=x.device)
     
     def _apply_input_masking(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Apply input masking to observations."""
@@ -1294,6 +1411,106 @@ def create_run_tags(config, topology_type, training_type, model=None, total_para
     
     return tags
 
+def create_continual_learning_run_name(config, topology_type, task_name, seed, model=None, shift_range=None):
+    """
+    Create enhanced run name for continual learning experiments.
+    
+    Format: {topology_type}_{network_details}_{task_abbrev}_{seed}_{experiment_details}
+    Example: SW_L3_S128_P12345_CP_seed42_L15_I3000_LS200_N02
+    """
+    # Topology abbreviation
+    topology_abbrev = {
+        'small_world': 'SW',
+        'modular': 'MOD', 
+        'hybrid': 'HYB',
+        'fully_connected': 'FC'
+    }.get(topology_type, topology_type.upper())
+    
+    # Get actual topology parameters for more detailed naming
+    topology_params = ''
+    if model is not None and hasattr(model, 'policy'):
+        try:
+            policy = model.policy
+            if topology_type == 'small_world':
+                k = config.get('small_world_k', 4)
+                p = config.get('small_world_p', 0.2)
+                topology_params = f"_k{k}_p{p:.1f}"
+            elif topology_type == 'modular':
+                num_modules = config.get('modular_num_modules', 4)
+                inter_prob = config.get('modular_inter_module_prob', 0.1)
+                intra_prob = config.get('modular_intra_module_prob', 0.8)
+                topology_params = f"_m{num_modules}_i{inter_prob:.1f}_a{intra_prob:.1f}"
+            elif topology_type == 'hybrid':
+                num_modules = config.get('hybrid_num_modules', 4)
+                k = config.get('hybrid_k', 4)
+                p = config.get('hybrid_p', 0.2)
+                inter_prob = config.get('hybrid_inter_module_prob', 0.1)
+                topology_params = f"_m{num_modules}_k{k}_p{p:.1f}_i{inter_prob:.1f}"
+        except Exception:
+            topology_params = ''
+    
+    # Get actual parameter count from the model
+    total_params = 0
+    if model is not None and hasattr(model, 'policy'):
+        try:
+            policy = model.policy
+            # Extract actual topology parameters using the policy's method
+            if hasattr(policy, '_get_topology_params'):
+                actor_params = policy._get_topology_params(policy.actor_topology)
+                critic_params = policy._get_topology_params(policy.critic_topology)
+                total_params = actor_params + critic_params
+            else:
+                # Fallback to PyTorch parameter counting
+                total_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
+        except Exception:
+            # Fallback to estimated parameters
+            hidden_size = config.get('hidden_size', 128)
+            num_layers = config.get('num_layers', 1)
+            estimated_params = hidden_size * 64 + hidden_size * hidden_size * (num_layers - 1) + hidden_size * 64
+            total_params = int(estimated_params)
+    
+    # Get network details
+    hidden_size = config.get('hidden_size', 128)
+    num_layers = config.get('num_layers', 1)
+    
+    # Task abbreviation
+    task_abbrev = {
+        'LunarLander-v2': 'LL',
+        'Acrobot-v1': 'AC', 
+        'CartPole-v1': 'CP',
+        'MountainCar-v0': 'MC'
+    }.get(task_name, task_name[:2].upper())
+    
+    # Experiment details
+    num_levels = config.get('max_iterations', 3000) // config.get('level_switch', 200)
+    max_iterations = config.get('max_iterations', 3000)
+    level_switch = config.get('level_switch', 200)
+    
+    # Noise interval from shift_range
+    noise_interval = 'N00'
+    if shift_range and len(shift_range) == 2:
+        noise_interval = f"N{int(shift_range[0]):02d}{int(shift_range[1]):02d}"
+    
+    # Build name parts
+    name_parts = [
+        topology_abbrev,
+        f"L{num_layers}",
+        f"S{hidden_size}",
+        f"P{total_params}",
+        task_abbrev,
+        f"seed{seed}",
+        f"L{num_levels}",
+        f"I{max_iterations}",
+        f"LS{level_switch}",
+        noise_interval
+    ]
+    
+    # Add topology-specific parameters if available
+    if topology_params:
+        name_parts.append(topology_params.lstrip('_'))  # Remove leading underscore
+    
+    return "_".join(name_parts)
+
 def log_baseline_results(wandb_run, baseline_results, topology_type):
     """Log baseline evaluation results with streamlined structure."""
     
@@ -1378,7 +1595,7 @@ def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None
 # CONFIGURATION AND UTILITY FUNCTIONS
 # ============================================================================
 
-def create_debug_config(num_levels=15):
+def create_debug_config(num_levels=15, num_layers=1):
     """Create a basic configuration for testing and debugging (Paper-Accurate)."""
     return {
         'max_iterations': num_levels * 200,  # Total iterations = num_levels × 200
@@ -1394,7 +1611,8 @@ def create_debug_config(num_levels=15):
         'gae_lambda': 0.95,            # PPO GAE lambda
         'clip_range': 0.2,             # PPO clip range
         'ent_coef': 0.01,             # PPO entropy coefficient
-        'max_grad_norm': 0.5           # PPO max gradient norm
+        'max_grad_norm': 0.5,          # PPO max gradient norm
+        'num_layers': num_layers       # Number of layers for topology networks
     }
 
 # 🚨 CONVENIENT TRAINING FUNCTIONS: Using unified configuration system
@@ -2314,9 +2532,12 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     
     # Initialize W&B if requested
     if use_wandb:
+        # Create initial run name (will be updated with actual parameters later)
+        initial_run_name = f"continual_learning_{task_name}_{topology_type}_seed{seed}"
+        
         wandb.init(
-            project="topology-playground",
-            name=f"continual_learning_{task_name}_{topology_type}_seed{seed}",
+            project="topologies--continual-learning-training",
+            name=initial_run_name,
             config={
                 'task_name': task_name,
                 'topology_type': topology_type,
@@ -2360,10 +2581,16 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         num_levels=config.get('max_iterations', 3000) // 200  # Calculate from max_iterations
     )()
     
-    # Create model with custom policy
+    # Create model with custom topology policy
     model = PPO(
-        "MlpPolicy",
-        env,
+        policy=DebugTopologyPolicy,  # Use custom topology-aware policy
+        env=env,
+        policy_kwargs={
+            'topology_type': topology_type,
+            'hidden_size': config.get('hidden_size', 128),
+            'num_layers': config.get('num_layers', 1),
+            'config': config
+        },
         verbose=0,  # Disable verbose output to reduce terminal spam and speed up training
         learning_rate=config.get('learning_rate', 0.01),  # Paper-aligned learning rate
         n_steps=config.get('n_steps', 800),
@@ -2375,6 +2602,22 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         ent_coef=config.get('ent_coef', 0.01),
         max_grad_norm=config.get('max_grad_norm', 0.5)
     )
+    
+    # Update W&B run name with actual parameters if W&B is enabled
+    if use_wandb and wandb.run is not None:
+        try:
+            # Create sophisticated run name with actual parameters
+            sophisticated_run_name = create_continual_learning_run_name(
+                config, topology_type, task_name, seed, model, shift_range
+            )
+            
+            # Update the run name
+            wandb.run.name = sophisticated_run_name
+            print(f"✅ Updated run name with actual parameters: {sophisticated_run_name}")
+            
+        except Exception as e:
+            print(f"⚠️  Could not update run name with actual parameters: {e}")
+            print(f"   Using initial run name: {initial_run_name}")
     
     # PAPER-ACCURATE ITERATION-BASED TRAINING
     print(f"🎯 Starting iteration-based training for {max_iterations} iterations...")
@@ -2644,7 +2887,7 @@ class EnhancedLoggingCallback(BaseCallback):
         
         if level == 0:
             print(f"🔄 Level {level} change logged at iteration {iteration}: Clean baseline (NO NOISE)")
-        else:
+    else:
             print(f"🔄 Level {level} change logged at iteration {iteration}: Perturbation applied")
     
     def _log_update_event(self):
@@ -2673,7 +2916,7 @@ class EnhancedLoggingCallback(BaseCallback):
                     'mean_raw_return': mean_raw_return,
                     'episodes_in_update': len(recent_episodes)
                 }
-            else:
+    else:
                 # Store update data for the iteration vs. rewards plot (no episodes)
                 update_data = {
                     'update_index': self.update_index,
@@ -2742,7 +2985,7 @@ class EnhancedLoggingCallback(BaseCallback):
                     # Start new iteration
                     current_iteration = estimated_iteration
                     current_iteration_rewards = [update['mean_raw_return']]
-                else:
+                    else:
                     current_iteration_rewards.append(update['mean_raw_return'])
             
             # Add final iteration
@@ -3009,7 +3252,7 @@ class AdvancedContinualLearningPlotter:
             if mean_returns[i-1] > 0:  # Avoid division by zero
                 forgetting_rate = (mean_returns[i-1] - mean_returns[i]) / mean_returns[i-1]
                 forgetting_rates.append(forgetting_rate)
-            else:
+                    else:
                 forgetting_rates.append(0)
         
         # Create forgetting analysis plot
@@ -3094,7 +3337,7 @@ class AdvancedContinualLearningPlotter:
         if window_size > 1:
             moving_avg = np.convolve(returns, np.ones(window_size)/window_size, mode='valid')
             moving_avg_steps = steps[window_size-1:]
-        else:
+                else:
             moving_avg = returns
             moving_avg_steps = steps
         
@@ -3317,7 +3560,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Continual Learning Training with Enhanced Logging")
     parser.add_argument("--single", action="store_true", help="Run single training instead of sweep")
     parser.add_argument("--topology", type=str, default="small_world", 
-                       choices=["small_world", "modular", "hybrid", "fully_connected"],
+                       choices=["small_world", "modular", "hybrid", "fully_connected", "standard_mlp"],
                        help="Network topology type")
     parser.add_argument("--task", type=str, default="CartPole-v1",
                        choices=["CartPole-v1", "Acrobot-v1", "LunarLander-v2"],
@@ -3328,6 +3571,8 @@ if __name__ == "__main__":
     parser.add_argument("--test", action="store_true", help="Run test experiment with multiple seeds and topologies")
     parser.add_argument("--num_levels", type=int, default=15, 
                        help="Number of distribution shift levels (default: 15, each level = 200 iterations × 800 env steps)")
+    parser.add_argument("--num_layers", type=int, default=1, 
+                       help="Number of layers for topology networks (default: 1, standard_mlp supports multiple layers)")
     
     args = parser.parse_args()
     
@@ -3338,13 +3583,14 @@ if __name__ == "__main__":
     print(f"   Task: {args.task}")
     print(f"   Seed: {args.seed}")
     print(f"   Number of Levels: {args.num_levels}")
+    print(f"   Number of Layers: {args.num_layers}")
     print(f"   W&B: {'Disabled' if args.no_wandb else 'Enabled'}")
     print(f"   Phase 3 Analysis: {'Enabled' if args.phase3 else 'Disabled'}")
     print(f"   Mode: {'Single Training' if args.single else 'Sweep'}")
     print("=" * 80)
     
     # Create debug configuration
-    config = create_debug_config(args.num_levels)
+    config = create_debug_config(args.num_levels, args.num_layers)
     
     if args.test:
         # Test experiment mode - run multiple seeds and topologies
