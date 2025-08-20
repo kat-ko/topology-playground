@@ -732,6 +732,9 @@ class ContinualLearningWrapper(gym.Wrapper):
         """Set the current iteration and update perturbation level accordingly."""
         self.current_iteration = iteration
         
+        # Reset episode counter for new iteration to prevent accumulation
+        self.episodes_in_current_iteration = 0
+        
         # Calculate which perturbation level we're in
         # Switch every 200 iterations, not every 200 env steps
         new_level = iteration // self.level_switch
@@ -2667,7 +2670,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     
     print(f"\n🎯 Training completed! Total iterations: {max_iterations}")
     print(f"   Total environment steps: {total_env_steps:,}")
-    print(f"   Total perturbation levels: {max_iterations // level_switch + 1}")
+    print(f"   Total perturbation levels: {max_iterations // level_switch}")
     
     # Get final episode returns for analysis
     if hasattr(env, 'episode_returns'):

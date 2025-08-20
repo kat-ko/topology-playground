@@ -1,8 +1,0 @@
-{
-  "run_id": "CartPole-v1_modular_seed42_1755522620",
-  "timestamp": 1755524637.1136975,
-  "total_episodes": 63808,
-  "total_shifts": 4,
-  "episode_data_file": "test_experiments/CartPole-v1_modular_seed42_1755522620/data/episode_data.csv",
-  "shift_data_file": "test_experiments/CartPole-v1_modular_seed42_1755522620/data/shift_data.csv"
-}
