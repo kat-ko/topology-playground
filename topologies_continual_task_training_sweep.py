@@ -1648,7 +1648,7 @@ def run_single_training(config_name='single', topology_type=None, seed=42, task_
         if config.get('continual_learning', False):
             return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
         else:
-        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+            return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
     
     print(f"🚀 Starting single training with config: {config_name}")
     
@@ -1673,7 +1673,7 @@ def run_single_training(config_name='single', topology_type=None, seed=42, task_
     if config.get('continual_learning', False):
         return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
     else:
-    return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
 
 def run_batch_training(config_name='batch', max_runs=None, **overrides):
     """
@@ -1770,7 +1770,7 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
 def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15):
     """Create an environment with optional continual learning wrapper."""
     def _make_env():
-            env = gym.make(env_name)
+        env = gym.make(env_name)
         
         # Set seed for reproducibility using modern Gymnasium API
         if seed is not None:
@@ -2890,7 +2890,7 @@ class EnhancedLoggingCallback(BaseCallback):
         
         if level == 0:
             print(f"🔄 Level {level} change logged at iteration {iteration}: Clean baseline (NO NOISE)")
-    else:
+        else:
             print(f"🔄 Level {level} change logged at iteration {iteration}: Perturbation applied")
     
     def _log_update_event(self):
@@ -2919,7 +2919,7 @@ class EnhancedLoggingCallback(BaseCallback):
                     'mean_raw_return': mean_raw_return,
                     'episodes_in_update': len(recent_episodes)
                 }
-    else:
+            else:
                 # Store update data for the iteration vs. rewards plot (no episodes)
                 update_data = {
                     'update_index': self.update_index,
@@ -2988,7 +2988,7 @@ class EnhancedLoggingCallback(BaseCallback):
                     # Start new iteration
                     current_iteration = estimated_iteration
                     current_iteration_rewards = [update['mean_raw_return']]
-                    else:
+                else:
                     current_iteration_rewards.append(update['mean_raw_return'])
             
             # Add final iteration
@@ -3255,7 +3255,7 @@ class AdvancedContinualLearningPlotter:
             if mean_returns[i-1] > 0:  # Avoid division by zero
                 forgetting_rate = (mean_returns[i-1] - mean_returns[i]) / mean_returns[i-1]
                 forgetting_rates.append(forgetting_rate)
-                    else:
+            else:
                 forgetting_rates.append(0)
         
         # Create forgetting analysis plot
@@ -3340,7 +3340,7 @@ class AdvancedContinualLearningPlotter:
         if window_size > 1:
             moving_avg = np.convolve(returns, np.ones(window_size)/window_size, mode='valid')
             moving_avg_steps = steps[window_size-1:]
-                else:
+        else:
             moving_avg = returns
             moving_avg_steps = steps
         
