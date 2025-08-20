@@ -2,19 +2,32 @@
 
 A reinforcement learning framework for exploring network topologies in multi-task learning scenarios with clean, research-ready experimental design.
 
+## 🎯 **Current Status: PRODUCTION READY** ✅
+
+**Latest Updates (August 2024)**:
+- ✅ **Episode Counter Bug Fixed**: All topology levels now complete properly
+- ✅ **Level Counting Consistency**: Run names and completion messages now match
+- ✅ **W&B Integration**: Fully functional with accurate parameter counting
+- ✅ **Multi-Layer MLP Support**: Standard MLP baseline with configurable layers
+- ✅ **Task Compatibility**: Works with CartPole, Acrobot, and LunarLander
+- ✅ **Parameter Accuracy**: Actual parameter counts, not estimates
+- ✅ **Indentation Errors**: All syntax issues resolved
+
 ## Overview
 
-This project implements and evaluates different network topologies (fully connected, small world, modular, and hybrid) for reinforcement learning agents trained on multiple tasks. The framework supports single-task, double-task, triple-task, and continual learning training scenarios with streamlined analysis and visualization capabilities.
+This project implements and evaluates different network topologies (fully connected, small world, modular, hybrid, and standard MLP) for reinforcement learning agents trained on multiple tasks. The framework supports single-task, double-task, triple-task, and continual learning training scenarios with streamlined analysis and visualization capabilities.
 
 ## Features
 
-- **Multiple Network Topologies**: Fully connected, small world, modular, and hybrid networks
+- **Multiple Network Topologies**: Fully connected, small world, modular, hybrid, and **standard MLP baseline**
 - **Multi-Task Learning**: Support for single, double, and triple task training scenarios
-- **Continual Learning**: **Paper-accurate** single task training with observation shifts for adaptation analysis
+- **Continual Learning**:single task training with observation shifts for adaptation analysis
+- **Accurate Parameter Counting**: **Real parameter counts** from network states, not estimates
+- **Multi-Layer Support**: Standard MLP supports 1, 2, 3, 5+ layers with proper scaling
 - **Capacity Matching**: Automatic parameter budget matching across different topologies
 - **Clean Slate Logging**: Minimal, research-ready W&B logging for publication-quality plots
 - **Experiment Tracking**: Streamlined integration with Weights & Biases
-- **Universal Action Space**: Unified action and observation spaces across different environments
+- **Task-Specific Dimensions**: Dynamic input/output handling for different environments
 
 ## Continual Learning Protocol (Paper-Accurate)
 
@@ -95,25 +108,100 @@ pip install -r requirements.txt
 
 **Continual Learning Training** (Recommended):
 ```bash
-python topologies_continual_task_training_sweep.py --single --topology small_world --task CartPole-v1 --seed 42
+# Basic continual learning with 5 levels
+python topologies_continual_task_training_sweep.py --single --topology small_world --task CartPole-v1 --seed 42 --num_levels 5
+
+# Multi-layer MLP baseline
+python topologies_continual_task_training_sweep.py --single --topology standard_mlp --task CartPole-v1 --seed 42 --num_levels 5 --num_layers 3
+
+# Full experiment with 15 levels
+python topologies_continual_task_training_sweep.py --single --topology modular --task Acrobot-v1 --seed 42
 ```
 
-**Single Task Training**:
+**Available Topologies**:
+- `small_world`: Small world networks with configurable k and p parameters
+- `modular`: Modular networks with distinct functional modules
+- `hybrid`: Combination of small world and modular properties
+- `fully_connected`: Traditional dense neural networks
+- `standard_mlp`: Standard MLP baseline with configurable layers (1, 2, 3, 5+)
+
+**Available Tasks**:
+- `CartPole-v1`: Cart-pole balancing (4D observation, 2D action)
+- `Acrobot-v1`: Acrobot swing-up (6D observation, 3D action)
+- `LunarLander-v2`: Lunar lander (8D observation, 4D action)
+
+**Training Parameters**:
+- `--num_levels`: Number of perturbation levels (default: 15)
+- `--num_layers`: Number of layers for standard_mlp (default: 1)
+- `--seed`: Random seed for reproducibility
+- `--no_wandb`: Disable W&B logging if needed
+
+### Advanced Training
+
+**Test Experiment Mode** (Multiple seeds and topologies):
 ```bash
-python topologies--single-task-training.py
+python topologies_continual_task_training_sweep.py --test --task CartPole-v1 --num_levels 5
 ```
 
-**Double Task Training**:
+**W&B Sweep Integration**:
 ```bash
-python topologies--double-task-training.py
+# Launch hyperparameter sweep
+python wandb_sweep_config.py
 ```
 
-**Triple Task Training**:
+## Recent Fixes and Improvements
+
+### **Episode Counter Bug (August 2024)** ✅
+**Problem**: Training was stopping after 4 levels instead of completing all 5 levels due to episode counter accumulation across iterations.
+
+**Solution**: Added episode counter reset in `ContinualLearningWrapper.set_iteration()` method.
+
+**Result**: All topology levels now complete properly, ensuring full training coverage.
+
+### **Level Counting Consistency** ✅
+**Problem**: Discrepancy between run names (showing L5) and completion messages (showing 6 levels).
+
+**Solution**: Fixed level calculation in training completion message to match run naming logic.
+
+**Result**: Consistent level counting throughout the system.
+
+### **Parameter Counting Accuracy** ✅
+**Problem**: System was estimating parameters instead of calculating actual counts from network states.
+
+**Solution**: Implemented accurate parameter counting from `FeedForwardNetwork.node_states`.
+
+**Result**: Run names now show real parameter counts (e.g., P1804 instead of P256).
+
+### **Multi-Layer MLP Support** ✅
+**Problem**: Only fully connected topology supported multiple layers, limiting baseline comparisons.
+
+**Solution**: Introduced `StandardMLPTopology` class with configurable layers (1, 2, 3, 5+).
+
+**Result**: Proper MLP baseline for comparing against graph-based topologies.
+
+### **Task-Specific Dimension Handling** ✅
+**Problem**: Universal action/observation spaces limited flexibility across different tasks.
+
+**Solution**: Dynamic input/output dimension handling based on actual task requirements.
+
+**Result**: Each topology adapts to task-specific dimensions (CartPole: 4D→2D, Acrobot: 6D→3D, LunarLander: 8D→4D).
+
+## Analysis Scripts
+
+**Systematic Topology Testing**:
 ```bash
-python topologies--triple-task-training.py
+python test_topology_systematic.py
 ```
 
-### Analysis Scripts
+**Task Dimension Compatibility**:
+```bash
+python test_task_dimensions.py
+```
+
+**MLP Multi-Layer Validation**:
+```bash
+python test_mlp_multilayer.py
+```
 
 **Analyze Single Task Results**:
 ```bash
@@ -130,14 +218,15 @@ python analyze_transfer_results_double_task.py
 python analyze_topology_depth.py
 ```
 
-### Configuration
+## Configuration
 
 The training scripts use centralized configuration through the `create_debug_config()` function. Key parameters include:
 
-- **Tasks**: CartPole-v1, MountainCar-v0, Acrobot-v1
-- **Topologies**: fully_connected, small_world, modular, hybrid
+- **Tasks**: CartPole-v1, Acrobot-v1, LunarLander-v2
+- **Topologies**: fully_connected, small_world, modular, hybrid, standard_mlp
 - **Training Parameters**: Learning rate, batch size, timesteps, etc.
 - **Capacity Matching**: Automatic parameter budget matching
+- **Multi-Layer Support**: Configurable layers for standard_mlp topology
 
 ## Clean Slate Experimental Design
 
@@ -175,9 +264,9 @@ continual_learning/        # Essential continual learning only
 
 ### Continual Learning Setup
 - **Single Task Training**: Focus on one task with observation shifts
-- **Segment Length**: 200 steps per segment (configurable)
+- **Segment Length**: 200 iterations per segment (configurable)
 - **Shift Range**: [0, 2] observation space modifications
-- **Total Lifetime**: 3,000 steps for rapid experimentation
+- **Total Lifetime**: 3,000 iterations for comprehensive experimentation
 - **Adaptation Analysis**: Measure how well networks adapt to changes
 
 ## Project Structure
@@ -186,10 +275,19 @@ continual_learning/        # Essential continual learning only
 topology-playground/
 ├── src/                          # Source code
 │   ├── topologies/              # Network topology implementations
+│   │   ├── small_world.py      # Small world networks
+│   │   ├── modular.py          # Modular networks
+│   │   ├── hybrid.py           # Hybrid networks
+│   │   ├── fully_connected.py  # Fully connected networks
+│   │   └── standard_mlp.py     # Standard MLP baseline
 │   ├── networks/                # Network architectures
+│   │   ├── ffn.py              # FeedForwardNetwork implementation
+│   │   └── base.py             # Base network classes
 │   ├── utils/                   # Utility functions
 │   ├── analysis/                # Analysis tools
 │   └── ...
+├── test_*.py                    # Testing and validation scripts
+├── wandb_sweep_config.py        # W&B sweep configurations
 ├── results/                     # Experiment results
 ├── logs/                        # Training logs
 ├── figures/                     # Generated visualizations
@@ -197,7 +295,6 @@ topology-playground/
 ├── tests/                       # Test files
 ├── requirements.txt             # Python dependencies
 ├── setup.py                     # Installation script
-├── METHODOLOGY.md               # Detailed methodology and approach
 └── README.md                    # This file
 ```
 
@@ -205,14 +302,15 @@ topology-playground/
 
 ### Network Topologies
 
-- **Fully Connected**: Traditional dense neural networks
 - **Small World**: Networks with high clustering and short path lengths
 - **Modular**: Networks with distinct functional modules
 - **Hybrid**: Combination of small world and modular properties
+- **Fully Connected**: Traditional dense neural networks
+- **Standard MLP**: Multi-layer perceptron baseline with configurable layers
 
 ### Training Scripts
 
-- **Continual Learning**: Single task with observation shifts (NEW)
+- **Continual Learning**: Single task with observation shifts (RECOMMENDED)
 - **Single Task**: Train on one task, evaluate on all tasks
 - **Double Task**: Train on two tasks sequentially, evaluate on all tasks
 - **Triple Task**: Train on all three tasks sequentially
@@ -239,9 +337,10 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"  # Add project to Python path
 
 ### Common Issues
 
-1. **CUDA/GPU Issues**:
+1. **CUDA/GPU Memory Issues**:
    ```bash
-   python gpu_test.ipynb  # Test GPU availability
+   # Force CPU usage if GPU memory is insufficient
+   CUDA_VISIBLE_DEVICES="" python topologies_continual_task_training_sweep.py --single --topology small_world --task CartPole-v1 --seed 42 --num_levels 5
    ```
 
 2. **Import Errors**:
@@ -252,6 +351,7 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"  # Add project to Python path
 3. **Memory Issues**:
    - Reduce batch size in configuration
    - Use smaller network sizes
+   - Use fewer layers for standard_mlp
    - Enable gradient checkpointing
 
 4. **WandB Issues**:
@@ -264,6 +364,7 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"  # Add project to Python path
 - Use GPU acceleration when available
 - Adjust batch sizes based on available memory
 - Use appropriate network sizes for your hardware
+- Use fewer layers if memory is constrained
 - Enable mixed precision training for faster execution
 
 ## Contributing
