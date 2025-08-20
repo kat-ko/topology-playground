@@ -22,13 +22,15 @@ class BaseNetwork(ABC):
         self.input_nodes = input_nodes
         self.output_nodes = output_nodes
         self.network_params = network_params
-        self.num_nodes = len(list(topology.nodes()))
         
         # Store original topology for metrics
         self.original_topology = topology
         
         # First prune all forbidden edges (input-input and output-output)
         self.topology = prune_forbidden_edges(topology, input_nodes, output_nodes)
+        
+        # Update num_nodes to reflect the pruned topology (should be the same, but ensures consistency)
+        self.num_nodes = len(list(self.topology.nodes()))
         
         # Then initialize topology validator with pruned topology
         self.validator = TopologyValidator(self.topology, input_nodes, output_nodes)

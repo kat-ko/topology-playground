@@ -80,15 +80,34 @@ class HybridTopology(BaseTopology, BasePlugin):
         
         return G
     
-    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
-        """Generate the hybrid network topology as a single connected graph."""
+    def generate(self, num_layers: int = 1, input_dim: int = None, output_dim: int = None) -> Union[nx.Graph, List[nx.Graph]]:
+        """
+        Generate the hybrid network topology as a single connected graph.
+        
+        Args:
+            num_layers: Number of layers (ignored for hybrid)
+            input_dim: Number of input nodes (if provided, extends graph)
+            output_dim: Number of output nodes (if provided, extends graph)
+        """
+        # Calculate total nodes needed
+        if input_dim is not None and output_dim is not None:
+            total_nodes = input_dim + self.size + output_dim
+        else:
+            total_nodes = self.size
+        
         G = nx.DiGraph()
-        G.add_nodes_from(range(self.size))
+        G.add_nodes_from(range(total_nodes))
+        
+        # Create hybrid connections only among hidden nodes
+        hidden_start = input_dim if input_dim is not None else 0
+        hidden_end = hidden_start + self.size
         
         # Create small-world graphs for each module (directed, acyclic)
         for module in range(self.num_modules):
             module_nodes = [node for node, mod in self.module_assignments.items() if mod == module]
-            module_graph = self._create_module_graph(module_nodes)
+            # Map module nodes to actual graph indices
+            actual_module_nodes = [hidden_start + node for node in module_nodes]
+            module_graph = self._create_module_graph(actual_module_nodes)
             G.add_edges_from(module_graph.edges())
         
         # Add inter-module connections (directed, acyclic)
@@ -97,13 +116,28 @@ class HybridTopology(BaseTopology, BasePlugin):
                 if module1 != module2:
                     module1_nodes = [node for node, mod in self.module_assignments.items() if mod == module1]
                     module2_nodes = [node for node, mod in self.module_assignments.items() if mod == module2]
+                    # Map to actual graph indices
+                    actual_module1_nodes = [hidden_start + node for node in module1_nodes]
+                    actual_module2_nodes = [hidden_start + node for node in module2_nodes]
                     # Sort nodes to ensure acyclicity
-                    module1_nodes.sort()
-                    module2_nodes.sort()
-                    for node1 in module1_nodes:
-                        for node2 in module2_nodes:
+                    actual_module1_nodes.sort()
+                    actual_module2_nodes.sort()
+                    for node1 in actual_module1_nodes:
+                        for node2 in actual_module2_nodes:
                             if node1 < node2 and self.rng.random() < self.inter_module_prob:
                                 G.add_edge(node1, node2)
+        
+        # Add connections from input nodes to hidden nodes
+        if input_dim is not None:
+            for input_node in range(input_dim):
+                for hidden_node in range(hidden_start, hidden_start + min(4, self.size)):  # Connect to first few hidden nodes
+                    G.add_edge(input_node, hidden_node)
+        
+        # Add connections from hidden nodes to output nodes
+        if output_dim is not None:
+            for output_node in range(hidden_end, total_nodes):
+                for hidden_node in range(hidden_end - min(4, self.size), hidden_end):  # Connect from last few hidden nodes
+                    G.add_edge(hidden_node, output_node)
         
         return G
     

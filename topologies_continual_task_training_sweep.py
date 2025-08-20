@@ -1002,7 +1002,31 @@ class DebugTopologyPolicy(ActorCriticPolicy):
     
     def _create_topology_network(self, network_type):
         """Create topology network based on type and parameters."""
-        # 1. Create topology object
+        # 1. Define input/output nodes (task-specific, no fallbacks) - FIRST
+        try:
+            from stable_baselines3.common.preprocessing import get_flattened_obs_dim
+            # Observation dim - use actual observation space
+            if hasattr(self, 'observation_space') and self.observation_space is not None:
+                input_dim = int(get_flattened_obs_dim(self.observation_space))
+            else:
+                raise ValueError("Observation space not available - cannot create network")
+            
+            # Action dim - use actual action space
+            if hasattr(self, 'action_space') and self.action_space is not None:
+                action_space = self.action_space
+                if hasattr(action_space, 'n'):
+                    output_dim = int(action_space.n)
+                elif hasattr(action_space, 'shape') and len(action_space.shape) > 0:
+                    output_dim = int(action_space.shape[0])
+                else:
+                    raise ValueError("Action space not properly configured - cannot create network")
+            else:
+                raise ValueError("Action space not available - cannot create network")
+        except Exception as e:
+            # No fallbacks - fail explicitly if we can't determine dimensions
+            raise ValueError(f"Cannot determine network dimensions: {e}")
+        
+        # 2. Create topology object
         if self.topology_type == 'fully_connected':
             topology = FullyConnectedTopology(
                 size=self.hidden_size,  # Total network size (matches other topologies)
@@ -1047,32 +1071,8 @@ class DebugTopologyPolicy(ActorCriticPolicy):
         else:
             raise ValueError(f"Unknown topology type: {self.topology_type}")
         
-        # 2. Generate graph from topology
-        graph = topology.generate()
-        
-        # 3. Define input/output nodes (task-specific, no fallbacks)
-        try:
-            from stable_baselines3.common.preprocessing import get_flattened_obs_dim
-            # Observation dim - use actual observation space
-            if hasattr(self, 'observation_space') and self.observation_space is not None:
-                input_dim = int(get_flattened_obs_dim(self.observation_space))
-            else:
-                raise ValueError("Observation space not available - cannot create network")
-            
-            # Action dim - use actual action space
-            if hasattr(self, 'action_space') and self.action_space is not None:
-                action_space = self.action_space
-                if hasattr(action_space, 'n'):
-                    output_dim = int(action_space.n)
-                elif hasattr(action_space, 'shape') and len(action_space.shape) > 0:
-                    output_dim = int(action_space.shape[0])
-                else:
-                    raise ValueError("Action space not properly configured - cannot create network")
-            else:
-                raise ValueError("Action space not available - cannot create network")
-        except Exception as e:
-            # No fallbacks - fail explicitly if we can't determine dimensions
-            raise ValueError(f"Cannot determine network dimensions: {e}")
+        # 3. Generate graph from topology with input/output dimensions
+        graph = topology.generate(input_dim=input_dim, output_dim=output_dim)
         
         input_nodes = list(range(input_dim))
         output_nodes = list(range(input_dim + self.hidden_size, input_dim + self.hidden_size + output_dim))
@@ -1147,7 +1147,10 @@ class DebugTopologyPolicy(ActorCriticPolicy):
                     # Create actual network to count real parameters
                     from src.networks.ffn import FeedForwardNetwork
                     network_params = {'learning_rate': 0.001, 'activation': 'tanh'}
-                    network = FeedForwardNetwork(graph, input_nodes, output_nodes, network_params)
+                    
+                    # Generate extended graph with input/output dimensions for accurate parameter counting
+                    extended_graph = topology_network.generate(input_dim=input_dim, output_dim=output_dim)
+                    network = FeedForwardNetwork(extended_graph, input_nodes, output_nodes, network_params)
                     
                     # Now count actual parameters from the real network
                     if hasattr(network, 'node_states'):
@@ -1645,7 +1648,7 @@ def run_single_training(config_name='single', topology_type=None, seed=42, task_
         if config.get('continual_learning', False):
             return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
         else:
-            return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
     
     print(f"🚀 Starting single training with config: {config_name}")
     
@@ -1670,7 +1673,7 @@ def run_single_training(config_name='single', topology_type=None, seed=42, task_
     if config.get('continual_learning', False):
         return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name)
     else:
-        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
+    return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
 
 def run_batch_training(config_name='batch', max_runs=None, **overrides):
     """
@@ -1767,7 +1770,7 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
 def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15):
     """Create an environment with optional continual learning wrapper."""
     def _make_env():
-        env = gym.make(env_name)
+            env = gym.make(env_name)
         
         # Set seed for reproducibility using modern Gymnasium API
         if seed is not None:

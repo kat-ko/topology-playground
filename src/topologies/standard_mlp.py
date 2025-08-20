@@ -38,22 +38,26 @@ class StandardMLPTopology(BaseTopology, BasePlugin):
         hidden_nodes = self.size * self.num_layers
         return hidden_nodes
     
-    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
+    def generate(self, num_layers: int = 1, input_dim: int = None, output_dim: int = None) -> Union[nx.Graph, List[nx.Graph]]:
         """
         Generate standard MLP network topology as a unified graph.
         
         Args:
             num_layers: Number of layers to generate (default: 1)
+            input_dim: Number of input nodes (if provided, extends graph)
+            output_dim: Number of output nodes (if provided, extends graph)
             
         Returns:
             Single unified graph representing MLP architecture
         """
-        # Use the provided num_layers parameter
-        if num_layers != self.num_layers:
-            # Recalculate for the new num_layers
-            total_nodes = self.size * num_layers
+        # Always use the provided num_layers parameter for consistency
+        hidden_nodes = self.size * num_layers
+        
+        # Calculate total nodes needed
+        if input_dim is not None and output_dim is not None:
+            total_nodes = input_dim + hidden_nodes + output_dim
         else:
-            total_nodes = self.total_nodes
+            total_nodes = hidden_nodes
         
         # Create empty directed graph
         G = nx.DiGraph()
@@ -64,20 +68,42 @@ class StandardMLPTopology(BaseTopology, BasePlugin):
         # Add connections representing MLP architecture
         # Each layer is fully connected to the next layer
         
+        # Calculate layer boundaries
+        input_start = 0
+        input_end = input_dim if input_dim is not None else 0
+        hidden_start = input_end
+        hidden_end = hidden_start + hidden_nodes
+        output_start = hidden_end
+        output_end = total_nodes
+        
+        # Connect input layer to first hidden layer
+        if input_dim is not None:
+            for i in range(input_start, input_end):
+                for j in range(hidden_start, hidden_start + self.size):
+                    G.add_edge(i, j)
+        
+        # Connect hidden layers to each other
         for layer_idx in range(num_layers):
-            # Calculate start and end indices for this layer
-            layer_start = layer_idx * self.size
+            # Calculate start and end indices for this hidden layer
+            layer_start = hidden_start + (layer_idx * self.size)
             layer_end = layer_start + self.size
             
-            # Add connections to next layer (if not the last layer)
+            # Add connections to next hidden layer (if not the last hidden layer)
             if layer_idx < num_layers - 1:
-                next_layer_start = (layer_idx + 1) * self.size
+                next_layer_start = hidden_start + ((layer_idx + 1) * self.size)
                 next_layer_end = next_layer_start + self.size
                 
                 # Connect all nodes from current layer to next layer
                 for i in range(layer_start, layer_end):
                     for j in range(next_layer_start, next_layer_end):
                         G.add_edge(i, j)  # Forward edge only
+        
+        # Connect last hidden layer to output layer
+        if output_dim is not None:
+            last_hidden_start = hidden_end - self.size
+            for i in range(last_hidden_start, hidden_end):
+                for j in range(output_start, output_end):
+                    G.add_edge(i, j)
         
         return G
     

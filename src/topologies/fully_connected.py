@@ -23,27 +23,34 @@ class FullyConnectedTopology(BaseTopology, BasePlugin):
         self.seed = seed
         self.rng = np.random.RandomState(seed)
     
-    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
+    def generate(self, num_layers: int = 1, input_dim: int = None, output_dim: int = None) -> Union[nx.Graph, List[nx.Graph]]:
         """
-        Generate fully connected network topology as a single complete graph.
+        Generate fully connected network topology as a single complete DAG.
         
         Args:
             num_layers: Ignored for fully connected topology (always creates single graph)
+            input_dim: Number of input nodes (if provided, extends graph)
+            output_dim: Number of output nodes (if provided, extends graph)
             
         Returns:
-            Single complete graph where every node connects to every other node
+            Single complete DAG where every node connects to every higher-indexed node
         """
+        # Calculate total nodes needed
+        if input_dim is not None and output_dim is not None:
+            total_nodes = input_dim + self.size + output_dim
+        else:
+            total_nodes = self.size
+        
         # Create empty directed graph
         G = nx.DiGraph()
         
         # Add all nodes
-        G.add_nodes_from(range(self.size))
+        G.add_nodes_from(range(total_nodes))
         
-        # Add connections: every node connects to every other node
-        for i in range(self.size):
-            for j in range(self.size):
-                if i != j:  # Don't connect node to itself
-                    G.add_edge(i, j)
+        # Add connections: every node connects to every higher-indexed node (ensures DAG)
+        for i in range(total_nodes):
+            for j in range(i + 1, total_nodes):  # Only connect to higher-indexed nodes
+                G.add_edge(i, j)
         
         return G
     

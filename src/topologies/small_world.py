@@ -25,17 +25,34 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
         self.seed = seed
         self.rng = np.random.RandomState(seed)
         
-    def generate(self, num_layers: int = 1) -> Union[nx.Graph, List[nx.Graph]]:
-        """Generate the small-world network topology as a single connected graph."""
-        G = nx.DiGraph()
-        G.add_nodes_from(range(self.size))
+    def generate(self, num_layers: int = 1, input_dim: int = None, output_dim: int = None) -> Union[nx.Graph, List[nx.Graph]]:
+        """
+        Generate the small-world network topology as a single connected graph.
         
-        # Create initial ring lattice structure (directed, acyclic)
-        for i in range(self.size):
-            # Only add edges to higher-indexed nodes to maintain acyclicity
+        Args:
+            num_layers: Number of layers (ignored for small world)
+            input_dim: Number of input nodes (if provided, extends graph)
+            output_dim: Number of output nodes (if provided, extends graph)
+        """
+        # Calculate total nodes needed
+        if input_dim is not None and output_dim is not None:
+            total_nodes = input_dim + self.size + output_dim
+        else:
+            total_nodes = self.size
+        
+        G = nx.DiGraph()
+        G.add_nodes_from(range(total_nodes))
+        
+        # Create small-world connections only among hidden nodes
+        hidden_start = input_dim if input_dim is not None else 0
+        hidden_end = hidden_start + self.size
+        
+        # Create initial ring lattice structure for hidden nodes (directed, acyclic)
+        for i in range(hidden_start, hidden_end):
+            # Only add edges to higher-indexed hidden nodes to maintain acyclicity
             for j in range(1, self.k // 2 + 1):
-                target = (i + j) % self.size
-                if target > i:  # Only add forward edges
+                target = hidden_start + ((i - hidden_start + j) % self.size)
+                if target > i and target < hidden_end:  # Only add forward edges within hidden layer
                     G.add_edge(i, target)
         
         # Rewire edges with probability p (maintaining acyclicity)
@@ -43,11 +60,23 @@ class SmallWorldTopology(BaseTopology, BasePlugin):
             if self.rng.random() < self.p:
                 # Remove the edge
                 G.remove_edge(*edge)
-                # Add a new random edge (only to higher-indexed nodes)
-                new_node = self.rng.randint(edge[0] + 1, self.size)
+                # Add a new random edge (only to higher-indexed hidden nodes)
+                new_node = self.rng.randint(edge[0] + 1, hidden_end)
                 while G.has_edge(edge[0], new_node):
-                    new_node = self.rng.randint(edge[0] + 1, self.size)
+                    new_node = self.rng.randint(edge[0] + 1, hidden_end)
                 G.add_edge(edge[0], new_node)
+        
+        # Add connections from input nodes to hidden nodes
+        if input_dim is not None:
+            for input_node in range(input_dim):
+                for hidden_node in range(hidden_start, hidden_start + min(self.k, self.size)):
+                    G.add_edge(input_node, hidden_node)
+        
+        # Add connections from hidden nodes to output nodes
+        if output_dim is not None:
+            for output_node in range(hidden_end, total_nodes):
+                for hidden_node in range(hidden_end - min(self.k, self.size), hidden_end):
+                    G.add_edge(hidden_node, output_node)
         
         return G
     
