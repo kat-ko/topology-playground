@@ -90,8 +90,8 @@ class FeedForwardNetwork(BaseNetwork):
                 for neighbor in self.topology.predecessors(layer):
                     weight = torch.tensor(self.node_states[layer]['weights'][neighbor], dtype=torch.float32, device=activations[neighbor].device)
                     weighted_sum += activations[neighbor] * weight
-                # Apply activation function (ReLU)
-                activations[layer] = torch.relu(weighted_sum)
+                # Apply activation function (LeakyReLU)
+                activations[layer] = torch.nn.LeakyReLU(0.1)(weighted_sum)
         
         # Return output node activations
         return {node: activations[node] for node in self.output_nodes}

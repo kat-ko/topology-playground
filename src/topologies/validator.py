@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Set, Tuple
 import networkx as nx
 import numpy as np
 from .utils import prune_output_edges
+import torch
 
 class TopologyValidator:
     """Validates network topology constraints and edge connections."""
@@ -99,8 +100,8 @@ class TopologyValidator:
                 for neighbor in self.topology.predecessors(layer):
                     weighted_sum += activations[neighbor]
                 
-                # Apply activation function (ReLU)
-                activations[layer] = max(0, weighted_sum)
+                # Apply activation function (LeakyReLU)
+                activations[layer] = torch.nn.LeakyReLU(0.1)(torch.tensor(weighted_sum, dtype=torch.float32))
         
         return activations
     
