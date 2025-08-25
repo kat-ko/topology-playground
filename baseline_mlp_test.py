@@ -216,6 +216,10 @@ class ContinualLearningWrapper(gym.Wrapper):
         print(f"   • Reward Scale: ÷{reward_scale}")
         print(f"   • Episode Cap: {episode_cap} steps")
         print(f"   • Episodes per Iteration: {self.max_episodes_per_iteration}")
+        if self.no_noise:
+            print(f"   🚫 NOISE DISABLED: Running no-noise ablation study")
+        else:
+            print(f"   🔧 Noise enabled: Gaussian perturbations applied")
     
     def set_iteration(self, iteration):
         """Set current iteration and update perturbation level."""
@@ -242,10 +246,18 @@ class ContinualLearningWrapper(gym.Wrapper):
                 print(f"   📊 Environment Steps: ~{iteration * 800:,}")
             else:
                 print(f"\n🎯 NEW NOISE LEVEL ACTIVATED:")
-                print(f"   📊 Level {self.current_level}: Noise Vector Applied")
-                print(f"   📍 Iteration: {iteration}")
-                print(f"   📊 Environment Steps: ~{iteration * 800:,}")
-                print(f"   🔧 Perturbation: {self.current_perturbation}")
+                if self.no_noise:
+                    # No-noise ablation study - show that no noise is applied
+                    print(f"   🚫 Level {self.current_level}: No-Noise Ablation (ZERO PERTURBATION)")
+                    print(f"   📍 Iteration: {iteration}")
+                    print(f"   📊 Environment Steps: ~{iteration * 800:,}")
+                    print(f"   🔧 Perturbation: ZERO (Noise disabled for ablation study)")
+                else:
+                    # Normal noise study - show actual perturbation
+                    print(f"   📊 Level {self.current_level}: Noise Vector Applied")
+                    print(f"   📍 Iteration: {iteration}")
+                    print(f"   📊 Environment Steps: ~{iteration * 800:,}")
+                    print(f"   🔧 Perturbation: {self.current_perturbation}")
         else:
             # Just update the perturbation without logging
             if self.current_level < len(self.perturbations):
@@ -263,8 +275,8 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Reset episode step counter
         self.episode_steps = 0
         
-        # Apply current perturbation
-        if self.current_level < len(self.perturbations):
+        # Apply current perturbation ONLY if noise is enabled
+        if not self.no_noise and self.current_level < len(self.perturbations):
             obs += self.perturbations[self.current_level]
         
         return obs, info
@@ -276,8 +288,8 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Increment episode step counter
         self.episode_steps += 1
         
-        # Apply current perturbation
-        if self.current_level < len(self.perturbations):
+        # Apply current perturbation ONLY if noise is enabled
+        if not self.no_noise and self.current_level < len(self.perturbations):
             obs += self.perturbations[self.current_level]
         
         # Scale reward (division by reward_scale)

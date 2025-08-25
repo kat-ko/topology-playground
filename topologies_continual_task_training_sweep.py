@@ -663,7 +663,7 @@ class ContinualLearningWrapper(gym.Wrapper):
     - Episode capping at 400 steps maximum
     """
     
-    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
+    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 1], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
         super().__init__(env)
         self.task_name = task_name
         self.max_iterations = max_iterations
@@ -727,7 +727,11 @@ class ContinualLearningWrapper(gym.Wrapper):
         print(f"   Reward scale: {reward_scale} (division factor)")
         print(f"   Episode cap: {episode_cap} steps")
         print(f"   Max episodes per iteration: {self.max_episodes_per_iteration}")
-        print(f"   Initial perturbation (Level 0): {self.current_perturbation}")
+        if self.no_noise:
+            print(f"   🚫 NOISE DISABLED: Running no-noise ablation study")
+            print(f"   Initial perturbation (Level 0): ZERO (Noise disabled)")
+        else:
+            print(f"   Initial perturbation (Level 0): {self.current_perturbation}")
         print(f"   Total perturbation levels: {len(self.perturbations)}")
         if logging_callback:
             print(f"   Enhanced logging: Enabled")
@@ -763,10 +767,18 @@ class ContinualLearningWrapper(gym.Wrapper):
                 print(f"   📊 Environment Steps: ~{iteration * 800:,}")
             else:
                 print(f"\n🎯 NEW NOISE LEVEL ACTIVATED:")
-                print(f"   📊 Level {self.current_level}: Noise Vector Applied")
-                print(f"   📍 Iteration: {iteration}")
-                print(f"   📊 Environment Steps: ~{iteration * 800:,}")
-                print(f"   🔧 Perturbation: {self.current_perturbation}")
+                if self.no_noise:
+                    # No-noise ablation study - show that no noise is applied
+                    print(f"   🚫 Level {self.current_level}: No-Noise Ablation (ZERO PERTURBATION)")
+                    print(f"   📍 Iteration: {iteration}")
+                    print(f"   📊 Environment Steps: ~{iteration * 800:,}")
+                    print(f"   🔧 Perturbation: ZERO (Noise disabled for ablation study)")
+                else:
+                    # Normal noise study - show actual perturbation
+                    print(f"   📊 Level {self.current_level}: Noise Vector Applied")
+                    print(f"   📍 Iteration: {iteration}")
+                    print(f"   📊 Environment Steps: ~{iteration * 800:,}")
+                    print(f"   🔧 Perturbation: {self.current_perturbation}")
             
             # Log level change to callback if available
             if self.logging_callback and hasattr(self.logging_callback, '_log_perturbation_level_change'):
@@ -782,8 +794,11 @@ class ContinualLearningWrapper(gym.Wrapper):
         """Step environment and apply current observation shift with reward scaling and episode capping."""
         obs, reward, done, truncated, info = self.env.step(action)
         
-        # Apply current perturbation to observation
-        shifted_obs = obs + self.current_perturbation
+        # Apply current perturbation to observation ONLY if noise is enabled
+        if self.no_noise:
+            shifted_obs = obs  # No perturbation when noise is disabled
+        else:
+            shifted_obs = obs + self.current_perturbation
         
         # Apply reward scaling (divide by 20 for training, as per notebook)
         scaled_reward = reward / self.reward_scale
@@ -814,8 +829,11 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Reset episode tracking
         self._reset_episode()
         
-        # Apply current perturbation to reset observation
-        shifted_obs = obs + self.current_perturbation
+        # Apply current perturbation to reset observation ONLY if noise is enabled
+        if self.no_noise:
+            shifted_obs = obs  # No perturbation when noise is disabled
+        else:
+            shifted_obs = obs + self.current_perturbation
         
         return shifted_obs, info
     
@@ -1614,7 +1632,7 @@ def create_debug_config(num_levels=15, num_layers=1):
     return {
         'max_iterations': num_levels * 200,  # Total iterations = num_levels × 200
         'level_switch': 200,           # Switch perturbation every 200 iterations
-        'shift_range': [0, 2],        # Uniform[0, 2] per dimension (increased from [0, 2])
+        'shift_range': [0, 1],        # Gaussian random [0, 1] per dimension (increased from [0, 1])
         'episode_cap': 400,            # Max episode length
         'reward_scale': 20.0,          # Division factor (creates small gradients)
         'n_steps': 800,                # PPO rollout size
@@ -1779,7 +1797,7 @@ def run_sweep_training(sweep_type='fixed_network_sizes'):
         print(f"❌ Failed to launch sweep: {e}")
         return None
 
-def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 2], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
+def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 1], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
     """Create an environment with optional continual learning wrapper."""
     def _make_env():
         env = gym.make(env_name)
@@ -2533,7 +2551,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     # Extract configuration parameters for paper-accurate approach
     max_iterations = config.get('max_iterations', 3000)  # Total iterations
     level_switch = config.get('level_switch', 200)       # Iterations per level
-    shift_range = config.get('shift_range', [0, 2])     # Perturbation range
+    shift_range = config.get('shift_range', [0, 1])     # Perturbation range
     reward_scale = config.get('reward_scale', 20.0)      # Division factor
     episode_cap = config.get('episode_cap', 400)         # Max steps per episode
     
@@ -2594,7 +2612,8 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         reward_scale=reward_scale,
         episode_cap=episode_cap,
         logging_callback=enhanced_logging_callback,
-        num_levels=config.get('max_iterations', 3000) // 200  # Calculate from max_iterations
+        num_levels=config.get('max_iterations', 3000) // 200,  # Calculate from max_iterations
+        no_noise=no_noise
     )()
     
     # Create model with custom topology policy
