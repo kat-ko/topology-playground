@@ -167,7 +167,7 @@ python baseline_mlp_test.py --task CartPole-v1 --seed 42 --num_levels 5 --no_cud
 
 ### **Training Parameters**
 - **PPO algorithm** with Stable-Baselines3
-- **Learning rate**: 0.01 (paper-accurate)
+- **Learning rate**: 0.01 
 - **Batch size**: 32
 - **Epochs per update**: 5
 - **Steps per update**: 800

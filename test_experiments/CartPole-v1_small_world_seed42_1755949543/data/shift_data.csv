@@ -1,2 +1,0 @@
-shift_step,shift_id,offset_repr,seed,env,topology
-160000,1,"[0.749080237694725, 1.9014286128198323, 1.4639878836228102, 1.1973169683940732]",42,CartPole-v1,small_world

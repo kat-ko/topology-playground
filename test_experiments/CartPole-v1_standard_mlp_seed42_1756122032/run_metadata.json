@@ -1,8 +1,0 @@
-{
-  "run_id": "CartPole-v1_standard_mlp_seed42_1756122032",
-  "timestamp": 1756124376.2225327,
-  "total_episodes": 15259,
-  "total_shifts": 9,
-  "episode_data_file": "test_experiments/CartPole-v1_standard_mlp_seed42_1756122032/data/episode_data.csv",
-  "shift_data_file": "test_experiments/CartPole-v1_standard_mlp_seed42_1756122032/data/shift_data.csv"
-}

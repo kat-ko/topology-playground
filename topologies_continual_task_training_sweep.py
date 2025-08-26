@@ -47,19 +47,9 @@ from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
-from src.utils.device_manager import get_device_manager, get_device_info
-from src.utils.task_normalization import (
-    compute_multi_task_metrics, log_normalized_metrics, print_normalized_summary,
-    get_task_thresholds, get_normalization_constants, normalize_reward,
-    calculate_reward_completion_percentage
-)
-from src.utils.advanced_plotting import (
-    log_streamlined_plots_for_run, create_multi_phase_learning_curves
-)
+from src.utils.device_manager import get_device_manager, get_device_info        
 from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
-from src.utils.topology_logging_handler import (
-    SimplifiedLoggingHandler, SimplifiedCallback, create_logging_handler
-)
+from src.utils.topology_logging_handler import (SimplifiedCallback, create_logging_handler)
 
 # ============================================================================
 # LOCAL DATA COLLECTION SYSTEM (No W&B Dependency)
@@ -200,7 +190,7 @@ class LocalDataCollector:
         return self.run_dir
 
 # ============================================================================
-# FIGURE-6 STYLE PLOTTING SYSTEM
+# FIGURE-6 STYLE TEST PLOTTING SYSTEM
 # ============================================================================
 
 class Figure6Plotter:
@@ -663,7 +653,7 @@ class ContinualLearningWrapper(gym.Wrapper):
     - Episode capping at 400 steps maximum
     """
     
-    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 1], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
+    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
         super().__init__(env)
         self.task_name = task_name
         self.max_iterations = max_iterations
@@ -904,100 +894,6 @@ class ContinualLearningWrapper(gym.Wrapper):
             'total_env_steps': self.total_env_steps,
             'total_episodes': len(self.episode_returns)
         }
-
-# ============================================================================
-# UNIVERSAL ACTION SPACE WRAPPER
-# ============================================================================
-
-class UniversalActionWrapper(gym.Wrapper):
-    """
-    Wrapper to create universal action space (3 actions) and universal observation space (6 dimensions) for all tasks.
-    Maps universal actions to task-specific actions using action masking.
-    Pads observations to universal dimensions.
-    """
-    
-    def __init__(self, env, task_name):
-        super().__init__(env)
-        self.task_name = task_name
-        
-        # Universal action space: 4 actions for all tasks (LunarLander-v2 needs 4)
-        self.action_space = gym.spaces.Discrete(4)
-        
-        # Universal observation space: 8 dimensions for all tasks (LunarLander-v2 needs 8)
-        self.observation_space = gym.spaces.Box(
-            low=-np.inf, 
-            high=np.inf, 
-            shape=(8,),  # Universal 8-dimensional observation space
-            dtype=np.float32
-        )
-        
-        # Task-specific action masks and mappings
-        self.action_masks = {
-            'CartPole-v1': [True, True, False, False],    # Actions 0,1 valid, 2,3 invalid
-            'Acrobot-v1': [True, True, True, False],      # Actions 0,1,2 valid, 3 invalid
-            'LunarLander-v2': [True, True, True, True]    # All 4 actions valid
-        }
-        
-        # Action mappings for invalid actions (fallback to valid action)
-        self.action_mappings = {
-            'CartPole-v1': {2: 0, 3: 0},      # Map actions 2,3 to action 0
-            'Acrobot-v1': {3: 0},             # Map action 3 to action 0
-            'LunarLander-v2': {}              # No mapping needed (all valid)
-        }
-        
-        self.current_mask = self.action_masks.get(task_name, [True, True, True])
-        self.current_mapping = self.action_mappings.get(task_name, {})
-    
-    def step(self, action):
-        """
-        Map universal action to task-specific action and step the environment.
-        Pad observations to universal dimensions.
-        """
-        # Convert numpy array to integer for dictionary lookup
-        if isinstance(action, np.ndarray):
-            action = int(action.item())
-        
-        # Map universal action to task-specific action
-        if action in self.current_mapping:
-            mapped_action = self.current_mapping[action]
-        else:
-            mapped_action = action
-        
-        # Step the environment with mapped action
-        obs, reward, done, truncated, info = self.env.step(mapped_action)
-        
-        # Pad observation to universal dimensions
-        padded_obs = self._pad_observation(obs)
-        
-        return padded_obs, reward, done, truncated, info
-    
-    def _pad_observation(self, obs):
-        """Pad observation to universal 8-dimensional space."""
-        if isinstance(obs, np.ndarray):
-            obs = obs.flatten()
-        else:
-            obs = np.array(obs).flatten()
-        
-        # Pad with zeros to reach 8 dimensions
-        if len(obs) < 8:
-            padded_obs = np.zeros(8, dtype=np.float32)
-            padded_obs[:len(obs)] = obs
-            return padded_obs
-        elif len(obs) > 8:
-            # Truncate to 8 dimensions
-            return obs[:8].astype(np.float32)
-        else:
-            return obs.astype(np.float32)
-    
-    def reset(self, **kwargs):
-        """Reset environment and pad observation."""
-        obs, info = self.env.reset(**kwargs)
-        padded_obs = self._pad_observation(obs)
-        return padded_obs, info
-    
-    def get_action_mask(self):
-        """Get action mask for current task."""
-        return self.current_mask
 
 class DebugTopologyPolicy(ActorCriticPolicy):
     """
@@ -1543,85 +1439,6 @@ def create_continual_learning_run_name(config, topology_type, task_name, seed, m
     
     return "_".join(name_parts)
 
-def log_baseline_results(wandb_run, baseline_results, topology_type):
-    """Log baseline evaluation results with streamlined structure."""
-    
-    for task, results in baseline_results.items():
-        # Streamlined baseline metrics
-        wandb_run.log({
-            f'baseline/{task}/mean_reward': results['mean_reward'],
-            f'baseline/{task}/success_rate': results['success_rate'],
-            f'baseline/{task}/mean_length': np.mean(results['lengths']),
-            f'baseline/{task}/std_reward': np.std(results['rewards']),
-            f'baseline/{task}/std_length': np.std(results['lengths'])
-        })
-
-def log_phase_results(wandb_run, phase_results, phase_idx, topology_type, task_order=None):
-    """Log results after each training phase with streamlined structure."""
-    
-    for task, results in phase_results.items():
-        # Streamlined phase metrics
-        base_path = f"phase_results/{topology_type}"
-        if task_order:
-            base_path += f"/{task_order}"
-        
-        wandb_run.log({
-            f'{base_path}/phase_{phase_idx}_{task}/mean_reward': results['mean_reward'],
-            f'{base_path}/phase_{phase_idx}_{task}/success_rate': results['success_rate'],
-            f'{base_path}/phase_{phase_idx}_{task}/mean_length': np.mean(results['lengths']),
-            f'{base_path}/phase_{phase_idx}_{task}/std_reward': np.std(results['rewards']),
-            f'{base_path}/phase_{phase_idx}_{task}/std_length': np.std(results['lengths'])
-        })
-
-def log_normalized_metrics(wandb_run, task_metrics, phase_idx, topology_type, task_order=None):
-    """Log normalized metrics with streamlined structure."""
-    
-    base_path = f"normalized_metrics/{topology_type}"
-    if task_order:
-        base_path += f"/{task_order}"
-    
-    # Task-specific normalized metrics
-    for task, metrics in task_metrics.items():
-        wandb_run.log({
-            f'{base_path}/phase_{phase_idx}_{task}/normalized_reward': metrics['normalized_reward'],
-            f'{base_path}/phase_{phase_idx}_{task}/steps_to_threshold': metrics['steps_to_threshold'],
-            f'{base_path}/phase_{phase_idx}_{task}/final_reward': metrics['final_reward']
-        })
-    
-    # Aggregated normalized metrics
-    final_normalized_score = np.mean([metrics['normalized_reward'] for metrics in task_metrics.values()])
-    efficiency_score = np.mean([metrics['steps_to_threshold'] for metrics in task_metrics.values()])
-    
-    wandb_run.log({
-        f'{base_path}/phase_{phase_idx}/final_normalized_score': final_normalized_score,
-        f'{base_path}/phase_{phase_idx}/efficiency_score': efficiency_score
-    })
-
-def log_transfer_metrics(wandb_run, transfer_metrics, phase_idx, topology_type, task_order=None):
-    """Log transfer learning metrics with streamlined structure."""
-    
-    base_path = f"transfer_metrics/{topology_type}"
-    if task_order:
-        base_path += f"/{task_order}"
-    
-    # Log all transfer metrics
-    for metric_name, value in transfer_metrics.items():
-        wandb_run.log({
-            f'{base_path}/phase_{phase_idx}/{metric_name}': value
-        })
-
-def log_final_analysis(wandb_run, final_analysis, topology_type, task_order=None):
-    """Log final analysis with streamlined structure."""
-    
-    base_path = f"final_analysis/{topology_type}"
-    if task_order:
-        base_path += f"/{task_order}"
-    
-    # Log all final analysis metrics
-    for metric_name, value in final_analysis.items():
-        wandb_run.log({
-            f'{base_path}/{metric_name}': value
-        })
 
 # ============================================================================
 # CONFIGURATION AND UTILITY FUNCTIONS
@@ -1632,7 +1449,7 @@ def create_debug_config(num_levels=15, num_layers=1):
     return {
         'max_iterations': num_levels * 200,  # Total iterations = num_levels × 200
         'level_switch': 200,           # Switch perturbation every 200 iterations
-        'shift_range': [0, 1],        # Gaussian random [0, 1] per dimension (increased from [0, 1])
+        'shift_range': [0, 2],        # Gaussian random[0, 2] per dimension (increased from [0, 2])
         'episode_cap': 400,            # Max episode length
         'reward_scale': 20.0,          # Division factor (creates small gradients)
         'n_steps': 800,                # PPO rollout size
@@ -1647,883 +1464,6 @@ def create_debug_config(num_levels=15, num_layers=1):
         'num_layers': num_layers       # Number of layers for topology networks
     }
 
-# 🚨 CONVENIENT TRAINING FUNCTIONS: Using unified configuration system
-def run_single_training(config_name='single', topology_type=None, seed=42, task_name=None, device=None, **overrides):
-    """
-    Run a single training session using unified configuration.
-    
-    Args:
-        config_name (str): 'single', 'batch', or 'fixed_capacity_batch'
-        topology_type (str): Override topology type if specified
-        seed (int): Random seed for reproducibility
-        task_name (str): Task to train on (for continual learning)
-        device (torch.device): Device to use for training
-        **overrides: Additional parameter overrides
-    """
-    if not CONFIG_SYSTEM_AVAILABLE:
-        print("❌ Configuration system not available. Using debug config.")
-        config = create_debug_config()
-        if topology_type:
-            config['topology_type'] = topology_type
-        if task_name:
-            config['task_name'] = task_name
-            # Force continual learning mode when task is specified
-            config['continual_learning'] = True
-        config.update(overrides)
-        
-        # Add seed to config for proper run naming
-        config['seed'] = seed
-        
-        # Choose training function based on config
-        if config.get('continual_learning', False):
-            return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name, device=device)
-        else:
-            return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
-    
-    print(f"🚀 Starting single training with config: {config_name}")
-    
-    # Get configuration
-    config = get_config_by_name(config_name)
-    
-    # Apply overrides
-    if topology_type:
-        config['topology_type'] = topology_type
-    if task_name:
-        config['task_name'] = task_name
-        # Force continual learning mode when task is specified
-        config['continual_learning'] = True
-    config.update(overrides)
-    
-    # Add seed to config for proper run naming
-    config['seed'] = seed
-    
-    print(f"📋 Configuration: {config}")
-    
-    # Choose training function based on config
-    if config.get('continual_learning', False):
-        return continual_learning_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed, task_name=task_name, device=device)
-    else:
-        return triple_task_training(DebugTopologyPolicy, config['topology_type'], config, seed=seed)
-
-def run_batch_training(config_name='batch', max_runs=None, device=None, **overrides):
-    """
-    Run batch training with multiple parameter combinations.
-    
-    Args:
-        config_name (str): 'batch' or 'fixed_capacity_batch'
-        max_runs (int): Maximum number of runs to execute
-        **overrides: Additional parameter overrides
-    """
-
-    if not CONFIG_SYSTEM_AVAILABLE:
-        print("❌ Configuration system not available. Cannot run batch training.")
-        return
-    
-    print(f"🚀 Starting batch training with config: {config_name}")
-    
-    # Get batch configuration
-    batch_config = get_config_by_name(config_name)
-    
-    # Apply overrides
-    batch_config.update(overrides)
-    
-    # Generate all combinations
-    combinations = generate_parameter_combinations(batch_config)
-    
-    if max_runs:
-        combinations = combinations[:max_runs]
-        print(f"📊 Limited to {max_runs} runs out of {len(combinations)} total combinations")
-    
-    print(f"📊 Total combinations to run: {len(combinations)}")
-    
-    # Run each combination
-    results = []
-    for i, combo_config in enumerate(combinations):
-        print(f"\n🔄 Running combination {i+1}/{len(combinations)}")
-        print(f"   Topology: {combo_config['topology_type']}")
-        print(f"   Hidden size: {combo_config.get('hidden_size', 'N/A')}")
-        print(f"   Task order: {combo_config.get('task_order', 'N/A')}")
-        print(f"   Seed: {combo_config.get('seed', 'N/A')}")
-        
-        try:
-            # Ensure seed is in the config for proper run naming
-            combo_config['seed'] = combo_config.get('seed', 42)
-            result = triple_task_training(DebugTopologyPolicy, combo_config['topology_type'], combo_config, seed=combo_config['seed'], device=device)
-            results.append(result)
-            print(f"✅ Combination {i+1} completed successfully")
-        except Exception as e:
-            print(f"❌ Combination {i+1} failed: {e}")
-            results.append(None)
-    
-    print(f"\n🎯 Batch training completed: {len([r for r in results if r is not None])}/{len(combinations)} successful")
-    return results
-
-def run_sweep_training(sweep_type='fixed_network_sizes'):
-    """
-    Launch W&B sweep training.
-    
-    Args:
-        sweep_type (str): 'fixed_network_sizes', 'fixed_capacities', or 'continual_learning'
-    """
-    if not CONFIG_SYSTEM_AVAILABLE:
-        print("❌ Configuration system not available. Cannot launch sweep.")
-        return
-    
-    print(f"🚀 Launching W&B sweep: {sweep_type}")
-    
-    try:
-        if sweep_type == 'fixed_network_sizes':
-            from wandb_sweep_config import create_fixed_network_sizes_triple_task_sweep
-            sweep_config = create_fixed_network_sizes_triple_task_sweep()
-        elif sweep_type == 'fixed_capacities':
-            from wandb_sweep_config import create_fixed_capacities_triple_task_sweep
-            sweep_config = create_fixed_capacities_triple_task_sweep()
-        elif sweep_type == 'continual_learning':
-            from wandb_sweep_config import create_continual_learning_sweep
-            sweep_config = create_continual_learning_sweep()
-        else:
-            print(f"❌ Unknown sweep type: {sweep_type}")
-            return
-        
-        # Launch sweep
-        import wandb
-        sweep_id = wandb.sweep(sweep_config, project='topology-research')
-        print(f"✅ Sweep launched with ID: {sweep_id}")
-        print(f"🔗 View at: https://wandb.ai/sweeps/{sweep_id}")
-        
-        return sweep_id
-        
-    except Exception as e:
-        print(f"❌ Failed to launch sweep: {e}")
-        return None
-
-def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 1], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
-    """Create an environment with optional continual learning wrapper."""
-    def _make_env():
-        env = gym.make(env_name)
-        
-        # Set seed for reproducibility using modern Gymnasium API
-        if seed is not None:
-            # Use the modern reset(seed=seed) method
-            env.reset(seed=seed)
-            # Seed action and observation spaces
-            env.action_space.seed(seed)
-            env.observation_space.seed(seed)
-            
-        # Apply continual learning wrapper if requested
-        if continual_learning:
-            env = ContinualLearningWrapper(env, env_name, max_iterations, level_switch, shift_range, seed, reward_scale, episode_cap, logging_callback, num_levels, no_noise)
-        
-        return env
-    
-    return _make_env
-
-def evaluate_model(model, env, n_eval_episodes=3):
-    """Evaluate model on environment."""
-    episode_rewards = []
-    episode_lengths = []
-    
-    for episode in range(n_eval_episodes):
-        # Handle different reset return signatures
-        reset_result = env.reset()
-        if isinstance(reset_result, tuple):
-            if len(reset_result) == 2:
-                obs, _ = reset_result
-            else:
-                obs = reset_result[0]
-        else:
-            obs = reset_result
-        
-        done = False
-        total_reward = 0
-        episode_length = 0
-        
-        while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            
-            # Handle different step return signatures
-            step_result = env.step(action)
-            if isinstance(step_result, tuple):
-                if len(step_result) == 5:
-                    obs, reward, done, truncated, _ = step_result
-                elif len(step_result) == 4:
-                    obs, reward, done, _ = step_result
-                    truncated = False
-                else:
-                    obs, reward, done = step_result
-                    truncated = False
-            else:
-                # Handle case where step returns a single value
-                obs, reward, done = step_result, 0, True
-                truncated = False
-            
-            total_reward += reward
-            episode_length += 1
-            done = done or truncated
-        
-        episode_rewards.append(total_reward)
-        episode_lengths.append(episode_length)
-    
-    return episode_rewards, episode_lengths
-
-def evaluate_model_enhanced(model, env, task_name, n_eval_episodes=3):
-    """Enhanced evaluation with task-specific metrics."""
-    episode_rewards, episode_lengths = evaluate_model(model, env, n_eval_episodes)
-    
-    # Calculate both success rate and completion percentage
-    success_rate, completion_pct = calculate_success_rate_with_completion(episode_rewards, episode_lengths, task_name)
-    
-    # Evaluation metrics logging removed - keeping only standard training metrics
-    pass
-    
-    return episode_rewards, episode_lengths, success_rate, completion_pct
-
-def calculate_success_rate(rewards, episode_lengths, task_name):
-    """Calculate success rate based on task-specific criteria."""
-    if task_name == 'CartPole-v1':
-        # Success: reward >= 500 (actual solved threshold) - consistent with completion
-        return np.mean([reward >= 500 for reward in rewards])
-    elif task_name == 'Acrobot-v1':
-        # Success: reward >= -80 (actual solved threshold)
-        return np.mean([reward >= -80 for reward in rewards])
-    elif task_name == 'LunarLander-v2':  # Replace MountainCar-v0
-        # Success: reward >= 200 (actual solved threshold)
-        return np.mean([reward >= 200 for reward in rewards])
-    else:
-        # Default: above average performance
-        mean_reward = np.mean(rewards)
-        return np.mean([reward >= mean_reward for reward in rewards])
-
-
-def calculate_success_rate_with_completion(rewards, episode_lengths, task_name):
-    """Calculate success rate with completion percentage for different tasks."""
-    if not rewards:
-        return 0.0, 0.0
-    
-    # Task-specific thresholds
-    thresholds = {
-        'CartPole-v1': 195.0,  # CartPole solved threshold
-        'Acrobot-v1': -100.0,  # Acrobot solved threshold (negative reward)
-        'LunarLander-v2': 200.0,  # LunarLander solved threshold
-        'MountainCar-v0': -110.0,  # MountainCar solved threshold
-    }
-    
-    # Default threshold if task not found
-    threshold = thresholds.get(task_name, 0.0)
-    
-    # Calculate success rate
-    successful_episodes = sum(1 for r in rewards if r >= threshold)
-    success_rate = successful_episodes / len(rewards)
-    
-    # Calculate completion percentage (how close to optimal performance)
-    if task_name == 'CartPole-v1':
-        # CartPole: 500 is max, 195 is solved, 0 is worst
-        max_reward = 500.0
-        min_reward = 0.0
-        completion_pct = np.mean([(r - min_reward) / (max_reward - min_reward) for r in rewards])
-    elif task_name == 'Acrobot-v1':
-        # Acrobot: 0 is best, -500 is worst, -100 is solved
-        max_reward = 0.0
-        min_reward = -500.0
-        completion_pct = np.mean([(r - min_reward) / (max_reward - min_reward) for r in rewards])
-    elif task_name == 'LunarLander-v2':
-        # LunarLander: 250+ is excellent, 200 is solved, -1000 is worst
-        max_reward = 250.0
-        min_reward = -1000.0
-        completion_pct = np.mean([(r - min_reward) / (max_reward - min_reward) for r in rewards])
-    elif task_name == 'MountainCar-v0':
-        # MountainCar: -110 is solved, -200 is worst
-        max_reward = -110.0
-        min_reward = -200.0
-        completion_pct = np.mean([(r - min_reward) / (max_reward - min_reward) for r in rewards])
-    else:
-        # Default: normalize to [0, 1] based on observed range
-        min_obs, max_obs = min(rewards), max(rewards)
-        if max_obs > min_obs:
-            completion_pct = np.mean([(r - min_obs) / (max_obs - min_obs) for r in rewards])
-        else:
-            completion_pct = 0.5  # Default to 50% if no variation
-    
-    return success_rate, completion_pct
-
-def calculate_reward_completion_percentage(rewards, task_name):
-    """Calculate completion percentage for reward-based tasks."""
-    if not rewards:
-        return 0.0
-    
-    # Task-specific completion calculation
-    if task_name == 'CartPole-v1':
-        # CartPole: 500 is max (100%), 195 is solved (39%), 0 is worst (0%)
-        # Use 195 as the "solved" threshold for meaningful completion
-        solved_threshold = 195.0
-        max_reward = 500.0
-        min_reward = 0.0
-        
-        # Calculate completion relative to solved threshold
-        completion_pcts = []
-        for r in rewards:
-            if r >= solved_threshold:
-                # Above solved threshold: 100% completion
-                completion_pcts.append(100.0)
-            else:
-                # Below solved threshold: linear scale from 0% to 100%
-                completion_pct = max(0.0, (r - min_reward) / (solved_threshold - min_reward) * 100.0)
-                completion_pcts.append(completion_pct)
-        
-        completion_pct = np.mean(completion_pcts)
-        
-    elif task_name == 'Acrobot-v1':
-        # Acrobot: 0 is best (100%), -100 is solved (80%), -500 is worst (0%)
-        # Use -100 as the "solved" threshold for meaningful completion
-        solved_threshold = -100.0
-        max_reward = 0.0
-        min_reward = -500.0
-        
-        # Calculate completion relative to solved threshold
-        completion_pcts = []
-        for r in rewards:
-            if r >= solved_threshold:
-                # Above solved threshold: 80% to 100% completion
-                completion_pct = 80.0 + (r - solved_threshold) / (max_reward - solved_threshold) * 20.0
-                completion_pcts.append(completion_pct)
-            else:
-                # Below solved threshold: linear scale from 0% to 80%
-                completion_pct = max(0.0, (r - min_reward) / (solved_threshold - min_reward) * 80.0)
-                completion_pcts.append(completion_pct)
-        
-        completion_pct = np.mean(completion_pcts)
-        
-    elif task_name == 'LunarLander-v2':
-        # LunarLander: 250+ is excellent (100%), 200 is solved (80%), -1000 is worst (0%)
-        # Use 200 as the "solved" threshold for meaningful completion
-        solved_threshold = 200.0
-        max_reward = 250.0
-        min_reward = -1000.0
-        
-        # Calculate completion relative to solved threshold
-        completion_pcts = []
-        for r in rewards:
-            if r >= solved_threshold:
-                # Above solved threshold: 80% to 100% completion
-                completion_pct = 80.0 + (r - solved_threshold) / (max_reward - solved_threshold) * 20.0
-                completion_pcts.append(completion_pct)
-            else:
-                # Below solved threshold: linear scale from 0% to 80%
-                completion_pct = max(0.0, (r - min_reward) / (solved_threshold - min_reward) * 80.0)
-                completion_pcts.append(completion_pct)
-        
-        completion_pct = np.mean(completion_pcts)
-        
-    elif task_name == 'MountainCar-v0':
-        # MountainCar: -110 is solved (100%), -200 is worst (0%)
-        solved_threshold = -110.0
-        max_reward = -110.0
-        min_reward = -200.0
-        
-        # Calculate completion relative to solved threshold
-        completion_pcts = []
-        for r in rewards:
-            if r >= solved_threshold:
-                # Above solved threshold: 100% completion
-                completion_pcts.append(100.0)
-            else:
-                # Below solved threshold: linear scale from 0% to 100%
-                completion_pct = max(0.0, (r - min_reward) / (solved_threshold - min_reward) * 100.0)
-                completion_pcts.append(completion_pct)
-        
-        completion_pct = np.mean(completion_pcts)
-        
-    else:
-        # Default: normalize to [0, 100] based on observed range
-        min_obs, max_obs = min(rewards), max(rewards)
-        if max_obs > min_obs:
-            completion_pct = np.mean([(r - min_obs) / (max_obs - min_obs) * 100.0 for r in rewards])
-        else:
-            completion_pct = 50.0  # Default to 50% if no variation
-    
-    return completion_pct
-
-# ============================================================================
-# MAIN TRAINING FUNCTION
-# ============================================================================
-
-def triple_task_training(policy_class, topology_type, config, seed=42, num_layers=2, hidden_size=None, train_task_1=None, train_task_2=None, train_task_3=None, device=None):
-    """
-    Triple-task training function with intermediate testing after each phase.
-    
-    Sequential training: Train on task 1, test on all tasks, then train on task 2, test on all tasks, then train on task 3, test on all tasks.
-    
-    Args:
-        policy_class: Policy class to use
-        topology_type: Type of topology network
-        config: Configuration dictionary
-        seed (int): Random seed for reproducibility
-        num_layers: Number of layers
-        hidden_size: Hidden layer size
-        train_task_1: First training task
-        train_task_2: Second training task
-        train_task_3: Third training task
-    """
-    # 🚨 CRITICAL: Import os at the top of the function
-    import os
-    
-    # 🚨 CRITICAL: Extract task information from config if not provided
-    if train_task_1 is None:
-        train_task_1 = config.get('train_task_1', 'CartPole-v1')
-    if train_task_2 is None:
-        train_task_2 = config.get('train_task_2', 'Acrobot-v1')
-    if train_task_3 is None:
-        train_task_3 = config.get('train_task_3', 'LunarLander-v2')
-    
-    # 🚨 CRITICAL: Extract topology parameters from config if not provided
-    if hidden_size is None:
-        hidden_size = config.get('hidden_size', 128)
-    if num_layers is None:
-        num_layers = config.get('num_layers', 2)
-    
-    print("=" * 80)
-    print(f"🎯 TRIPLE-TASK SEQUENTIAL TRAINING: {topology_type.upper()} TOPOLOGY")
-    print("=" * 80)
-    print(f"📋 Configuration:")
-    print(f"   • Task Sequence: {train_task_1} → {train_task_2} → {train_task_3}")
-    print(f"   • Topology Type: {topology_type}")
-    print(f"   • Hidden Size: {hidden_size}")
-    print(f"   • Layers: {num_layers}")
-    print(f"   • Total Timesteps per Phase: {config['total_timesteps']:,}")
-    print(f"   • Learning Rate: {config['learning_rate']}")
-    print(f"   • Batch Size: {config['batch_size']}")
-    print(f"🔧 Device: {DEVICE_INFO['device']}")
-    if DEVICE_INFO['is_cuda']:
-        print(f"   GPU: {DEVICE_INFO.get('cuda_device_name', 'Unknown')}")
-        print(f"   Memory: {DEVICE_INFO.get('cuda_memory_allocated', 0) / 1024**2:.1f}MB allocated")
-    print("=" * 80)
-    
-    # 🚨 CRITICAL: Apply comprehensive seeding for reproducibility
-    print(f"🎲 Setting random seed: {seed}")
-    
-    # PyTorch seeding
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    
-    # NumPy seeding
-    np.random.seed(seed)
-    
-    # Python random seeding
-    import random
-    random.seed(seed)
-    
-    # Gym seeding
-    try:
-        gym.utils.seeding.np_random(seed)
-    except:
-        pass  # Some gym versions don't have this function
-    
-    print(f"✅ All random states seeded with seed: {seed}")
-    print("=" * 80)
-    
-    # Initialize wandb if not already done
-    if wandb.run is None:
-        # Create proper naming for this specific training run
-        run_name = create_run_name(config, topology_type, 'triple_task')
-        tags = create_run_tags(config, topology_type, 'triple_task')
-        
-        wandb.init(
-            project="topologies--continual-learning-training",
-            entity="katko-it-universitetet-i-k-benhavn",
-            config=config,
-            name=run_name,
-            tags=tags,
-            mode="disabled" if os.environ.get('WANDB_DISABLE', 'false').lower() == 'true' else "online"
-            # Removed silent=True to allow legitimate training metrics
-        )
-        
-        # 🚨 CRITICAL FIX: Ensure W&B's internal step counter never starts at 0
-        # This prevents the "step 0" warnings by ensuring W&B starts at step 1
-        if wandb.run and hasattr(wandb.run, 'step'):
-            # Force W&B to start at step 1 instead of 0
-            try:
-                # Initialization logging removed - keeping only standard training metrics
-                print("🔧 W&B Step Fix: Initialized internal step counter at step 1")
-            except Exception as e:
-                print(f"⚠️  W&B Step Fix: Could not initialize step counter: {e}")
-    
-    # 🚨 CRITICAL FIX: Ensure W&B's step counter is always > 0
-    # This prevents step 0 warnings throughout training
-    if wandb.run and hasattr(wandb.run, 'step') and wandb.run.step <= 0:
-        try:
-            # Step reset logging removed - keeping only standard training metrics
-            print("🔧 W&B Step Fix: Reset internal step counter from 0 to 1")
-        except Exception as e:
-            print(f"⚠️  W&B Step Fix: Could not reset step counter: {e}")
-    
-    # Calculate timesteps for each phase
-    task1_timesteps = config['total_timesteps'] // 3  # 200,000 timesteps per phase
-    task2_timesteps = config['total_timesteps'] // 3  # 200,000 timesteps per phase  
-    task3_timesteps = config['total_timesteps'] // 3  # 200,000 timesteps per phase
-    
-    # Create task order string for topology-aware logging
-    task_order = f"{train_task_1}_{train_task_2}_{train_task_3}"
-    
-    # Create environments for sequential training
-    env1 = DummyVecEnv([make_env(train_task_1, seed=seed)])
-    env2 = DummyVecEnv([make_env(train_task_2, seed=seed)])
-    env3 = DummyVecEnv([make_env(train_task_3, seed=seed)])
-    
-    # Create ONE model for sequential training
-    # 🚨 CRITICAL: Disable ALL internal SB3 logging to ensure clean output
-    os.environ['SB3_VERBOSE'] = '0'  # Force disable SB3 verbose logging
-    
-    model = PPO(
-        policy_class,
-        env1,  # Start with first task environment
-        learning_rate=config['learning_rate'],
-        n_steps=config['n_steps'],
-        batch_size=config['batch_size'],
-        n_epochs=config['n_epochs'],
-        gamma=config['gamma'],
-        gae_lambda=config['gae_lambda'],
-        clip_range=config['clip_range'],
-        ent_coef=config['ent_coef'],
-        max_grad_norm=config['max_grad_norm'],
-        verbose=0,  # 🚨 CRITICAL: Disable internal Stable-Baselines3 logging
-        tensorboard_log=None,  # Disable tensorboard logging
-        device=device,  # Use the device specified by --no_cuda flag
-        policy_kwargs={
-            'topology_type': topology_type,
-            'hidden_size': hidden_size,
-            'num_layers': num_layers,
-            'config': config
-        }
-    )
-    
-    # Create logging handler and callback FIRST
-    logging_handler = create_logging_handler(config, topology_type, 'triple_task')
-    logging_handler.initialize_run()
-    
-    # Create callback using the simplified logging handler
-    callback = SimplifiedCallback(logging_handler=logging_handler, log_freq=1000)
-    
-    # Calculate actual capacity and update run name if needed
-    if wandb.run is not None:
-        try:
-            # Calculate actual capacity from the policy using PyTorch's built-in method
-            # This automatically counts total parameters (actor + critic) from the actual model
-            policy = model.policy
-            total_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
-            
-            # Get individual network info for logging (optional, for debugging)
-            actor_params = policy._get_topology_params(policy.actor_topology)
-            critic_params = policy._get_topology_params(policy.critic_topology)
-            
-            # Update run name using the logging handler
-            updated_run_name = logging_handler.update_run_name(model, total_params)
-            
-            # 🚨 CRITICAL: Don't log network info at step 0 - wait until after first training step
-            # This prevents W&B step warnings about logging to step 0
-            print(f"📊 Actual network capacity: {total_params:,} parameters")
-            
-        except Exception as e:
-            print(f"   ⚠️  Could not calculate actual capacity: {e}")
-    
-    # ============================================================================
-    # PHASE 1: Train on task 1
-    # ============================================================================
-    callback.set_task_phase(train_task_1, 1)  # Set phase 1
-    
-    # Get task-specific training configuration
-    task1_timesteps = get_task_timesteps(train_task_1, config)
-    convergence_callback = create_convergence_callback(train_task_1, config, verbose=0)  # Disable verbose output
-    
-    print(f"📋 Task-specific training: {train_task_1} for {task1_timesteps:,} timesteps")
-    
-    # Create a callback to update our progress bar
-    class ProgressBarCallback(BaseCallback):
-        def __init__(self, total_timesteps, task_name):
-            super().__init__()
-            self.total_timesteps = total_timesteps
-            self.task_name = task_name
-            self.progress_bar = None
-            self.last_update = 0
-        
-        def _on_training_start(self) -> None:
-            # Create a fresh progress bar for each training phase
-            self.progress_bar = tqdm(
-                total=self.total_timesteps, 
-                desc=f"Training {self.task_name}", 
-                unit="steps", 
-                bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
-            )
-        
-        def _on_step(self) -> bool:
-            # Update progress bar with current training progress
-            if self.progress_bar:
-                current_step = self.num_timesteps
-                if current_step > self.last_update:
-                    self.progress_bar.update(current_step - self.last_update)
-                    self.last_update = current_step
-            return True
-        
-        def _on_training_end(self) -> None:
-            # Ensure progress bar is complete and closed
-            if self.progress_bar:
-                self.progress_bar.close()
-                self.progress_bar = None
-    
-    # Create a callback to monitor training rewards in real-time (silent version)
-    class RewardMonitorCallback(BaseCallback):
-        def __init__(self, task_name, log_interval=10000):
-            super().__init__()
-            self.task_name = task_name
-            self.log_interval = log_interval
-            self.last_log_step = 0
-            self.episode_rewards = []
-            self.episode_lengths = []
-        
-        def _on_step(self) -> bool:
-            # Collect episode rewards from the environment
-            if hasattr(self.training_env, 'get_episode_rewards'):
-                rewards = self.training_env.get_episode_rewards()
-                if rewards:
-                    self.episode_rewards.extend(rewards)
-            
-            # Log rewards periodically (silent - only to W&B)
-            if self.num_timesteps - self.last_log_step >= self.log_interval:
-                self.last_log_step = self.num_timesteps
-                # Silent - no terminal output
-            
-            return True
-    
-    # Create a callback that integrates convergence monitoring with periodic evaluation (silent version)
-    class ConvergenceEvaluationCallback(BaseCallback):
-        def __init__(self, convergence_callback, model, env, task_name, eval_interval=20000):
-            super().__init__()
-            self.convergence_callback = convergence_callback
-            self.model = model
-            self.env = env
-            self.task_name = task_name
-            self.eval_interval = eval_interval
-            self.last_eval_step = 0
-        
-        def _on_step(self) -> bool:
-            # Check if we should do a quick evaluation
-            if self.num_timesteps - self.last_eval_step >= self.eval_interval:
-                self.last_eval_step = self.num_timesteps
-                
-                # Quick evaluation to check convergence
-                try:
-                    rewards, lengths, success, completion = evaluate_model_enhanced(
-                        self.model, self.env, self.task_name, 5  # Quick eval with 5 episodes
-                    )
-                    mean_reward = np.mean(rewards)
-                    
-                    # Update convergence callback with evaluation results
-                    self.convergence_callback.update_with_evaluation(mean_reward, success)
-                    
-                    # Silent - no terminal output, only W&B logging
-                    
-                    # Check convergence status (silent)
-                    if self.convergence_callback.should_stop:
-                        pass  # Silent early stopping
-                
-                except Exception as e:
-                    # Silent error handling
-                    pass
-            
-            return True
-    
-    # RewardTrackingCallback class definition moved to continual_learning_training function
-    
-    # Combine all callbacks
-    combined_callback = CallbackList([
-        callback,  # Main logging callback
-        ProgressBarCallback(task1_timesteps, train_task_1),  # Progress bar
-        RewardMonitorCallback(train_task_1, log_interval=10000),  # Reward monitoring
-        ConvergenceEvaluationCallback(convergence_callback, model, env1, train_task_1, eval_interval=20000),  # Convergence evaluation
-        RewardTrackingCallback(train_task_1, log_frequency=5)  # Fine-grained reward tracking
-    ])
-    # Phase 1
-    # 🚨 CRITICAL: Disable SB3's internal progress bar to prevent conflicts with our TQDM bar
-    model.learn(total_timesteps=task1_timesteps, callback=combined_callback, progress_bar=False)
-    
-    # 🚨 CREATIVE FIX: Use W&B's internal step reset mechanism
-    # Since we can't directly set wandb.run.step, we use alternative methods
-    if wandb.run:
-        print("🔄 W&B step counter reset not needed - using environment variables")
-    
-    # 🚨 CREATIVE FIX: W&B-Native Step Management
-    # Instead of fighting W&B's step counter, we work with it
-    # This eliminates step warnings while maintaining proper timestep tracking
-    if wandb.run:
-        print("🔄 Using W&B-native step management for seamless synchronization")
-        # Let W&B manage its own step counter naturally
-        # We'll use wandb.run.step for all logging to ensure alignment
-    
-    # 🚨 CRITICAL: Update global timesteps after Phase 1 training
-    # This ensures continuous progression across tasks for learning curves
-    actual_task1_duration = model.num_timesteps if hasattr(model, 'num_timesteps') else task1_timesteps
-    logging_handler.update_global_timesteps(actual_task1_duration)
-    
-    # 🚨 CRITICAL: Evaluate on all tasks after Phase 1 training
-    print("\n" + "=" * 80)
-    print("🔍 PHASE 1 EVALUATION: Testing performance on all tasks after CartPole-v1 training")
-    print("=" * 80)
-    
-    # Evaluate on all tasks to see transfer learning effects
-    for task_name in [train_task_1, train_task_2, train_task_3]:
-        print(f"\n📊 Evaluating on {task_name} after CartPole-v1 training...")
-        try:
-            # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
-            
-            # Evaluate model performance
-            rewards, lengths, success, completion = evaluate_model_enhanced(
-                model, eval_env, task_name, config['n_eval_episodes']
-            )
-            
-            # Evaluation logging removed - keeping only standard training metrics
-            pass
-            
-            print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
-            
-        except Exception as e:
-            print(f"   ❌ {task_name} evaluation failed: {e}")
-    
-    # 🚨 CRITICAL: Phase 2 - Train on Acrobot-v1
-    print("\n" + "=" * 80)
-    print("🎯 PHASE 2: Training on Acrobot-v1")
-    print("=" * 80)
-    
-    # Switch to Acrobot environment for Phase 2
-    model.set_env(env2)
-    logging_handler.set_task_phase(train_task_2, 2)
-    
-    # Get task-specific training configuration for Phase 2
-    task2_timesteps = get_task_timesteps(train_task_2, config)
-    convergence_callback_2 = create_convergence_callback(train_task_2, config)
-    
-    # Create Phase 2 callback
-    phase2_callback = CallbackList([
-        callback,  # Main logging callback
-        convergence_callback_2,  # Convergence monitoring for Phase 2
-        RewardMonitorCallback(train_task_2, log_interval=10000),  # Reward monitoring
-        ConvergenceEvaluationCallback(convergence_callback_2, model, env2, train_task_2, eval_interval=20000),  # Convergence evaluation
-        ProgressBarCallback(task2_timesteps, train_task_2)  # 🚨 CRITICAL: Fresh progress bar for Phase 2
-    ])
-    
-    # Train on Acrobot-v1
-    print(f"📋 Task-specific training: {train_task_2} for {task2_timesteps:,} timesteps")
-    model.learn(total_timesteps=task2_timesteps, callback=phase2_callback, progress_bar=False)
-    
-    # Update global timesteps after Phase 2
-    actual_task2_duration = model.num_timesteps if hasattr(model, 'num_timesteps') else task2_timesteps
-    logging_handler.update_global_timesteps(actual_task2_duration)
-    
-    # 🚨 CRITICAL: Evaluate on all tasks after Phase 2 training
-    print("\n" + "=" * 80)
-    print("🔍 PHASE 2 EVALUATION: Testing performance on all tasks after Acrobot-v1 training")
-    print("=" * 80)
-    
-    # Evaluate on all tasks to see transfer learning effects
-    for task_name in [train_task_1, train_task_2, train_task_3]:
-        print(f"\n📊 Evaluating on {task_name} after Acrobot-v1 training...")
-        try:
-            # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
-            
-            # Evaluate model performance
-            rewards, lengths, success, completion = evaluate_model_enhanced(
-                model, eval_env, task_name, config['n_eval_episodes']
-            )
-            
-            # Evaluation logging removed - keeping only standard training metrics
-            pass
-            
-            print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
-            
-        except Exception as e:
-            print(f"   ❌ {task_name} evaluation failed: {e}")
-    
-    # 🚨 CRITICAL: Phase 3 - Train on LunarLander-v2
-    print("\n" + "=" * 80)
-    print("🎯 PHASE 3: Training on LunarLander-v2")
-    print("=" * 80)
-    
-    # Switch to LunarLander environment for Phase 3
-    model.set_env(env3)
-    logging_handler.set_task_phase(train_task_3, 3)
-    
-    # Get task-specific training configuration for Phase 3
-    task3_timesteps = get_task_timesteps(train_task_3, config)
-    convergence_callback_3 = create_convergence_callback(train_task_3, config)
-    
-    # Create Phase 3 callback
-    phase3_callback = CallbackList([
-        callback,  # Main logging callback
-        convergence_callback_3,  # Convergence monitoring for Phase 3
-        RewardMonitorCallback(train_task_3, log_interval=10000),  # Reward monitoring
-        ConvergenceEvaluationCallback(convergence_callback_3, model, env3, train_task_3, eval_interval=20000),  # Convergence evaluation
-        ProgressBarCallback(task3_timesteps, train_task_3)  # 🚨 CRITICAL: Fresh progress bar for Phase 3
-    ])
-    
-    # Train on LunarLander-v2
-    print(f"📋 Task-specific training: {train_task_3} for {task3_timesteps:,} timesteps")
-    model.learn(total_timesteps=task3_timesteps, callback=phase3_callback, progress_bar=False)
-    
-    # Update global timesteps after Phase 3
-    actual_task3_duration = model.num_timesteps if hasattr(model, 'num_timesteps') else task3_timesteps
-    logging_handler.update_global_timesteps(actual_task3_duration)
-    
-    # 🚨 CRITICAL: Final evaluation on all tasks after Phase 3 training
-    print("\n" + "=" * 80)
-    print("🔍 FINAL EVALUATION: Testing performance on all tasks after complete training")
-    print("=" * 80)
-    
-    # Evaluate on all tasks to see final transfer learning effects
-    for task_name in [train_task_1, train_task_2, train_task_3]:
-        print(f"\n📊 Final evaluation on {task_name}...")
-        try:
-            # Create evaluation environment
-            eval_env = DummyVecEnv([make_env(task_name, seed=seed)])
-            
-            # Evaluate model performance
-            rewards, lengths, success, completion = evaluate_model_enhanced(
-                model, eval_env, task_name, config['n_eval_episodes']
-            )
-            
-            # Evaluation logging removed - keeping only standard training metrics
-            pass
-            
-            print(f"   ✅ {task_name}: Reward={np.mean(rewards):.2f}, Success={success:.2%}, Completion={completion:.2%}")
-            
-        except Exception as e:
-            print(f"   ❌ {task_name} evaluation failed: {e}")
-    
-    # 🚨 CRITICAL: Log final training summary
-    print("\n" + "=" * 80)
-    print("🎯 TRIPLE-TASK TRAINING COMPLETED SUCCESSFULLY!")
-    print("=" * 80)
-    print(f"📊 Total training timesteps: {logging_handler.global_timesteps:,}")
-    print(f"📊 Task 1 ({train_task_1}): {actual_task1_duration:,} timesteps")
-    print(f"📊 Task 2 ({train_task_2}): {actual_task2_duration:,} timesteps")
-    print(f"📊 Task 3 ({train_task_3}): {actual_task3_duration:,} timesteps")
-    print(f"🔧 Topology: {topology_type}")
-    print(f"🔧 Network capacity: {total_params:,} parameters")
-    print("=" * 80)
-    
-    # Final summary logging removed - keeping only standard training metrics
-    pass
-    
-    return {
-        'model': model,
-        'total_timesteps': logging_handler.global_timesteps,
-        'task_durations': [actual_task1_duration, actual_task2_duration, actual_task3_duration],
-        'topology_type': topology_type,
-        'network_capacity': total_params
-    }
 
 # ============================================================================
 # CONTINUAL LEARNING TRAINING FUNCTION
@@ -2551,7 +1491,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     # Extract configuration parameters for paper-accurate approach
     max_iterations = config.get('max_iterations', 3000)  # Total iterations
     level_switch = config.get('level_switch', 200)       # Iterations per level
-    shift_range = config.get('shift_range', [0, 1])     # Perturbation range
+    shift_range = config.get('shift_range', [0, 2])     # Perturbation range
     reward_scale = config.get('reward_scale', 20.0)      # Division factor
     episode_cap = config.get('episode_cap', 400)         # Max steps per episode
     
@@ -2592,13 +1532,17 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         run_id=f"{task_name}_{topology_type}_seed{seed}_{int(time.time())}"
     )
     
-    # Create enhanced logging callback with local data collection
+    # Initialize iteration rewards collection (like baseline MLP)
+    iteration_rewards = []
+    
+    # Create enhanced logging callback with local data collection and iteration rewards reference
     enhanced_logging_callback = EnhancedLoggingCallback(
         task_name=task_name,
         topology_type=topology_type,
         seed=seed,
         reward_scale=reward_scale,
-        local_data_collector=local_data_collector
+        local_data_collector=local_data_collector,
+        iteration_rewards=iteration_rewards  # Pass reference to iteration_rewards
     )
     
     # Create environment with enhanced logging
@@ -2670,30 +1614,100 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         # Set current iteration in environment wrapper (this will show progress and level changes)
         env.set_iteration(current_iteration)
         
-        # Run training for this iteration (approximately 800 env steps)
-        # This will run 2 episodes with max 400 steps each
-        iteration_steps = 0
-        episodes_in_iteration = 0
+        # 🎯 OPTION C IMPLEMENTATION: Collect episodes first, then train (like main.ipynb)
+        print(f"\n🔄 Iteration {current_iteration + 1}/{max_iterations}: Collecting episodes...")
         
-        while iteration_steps < 800 and episodes_in_iteration < 2:
-            # Train for one episode or until we reach 800 steps
+        # Phase 1: Collect 2 episodes per iteration (like main.ipynb)
+        episodes_data = []
+        iteration_episode_rewards = []
+        
+        # Collect exactly 2 episodes per iteration (like main.ipynb)
+        for episode_idx in range(2):
+            print(f"   📝 Collecting episode {episode_idx + 1}/2...")
+            
+            # Reset environment for new episode
+            observation = env.reset()[0]
+            episode_reward = 0.0
+            episode_steps = 0
+            episode_transitions = []
+            
+            # Run one episode (like main.ipynb)
+            for step in range(env.episode_cap):
+                # 🎯 OPTION C: Use raw observation (reward scaling happens in env wrapper)
+                # Get action from PPO policy using raw observation
+                action = model.predict(observation, deterministic=False)[0]
+                
+                # Take environment step
+                next_observation, reward, done, truncated, info = env.step(action)
+                
+                # Store transition data (like main.ipynb structure)
+                transition = {
+                    'observation': observation,  # Raw observation (reward scaling in env wrapper)
+                    'action': action,
+                    'reward': reward,
+                    'done': done,
+                    'truncated': truncated,
+                    'step': step
+                }
+                episode_transitions.append(transition)
+                
+                # Update tracking
+                episode_reward += reward
+                episode_steps += 1
+                observation = next_observation
+                
+                if done or truncated:
+                    break
+            
+            # Store episode data (like main.ipynb)
+            episode_data = {
+                'episode_idx': episode_idx,
+                'episode_reward': episode_reward,
+                'episode_steps': episode_steps,
+                'transitions': episode_transitions,
+                'iteration': current_iteration
+            }
+            episodes_data.append(episode_data)
+            # Store raw reward for plotting (like baseline MLP)
+            raw_episode_reward = episode_reward * reward_scale
+            iteration_episode_rewards.append(raw_episode_reward)
+            
+            print(f"      ✅ Episode {episode_idx + 1}: {episode_steps} steps, reward: {episode_reward:.2f} (raw: {raw_episode_reward:.2f})")
+        
+        # Calculate mean reward for this iteration (like main.ipynb)
+        mean_iteration_reward = np.mean(iteration_episode_rewards)
+        iteration_rewards.append(mean_iteration_reward)
+        
+        print(f"   📊 Iteration {current_iteration + 1} complete:")
+        print(f"      • Episodes collected: {len(episodes_data)}")
+        print(f"      • Mean episode reward: {mean_iteration_reward:.2f}")
+        print(f"      • Total transitions: {sum(len(ep['transitions']) for ep in episodes_data)}")
+        
+        # Phase 2: Train PPO on collected data (like main.ipynb)
+        print(f"   🎓 Training PPO on collected data...")
+        
+        # Calculate total timesteps from collected episodes
+        total_transitions = sum(len(ep['transitions']) for ep in episodes_data)
+        
+        if total_transitions > 0:
+            # 🎯 OPTION C: Force PPO to train exactly once per iteration (like main.ipynb)
+            # Use the collected episode data to determine training steps
+            # Note: n_epochs is already set to 5 in PPO constructor
             model.learn(
-                total_timesteps=min(400, 800 - iteration_steps),  # Max 400 steps per episode
+                total_timesteps=total_transitions,  # Train on exactly the collected data
                 callback=enhanced_logging_callback,
                 progress_bar=False,  # Disable progress bar for cleaner output
                 reset_num_timesteps=False  # Don't reset timestep counter
             )
             
-            # Update iteration tracking
-            if hasattr(env, 'get_current_info'):
-                info = env.get_current_info()
-                iteration_steps = info['total_env_steps'] - total_env_steps
-                episodes_in_iteration = info['episodes_in_iteration']
-                total_env_steps = info['total_env_steps']
+            print(f"      ✅ PPO training complete: {total_transitions} transitions, 5 epochs")
+        else:
+            print(f"      ⚠️  No transitions to train on")
         
-        # Show iteration completion summary (only every 50 iterations to reduce noise)
-        # if current_iteration % 50 == 0:
-        #     print(f"   ✅ Iteration {current_iteration + 1}/{max_iterations} completed: {episodes_in_iteration} episodes, ~{iteration_steps} steps")
+        # Update iteration tracking
+        if hasattr(env, 'get_current_info'):
+            info = env.get_current_info()
+            total_env_steps = info['total_env_steps']
         
         # Move to next iteration
         current_iteration += 1
@@ -2717,6 +1731,11 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     print("\n📁 Finalizing local data collection...")
     run_dir = local_data_collector.finalize_run()
     print(f"✅ Local data saved to: {run_dir}")
+    
+    # Create final iteration vs rewards plot using collected data
+    if iteration_rewards and use_wandb and wandb.run:
+        print("\n📊 Creating final iteration vs rewards plot...")
+        enhanced_logging_callback._create_and_log_iteration_plot(iteration_rewards)
     
     # Phase 3: Advanced Analysis & Visualization
     if enable_phase3:
@@ -2833,13 +1852,14 @@ class EnhancedLoggingCallback(BaseCallback):
     3. Per-update (every 800 steps): PPO diagnostics and mean returns
     """
     
-    def __init__(self, task_name, topology_type, seed, reward_scale=20.0, local_data_collector=None):
+    def __init__(self, task_name, topology_type, seed, reward_scale=20.0, local_data_collector=None, iteration_rewards=None):
         super().__init__()
         self.task_name = task_name
         self.topology_type = topology_type
         self.seed = seed
         self.reward_scale = reward_scale
         self.local_data_collector = local_data_collector
+        self.iteration_rewards = iteration_rewards  # Store reference to iteration_rewards
         
         # Tracking
         self.update_index = 0
@@ -2852,6 +1872,8 @@ class EnhancedLoggingCallback(BaseCallback):
         
         if local_data_collector:
             print(f"📁 Enhanced logging with local data collection enabled")
+        if iteration_rewards is not None:
+            print(f"📊 Enhanced logging with iteration rewards tracking enabled")
     
     def _on_step(self) -> bool:
         """Called every step during training."""
@@ -2918,8 +1940,8 @@ class EnhancedLoggingCallback(BaseCallback):
             self.local_data_collector.log_shift(local_level_info)
         
         # Log the iteration vs. rewards plot to W&B only when levels change
-        if wandb.run and hasattr(self, 'update_buffer') and self.update_buffer:
-            self._create_and_log_iteration_plot()
+        if wandb.run and self.iteration_rewards:
+            self._create_and_log_iteration_plot(self.iteration_rewards)
         
         if level == 0:
             print(f"🔄 Level {level} change logged at iteration {iteration}: Clean baseline (NO NOISE)")
@@ -2997,66 +2019,44 @@ class EnhancedLoggingCallback(BaseCallback):
         return [ep for ep in self.episodes_since_last_update 
                 if current_step - ep['global_step_end'] <= window_steps]
     
-    def _create_and_log_iteration_plot(self):
+    def _create_and_log_iteration_plot(self, iteration_rewards):
         """Create the single iteration vs. rewards plot and log it to W&B."""
         try:
-            # Extract iteration data from update buffer
-            iterations = []
-            mean_rewards = []
+            # REQUIRE iteration_rewards - no fallback to old logic
+            if not iteration_rewards:
+                print("⚠️  No iteration_rewards provided - cannot create plot")
+                return
             
-            # Group updates by iteration (each iteration has ~800 steps, so group updates accordingly)
-            current_iteration = 0
-            current_iteration_rewards = []
+            # Use ONLY the correct methodology (like baseline MLP)
+            # Create the plot (KEEP EXACTLY THE SAME STYLING)
+            fig, ax = plt.subplots(figsize=(10, 6))
             
-            for update in self.update_buffer:
-                # Estimate which iteration this update belongs to
-                estimated_iteration = update['global_step'] // 800
-                
-                if estimated_iteration != current_iteration:
-                    # Save previous iteration data
-                    if current_iteration_rewards:
-                        iterations.append(current_iteration)
-                        mean_rewards.append(np.mean(current_iteration_rewards))
-                    
-                    # Start new iteration
-                    current_iteration = estimated_iteration
-                    current_iteration_rewards = [update['mean_raw_return']]
-                else:
-                    current_iteration_rewards.append(update['mean_raw_return'])
+            # Plot iterations vs mean episode reward (KEEP SAME STYLE)
+            iterations = list(range(len(iteration_rewards)))
+            ax.plot(iterations, iteration_rewards, 'b-', linewidth=2, marker='o', markersize=4)
+            ax.set_xlabel('Iteration')
+            ax.set_ylabel('Mean Episode Reward (Raw)')
+            ax.set_title(f'Iteration vs. Mean Episode Rewards\n{self.task_name} - {self.topology_type}')
+            ax.grid(True, alpha=0.3)
             
-            # Add final iteration
-            if current_iteration_rewards:
-                iterations.append(current_iteration)
-                mean_rewards.append(np.mean(current_iteration_rewards))
+            # Add level change markers (KEEP EXACTLY THE SAME)
+            level_switch = 200  # Each level is 200 iterations
+            for level in range(1, max(iterations) // level_switch + 1):
+                iteration_marker = level * level_switch
+                if iteration_marker <= max(iterations):
+                    ax.axvline(x=iteration_marker, color='r', linestyle='--', alpha=0.7, 
+                              label=f'Level {level}' if level == 1 else "")
             
-            if iterations and mean_rewards:
-                # Create the plot
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.plot(iterations, mean_rewards, 'b-', linewidth=2, marker='o', markersize=4)
-                ax.set_xlabel('Iteration')
-                ax.set_ylabel('Mean Episode Reward (Raw)')
-                ax.set_title(f'Iteration vs. Mean Episode Rewards\n{self.task_name} - {self.topology_type}')
-                ax.grid(True, alpha=0.3)
-                
-                # Add level change markers
-                level_switch = 200  # Each level is 200 iterations
-                for level in range(1, max(iterations) // level_switch + 1):
-                    iteration_marker = level * level_switch
-                    if iteration_marker <= max(iterations):
-                        ax.axvline(x=iteration_marker, color='r', linestyle='--', alpha=0.7, 
-                                  label=f'Level {level}' if level == 1 else "")
-                
-                if max(iterations) > level_switch:
-                    ax.legend()
-                
-                plt.tight_layout()
-                
-                # Log to W&B
-                wandb.log({"iteration_vs_rewards_plot": wandb.Image(fig)})
-                print("📊 Iteration vs. rewards plot logged to W&B")
-                
-                plt.close(fig)
-                
+            if max(iterations) > level_switch:
+                ax.legend()
+            
+            plt.tight_layout()
+            
+            # Log to W&B (KEEP EXACTLY THE SAME LOCATION)
+            wandb.log({"iteration_vs_rewards_plot": wandb.Image(fig)})
+            print("📊 Iteration vs. rewards plot logged to W&B")
+            
+            plt.close(fig)
         except Exception as e:
             print(f"⚠️  Failed to create iteration plot: {e}")
             import traceback
@@ -3688,7 +2688,7 @@ if __name__ == "__main__":
                 
     else:
         # Sweep mode (placeholder for future implementation)
-        print("🔄 Sweep mode not yet implemented in Phase 2")
+        print("🔄 Sweep mode not yet implemented in here")
         print("   Use --single flag for individual training runs")
         sys.exit(1)
     
