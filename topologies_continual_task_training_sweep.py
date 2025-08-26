@@ -1444,6 +1444,27 @@ def create_continual_learning_run_name(config, topology_type, task_name, seed, m
 # CONFIGURATION AND UTILITY FUNCTIONS
 # ============================================================================
 
+def make_env(env_name, seed=None, continual_learning=False, max_iterations=3000, level_switch=200, shift_range=[0, 1], reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
+    """Create an environment with optional continual learning wrapper."""
+    def _make_env():
+        env = gym.make(env_name)
+        
+        # Set seed for reproducibility using modern Gymnasium API
+        if seed is not None:
+            # Use the modern reset(seed=seed) method
+            env.reset(seed=seed)
+            # Seed action and observation spaces
+            env.action_space.seed(seed)
+            env.observation_space.seed(seed)
+            
+        # Apply continual learning wrapper if requested
+        if continual_learning:
+            env = ContinualLearningWrapper(env, env_name, max_iterations, level_switch, shift_range, seed, reward_scale, episode_cap, logging_callback, num_levels, no_noise)
+        
+        return env
+    
+    return _make_env
+    
 def create_debug_config(num_levels=15, num_layers=1):
     """Create a basic configuration for testing and debugging (Paper-Accurate)."""
     return {
