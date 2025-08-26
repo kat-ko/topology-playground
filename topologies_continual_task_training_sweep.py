@@ -47,7 +47,7 @@ from src.networks.ffn import FeedForwardNetwork
 from src.utils.parameter_budget import ParameterBudgetCalculator
 from src.utils.capacity_measurement import CapacityMeasurementManager
 from src.utils.capacity_matching_helper import pre_calculate_capacity_matching
-from src.utils.device_manager import get_device_manager, get_device_info        
+from src.utils.device_manager import get_device_manager, get_device_info
 from src.utils.task_training_config import get_task_timesteps, create_convergence_callback
 from src.utils.topology_logging_handler import (SimplifiedCallback, create_logging_handler)
 
@@ -163,7 +163,7 @@ class LocalDataCollector:
         # Clear batch after writing
         self.shift_batch = []
     
-    def finalize_run(self):
+    def finalize_run(self, additional_metadata=None):
         """Save run metadata and create summary."""
         # Flush any remaining batches before finalizing
         if self.episode_batch:
@@ -171,14 +171,19 @@ class LocalDataCollector:
         if self.shift_batch:
             self._flush_shift_batch()
         
+        # Base metadata
         metadata = {
             'run_id': self.run_id,
             'timestamp': time.time(),
             'total_episodes': len(self.episode_data),
             'total_shifts': len(self.shift_data),
-            'episode_data_file': f"{self.run_dir}/data/episode_data.csv",
-            'shift_data_file': f"{self.run_dir}/data/shift_data.csv"
+            'episode_data_file': f"{self.base_path}/{self.run_id}/data/episode_data.csv",
+            'shift_data_file': f"{self.base_path}/{self.run_id}/data/shift_data.csv"
         }
+        
+        # Add additional metadata if provided
+        if additional_metadata:
+            metadata.update(additional_metadata)
         
         with open(f"{self.run_dir}/run_metadata.json", 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -681,7 +686,11 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Generate perturbations for all levels
         obs_dim = self.observation_space.shape[0]
         self.perturbations = []
-        for level in range(self.num_levels):  # Dynamic number of levels
+        
+        # Ensure we have at least one level (even if num_levels is 0)
+        effective_levels = max(1, self.num_levels)
+        
+        for level in range(effective_levels):  # Dynamic number of levels
             if level == 0:
                 # Level 0: NO NOISE - Clean baseline
                 perturbation = np.zeros(obs_dim)
@@ -1547,22 +1556,16 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             tags=["continual_learning", "paper_accurate", "iteration_based"]
         )
     
-    # Initialize local data collector for offline analysis
-    local_data_collector = LocalDataCollector(
-        base_path="test_experiments",
-        run_id=f"{task_name}_{topology_type}_seed{seed}_{int(time.time())}"
-    )
-    
     # Initialize iteration rewards collection (like baseline MLP)
     iteration_rewards = []
     
-    # Create enhanced logging callback with local data collection and iteration rewards reference
+    # Create enhanced logging callback WITHOUT local data collection initially
     enhanced_logging_callback = EnhancedLoggingCallback(
         task_name=task_name,
         topology_type=topology_type,
         seed=seed,
         reward_scale=reward_scale,
-        local_data_collector=local_data_collector,
+        local_data_collector=None,  # Will be set after W&B run name is finalized
         iteration_rewards=iteration_rewards  # Pass reference to iteration_rewards
     )
     
@@ -1620,6 +1623,34 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             print(f"⚠️  Could not update run name with actual parameters: {e}")
             print(f"   Using initial run name: {initial_run_name}")
     
+    # NOW create LocalDataCollector with finalized W&B run name
+    if use_wandb and wandb.run is not None:
+        # Use the finalized W&B run name for folder naming
+        final_run_name = wandb.run.name
+        print(f"📁 Creating LocalDataCollector with W&B run name: {final_run_name}")
+        
+        local_data_collector = LocalDataCollector(
+            base_path="test_experiments",
+            run_id=final_run_name
+        )
+        
+        # Update EnhancedLoggingCallback with the LocalDataCollector
+        enhanced_logging_callback.local_data_collector = local_data_collector
+        print(f"✅ LocalDataCollector initialized and linked to EnhancedLoggingCallback")
+    else:
+        # Fallback if W&B is not available
+        fallback_run_name = f"{task_name}_{topology_type}_seed{seed}_{int(time.time())}"
+        print(f"📁 Creating LocalDataCollector with fallback name: {fallback_run_name}")
+        
+        local_data_collector = LocalDataCollector(
+            base_path="test_experiments",
+            run_id=fallback_run_name
+        )
+        
+        # Update EnhancedLoggingCallback with the LocalDataCollector
+        enhanced_logging_callback.local_data_collector = local_data_collector
+        print(f"✅ LocalDataCollector initialized with fallback name")
+    
     # PAPER-ACCURATE ITERATION-BASED TRAINING
     print(f"🎯 Starting iteration-based training for {max_iterations} iterations...")
     print(f"   Each iteration will run ~800 environment steps (2 episodes × 400 steps)")
@@ -1636,7 +1667,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         env.set_iteration(current_iteration)
         
         # 🎯 OPTION C IMPLEMENTATION: Collect episodes first, then train (like main.ipynb)
-        print(f"\n🔄 Iteration {current_iteration + 1}/{max_iterations}: Collecting episodes...")
+        # print(f"\n🔄 Iteration {current_iteration + 1}/{max_iterations}: Collecting episodes...")
         
         # Phase 1: Collect 2 episodes per iteration (like main.ipynb)
         episodes_data = []
@@ -1644,7 +1675,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         
         # Collect exactly 2 episodes per iteration (like main.ipynb)
         for episode_idx in range(2):
-            print(f"   📝 Collecting episode {episode_idx + 1}/2...")
+            # print(f"   📝 Collecting episode {episode_idx + 1}/2...")
             
             # Reset environment for new episode
             observation = env.reset()[0]
@@ -1693,19 +1724,19 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             raw_episode_reward = episode_reward * reward_scale
             iteration_episode_rewards.append(raw_episode_reward)
             
-            print(f"      ✅ Episode {episode_idx + 1}: {episode_steps} steps, reward: {episode_reward:.2f} (raw: {raw_episode_reward:.2f})")
+            # print(f"      ✅ Episode {episode_idx + 1}: {episode_steps} steps, reward: {episode_reward:.2f} (raw: {raw_episode_reward:.2f})")
         
         # Calculate mean reward for this iteration (like main.ipynb)
         mean_iteration_reward = np.mean(iteration_episode_rewards)
         iteration_rewards.append(mean_iteration_reward)
         
-        print(f"   📊 Iteration {current_iteration + 1} complete:")
-        print(f"      • Episodes collected: {len(episodes_data)}")
-        print(f"      • Mean episode reward: {mean_iteration_reward:.2f}")
-        print(f"      • Total transitions: {sum(len(ep['transitions']) for ep in episodes_data)}")
+        # print(f"   📊 Iteration {current_iteration + 1} complete:")
+        # print(f"      • Episodes collected: {len(episodes_data)}")
+        # print(f"      • Mean episode reward: {mean_iteration_reward:.2f}")
+        # print(f"      • Total transitions: {sum(len(ep['transitions']) for ep in episodes_data)}")
         
         # Phase 2: Train PPO on collected data (like main.ipynb)
-        print(f"   🎓 Training PPO on collected data...")
+        # print(f"   🎓 Training PPO on collected data...")
         
         # Calculate total timesteps from collected episodes
         total_transitions = sum(len(ep['transitions']) for ep in episodes_data)
@@ -1721,7 +1752,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
                 reset_num_timesteps=False  # Don't reset timestep counter
             )
             
-            print(f"      ✅ PPO training complete: {total_transitions} transitions, 5 epochs")
+            # print(f"      ✅ PPO training complete: {total_transitions} transitions, 5 epochs")
         else:
             print(f"      ⚠️  No transitions to train on")
         
@@ -1750,8 +1781,83 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     
     # Finalize local data collection
     print("\n📁 Finalizing local data collection...")
-    run_dir = local_data_collector.finalize_run()
+    
+    # Collect enhanced metadata for network analysis
+    enhanced_metadata = {
+        'training_config': {
+            'task_name': task_name,
+            'topology_type': topology_type,
+            'seed': seed,
+            'max_iterations': max_iterations,
+            'level_switch': level_switch,
+            'shift_range': shift_range,
+            'reward_scale': reward_scale,
+            'episode_cap': episode_cap,
+            'no_noise': no_noise
+        },
+        'network_architecture': {
+            'hidden_size': config.get('hidden_size', 128),
+            'num_layers': config.get('num_layers', 1),
+            'activation': config.get('activation', 'leaky_relu'),
+            'dropout': config.get('dropout', 0.0)
+        },
+        'topology_parameters': {}
+    }
+    
+    # Add topology-specific parameters
+    if topology_type == 'small_world':
+        enhanced_metadata['topology_parameters'] = {
+            'k': config.get('small_world_k', 4),
+            'p': config.get('small_world_p', 0.2)
+        }
+    elif topology_type == 'modular':
+        enhanced_metadata['topology_parameters'] = {
+            'num_modules': config.get('modular_num_modules', 4),
+            'inter_module_prob': config.get('modular_inter_module_prob', 0.1),
+            'intra_module_prob': config.get('modular_intra_module_prob', 0.8)
+        }
+    elif topology_type == 'hybrid':
+        enhanced_metadata['topology_parameters'] = {
+            'num_modules': config.get('hybrid_num_modules', 4),
+            'k': config.get('hybrid_k', 4),
+            'p': config.get('hybrid_p', 0.2),
+            'inter_module_prob': config.get('hybrid_inter_module_prob', 0.1)
+        }
+    elif topology_type == 'fully_connected':
+        enhanced_metadata['topology_parameters'] = {
+            'type': 'fully_connected'
+        }
+    elif topology_type == 'standard_mlp':
+        enhanced_metadata['topology_parameters'] = {
+            'type': 'standard_mlp',
+            'num_layers': config.get('num_layers', 1)
+        }
+    
+    # Add model parameter count if available
+    if hasattr(model, 'policy') and hasattr(model.policy, '_get_topology_params'):
+        try:
+            actor_params = model.policy._get_topology_params(model.policy.actor_topology)
+            critic_params = model.policy._get_topology_params(model.policy.critic_topology)
+            total_params = actor_params + critic_params
+            enhanced_metadata['network_architecture']['total_parameters'] = total_params
+            enhanced_metadata['network_architecture']['actor_parameters'] = actor_params
+            enhanced_metadata['network_architecture']['critic_parameters'] = critic_params
+        except Exception as e:
+            print(f"⚠️  Could not extract topology parameters: {e}")
+            enhanced_metadata['network_architecture']['total_parameters'] = 'unknown'
+    
+    # Add W&B run information if available
+    if use_wandb and wandb.run:
+        enhanced_metadata['wandb'] = {
+            'run_name': wandb.run.name,
+            'run_id': wandb.run.id,
+            'project': wandb.run.project,
+            'entity': wandb.run.entity
+        }
+    
+    run_dir = local_data_collector.finalize_run(enhanced_metadata)
     print(f"✅ Local data saved to: {run_dir}")
+    print(f"📊 Enhanced metadata includes network architecture and topology parameters")
     
     # Create final iteration vs rewards plot using collected data
     if iteration_rewards and use_wandb and wandb.run:
@@ -2118,8 +2224,8 @@ class AdvancedContinualLearningPlotter:
     def create_comprehensive_analysis(self, episode_data, shift_data, update_data):
         """
         Create comprehensive analysis plots for continual learning research.
-        
-        Args:
+    
+    Args:
             episode_data: List of episode dictionaries from EnhancedLoggingCallback
             shift_data: List of shift dictionaries from EnhancedLoggingCallback
             update_data: List of update dictionaries from EnhancedLoggingCallback
@@ -2706,7 +2812,7 @@ if __name__ == "__main__":
             import traceback
             traceback.print_exc()
             sys.exit(1)
-                
+    
     else:
         # Sweep mode (placeholder for future implementation)
         print("🔄 Sweep mode not yet implemented in here")
