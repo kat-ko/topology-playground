@@ -1956,8 +1956,8 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
                 traceback.print_exc()
         else:
             print("⚠️  No episode data available for advanced analysis")
-    else:
-        print("\n⏭️  Phase 3 analysis skipped (use --phase3 to enable)")
+    
+    print("\n⏭️  Phase 3 analysis skipped (use --phase3 to enable)")
     
     # Close W&B run
     if use_wandb:
