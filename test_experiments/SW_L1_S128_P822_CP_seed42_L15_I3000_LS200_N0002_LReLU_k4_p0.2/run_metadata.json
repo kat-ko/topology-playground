@@ -1,7 +1,7 @@
 {
   "run_id": "SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2",
-  "timestamp": 1756254310.1173024,
-  "total_episodes": 144903,
+  "timestamp": 1756344322.196377,
+  "total_episodes": 247244,
   "total_shifts": 14,
   "episode_data_file": "test_experiments/SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2/data/episode_data.csv",
   "shift_data_file": "test_experiments/SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2/data/shift_data.csv",
@@ -34,7 +34,7 @@
   },
   "wandb": {
     "run_name": "SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2",
-    "run_id": "i5jittyv",
+    "run_id": "lqp58kqx",
     "project": "topologies--continual-learning-training",
     "entity": "katko-it-universitetet-i-k-benhavn"
   }

@@ -1,7 +1,7 @@
 {
   "run_id": "STANDARD_MLP_L3_S128_P1804_CP_seed42_L15_I3000_LS200_N0002_LReLU",
-  "timestamp": 1756250457.0144284,
-  "total_episodes": 95770,
+  "timestamp": 1756339430.938263,
+  "total_episodes": 113483,
   "total_shifts": 14,
   "episode_data_file": "test_experiments/STANDARD_MLP_L3_S128_P1804_CP_seed42_L15_I3000_LS200_N0002_LReLU/data/episode_data.csv",
   "shift_data_file": "test_experiments/STANDARD_MLP_L3_S128_P1804_CP_seed42_L15_I3000_LS200_N0002_LReLU/data/shift_data.csv",
@@ -34,7 +34,7 @@
   },
   "wandb": {
     "run_name": "STANDARD_MLP_L3_S128_P1804_CP_seed42_L15_I3000_LS200_N0002_LReLU",
-    "run_id": "scomafeo",
+    "run_id": "tqy2amro",
     "project": "topologies--continual-learning-training",
     "entity": "katko-it-universitetet-i-k-benhavn"
   }
