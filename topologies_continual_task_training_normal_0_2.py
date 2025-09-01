@@ -699,10 +699,10 @@ class ContinualLearningWrapper(gym.Wrapper):
                 if self.no_noise:
                     perturbation = np.zeros(obs_dim)
                 else:
-                    perturbation = self.perturbation_rng.uniform(
-                        low=self.shift_range[0], 
-                        high=self.shift_range[1], 
-                        size=obs_dim
+                    perturbation = self.perturbation_rng.normal(
+                        self.shift_range[0], 
+                        self.shift_range[1], 
+                        obs_dim
                     )
             self.perturbations.append(perturbation)
         

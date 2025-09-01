@@ -699,10 +699,10 @@ class ContinualLearningWrapper(gym.Wrapper):
                 if self.no_noise:
                     perturbation = np.zeros(obs_dim)
                 else:
-                    perturbation = self.perturbation_rng.uniform(
-                        low=self.shift_range[0], 
-                        high=self.shift_range[1], 
-                        size=obs_dim
+                    perturbation = self.perturbation_rng.normal(
+                        self.shift_range[0], 
+                        self.shift_range[1], 
+                        obs_dim
                     )
             self.perturbations.append(perturbation)
         
@@ -925,7 +925,7 @@ class DebugTopologyPolicy(ActorCriticPolicy):
     Debug Topology Policy for triple-task training with sweep support.
     """
     
-    def __init__(self, observation_space, action_space, lr_schedule, topology_type='fully_connected', hidden_size=128, num_layers=3, config=None, *args, **kwargs):
+    def __init__(self, observation_space, action_space, lr_schedule, topology_type='fully_connected', hidden_size=256, num_layers=3, config=None, *args, **kwargs):
         super().__init__(observation_space, action_space, lr_schedule, *args, **kwargs)
         
         # Get hyperparameters from wandb config if available
@@ -1085,7 +1085,7 @@ class DebugTopologyPolicy(ActorCriticPolicy):
                         input_dim = 6
                         output_dim = 3
                     
-                    hidden_size = getattr(topology_network, 'size', 128)
+                    hidden_size = getattr(topology_network, 'size', 256)
                     
                     input_nodes = list(range(input_dim))
                     output_nodes = list(range(input_dim + hidden_size, input_dim + hidden_size + output_dim))
@@ -1365,7 +1365,7 @@ def create_continual_learning_run_name(config, topology_type, task_name, seed, m
     Create enhanced run name for continual learning experiments.
     
     Format: {topology_type}_{network_details}_{task_abbrev}_{seed}_{experiment_details}
-    Example: SW_L3_S128_P12345_CP_seed42_L15_I3000_LS200_N02
+    Example: SW_L3_S256_P12345_CP_seed42_L15_I3000_LS200_N02
     """
     # Topology abbreviation
     topology_abbrev = {
@@ -1413,13 +1413,13 @@ def create_continual_learning_run_name(config, topology_type, task_name, seed, m
                 total_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
         except Exception:
             # Fallback to estimated parameters
-            hidden_size = config.get('hidden_size', 128)
+            hidden_size = config.get('hidden_size', 256)
             num_layers = config.get('num_layers', 1)
             estimated_params = hidden_size * 64 + hidden_size * hidden_size * (num_layers - 1) + hidden_size * 64
             total_params = int(estimated_params)
     
     # Get network details
-    hidden_size = config.get('hidden_size', 128)
+    hidden_size = config.get('hidden_size', 256)
     num_layers = config.get('num_layers', 1)
     
     # Task abbreviation
@@ -1606,7 +1606,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         env=env,
         policy_kwargs={
             'topology_type': topology_type,
-            'hidden_size': config.get('hidden_size', 128),
+            'hidden_size': config.get('hidden_size', 256),
             'num_layers': config.get('num_layers', 1),
             'config': config
         },
@@ -1818,7 +1818,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
             'no_noise': no_noise
         },
         'network_architecture': {
-            'hidden_size': config.get('hidden_size', 128),
+            'hidden_size': config.get('hidden_size', 256),
             'num_layers': config.get('num_layers', 1),
             'activation': config.get('activation', 'leaky_relu'),
             'dropout': config.get('dropout', 0.0)

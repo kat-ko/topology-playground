@@ -717,6 +717,10 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Environment step counting (for logging)
         self.total_env_steps = 0
         
+        # NEW: Track whether we're in training mode or PPO internal mode
+        self.training_mode = False
+        self.training_episode_count = 0
+        
         print(f"🎲 Continual Learning Wrapper initialized (Paper-Accurate):")
         print(f"   Task: {task_name}")
         print(f"   Max iterations: {max_iterations}")
@@ -789,6 +793,15 @@ class ContinualLearningWrapper(gym.Wrapper):
         # Show progress for current level
         self._show_progress()
     
+    def start_training_episode(self):
+        """Call this when starting a training episode to enable logging."""
+        self.training_mode = True
+        self.training_episode_count += 1
+    
+    def end_training_episode(self):
+        """Call this when ending a training episode to disable logging."""
+        self.training_mode = False
+    
     def step(self, action):
         """Step environment and apply current observation shift with reward scaling and episode capping."""
         obs, reward, done, truncated, info = self.env.step(action)
@@ -813,11 +826,13 @@ class ContinualLearningWrapper(gym.Wrapper):
         episode_ended = done or truncated or self.episode_step >= self.episode_cap
         
         if episode_ended:
-            self._log_episode()
-            self._reset_episode()
+            # Only log episodes if we're in training mode
+            if self.training_mode:
+                self._log_episode()
+                # Increment episode counter for current iteration
+                self.episodes_in_current_iteration += 1
             
-            # Increment episode counter for current iteration
-            self.episodes_in_current_iteration += 1
+            self._reset_episode()
         
         return shifted_obs, scaled_reward, episode_ended, truncated, info
     
@@ -901,7 +916,8 @@ class ContinualLearningWrapper(gym.Wrapper):
             'current_perturbation': self.current_perturbation.copy(),
             'episodes_in_iteration': self.episodes_in_current_iteration,
             'total_env_steps': self.total_env_steps,
-            'total_episodes': len(self.episode_returns)
+            'total_episodes': len(self.episode_returns),
+            'training_episode_count': self.training_episode_count
         }
 
 class DebugTopologyPolicy(ActorCriticPolicy):
@@ -1677,6 +1693,9 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
         for episode_idx in range(2):
             # print(f"   📝 Collecting episode {episode_idx + 1}/2...")
             
+            # Enable training mode for this episode
+            env.start_training_episode()
+            
             # Reset environment for new episode
             observation = env.reset()[0]
             episode_reward = 0.0
@@ -1710,6 +1729,9 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
                 
                 if done or truncated:
                     break
+            
+            # Disable training mode for this episode
+            env.end_training_episode()
             
             # Store episode data (like main.ipynb)
             episode_data = {

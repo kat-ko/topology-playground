@@ -695,15 +695,18 @@ class ContinualLearningWrapper(gym.Wrapper):
                 # Level 0: NO NOISE - Clean baseline
                 perturbation = np.zeros(obs_dim)
             else:
-                # Levels 1+: Random perturbations (or no noise if ablation study)
+                # Levels 1+: Alternating perturbation pattern for ablation study
                 if self.no_noise:
                     perturbation = np.zeros(obs_dim)
                 else:
-                    perturbation = self.perturbation_rng.uniform(
-                        low=self.shift_range[0], 
-                        high=self.shift_range[1], 
-                        size=obs_dim
-                    )
+                    # Implement alternating pattern: 0, +2, 0, -2, 0, +2, 0, -2...
+                    if level % 2 == 1:  # Odd levels (1, 3, 5, ...)
+                        if (level // 2) % 2 == 0:  # Levels 1, 5, 9, ... (positive)
+                            perturbation = np.full(obs_dim, 1.0)  # +2.0 to all observations
+                        else:  # Levels 3, 7, 11, ... (negative)
+                            perturbation = np.full(obs_dim, -1.0)  # -2.0 to all observations
+                    else:  # Even levels (2, 4, 6, ...)
+                        perturbation = np.zeros(obs_dim)  # No perturbation
             self.perturbations.append(perturbation)
         
         # Set initial perturbation (Level 0 = no noise)
@@ -734,6 +737,8 @@ class ContinualLearningWrapper(gym.Wrapper):
             print(f"   🚫 NOISE DISABLED: Running no-noise ablation study")
             print(f"   Initial perturbation (Level 0): ZERO (Noise disabled)")
         else:
+            print(f"   🔄 ALTERNATING PATTERN: Running alternating perturbation ablation study")
+            print(f"   Pattern: 0 → +2.0 → 0 → -2.0 → 0 → +2.0 → 0 → -2.0...")
             print(f"   Initial perturbation (Level 0): {self.current_perturbation}")
         print(f"   Total perturbation levels: {len(self.perturbations)}")
         if logging_callback:
@@ -778,10 +783,18 @@ class ContinualLearningWrapper(gym.Wrapper):
                     print(f"   🔧 Perturbation: ZERO (Noise disabled for ablation study)")
                 else:
                     # Normal noise study - show actual perturbation
-                    print(f"   📊 Level {self.current_level}: Noise Vector Applied")
+                    print(f"   📊 Level {self.current_level}: Alternating Perturbation Applied")
                     print(f"   📍 Iteration: {iteration}")
                     print(f"   📊 Environment Steps: ~{iteration * 800:,}")
                     print(f"   🔧 Perturbation: {self.current_perturbation}")
+                    # Add specific pattern information
+                    if self.current_level % 2 == 1:  # Odd levels
+                        if (self.current_level // 2) % 2 == 0:  # Positive perturbation
+                            print(f"   ➕ Pattern: Positive perturbation (+2.0) to all observations")
+                        else:  # Negative perturbation
+                            print(f"   ➖ Pattern: Negative perturbation (-2.0) to all observations")
+                    else:  # Even levels
+                        print(f"   🧹 Pattern: Clean baseline (no perturbation)")
             
             # Log level change to callback if available
             if self.logging_callback and hasattr(self.logging_callback, '_log_perturbation_level_change'):
@@ -1436,8 +1449,12 @@ def create_continual_learning_run_name(config, topology_type, task_name, seed, m
     level_switch = config.get('level_switch', 200)
     
     # Noise interval from shift_range (or no noise if ablation study)
+    perturbation_pattern = config.get('perturbation_pattern', None)
+    
     if no_noise:
         noise_interval = 'N00'  # No noise ablation study
+    elif perturbation_pattern == 'alternating_0_plus2_0_minus2':
+        noise_interval = 'ALT'  # Alternating pattern: 0, +2, 0, -2, 0, +2, 0, -2...
     elif shift_range and len(shift_range) == 2:
         noise_interval = f"N{int(shift_range[0]):02d}{int(shift_range[1]):02d}"
     else:
@@ -1495,7 +1512,8 @@ def create_debug_config(num_levels=15, num_layers=1):
     return {
         'max_iterations': num_levels * 200,  # Total iterations = num_levels × 200
         'level_switch': 200,           # Switch perturbation every 200 iterations
-        'shift_range': [0, 2],        # Gaussian random[0, 2] per dimension (increased from [0, 2])
+        'shift_range': [0, 2],        # Legacy parameter (not used in alternating pattern)
+        'perturbation_pattern': 'alternating_0_plus2_0_minus2',  # New alternating pattern
         'episode_cap': 400,            # Max episode length
         'reward_scale': 20.0,          # Division factor (creates small gradients)
         'n_steps': 800,                # PPO rollout size
@@ -1537,13 +1555,14 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     # Extract configuration parameters for paper-accurate approach
     max_iterations = config.get('max_iterations', 3000)  # Total iterations
     level_switch = config.get('level_switch', 200)       # Iterations per level
-    shift_range = config.get('shift_range', [0, 2])     # Perturbation range
+    shift_range = config.get('shift_range', [0, 2])     # Perturbation range (legacy, not used in alternating pattern)
     reward_scale = config.get('reward_scale', 20.0)      # Division factor
     episode_cap = config.get('episode_cap', 400)         # Max steps per episode
     
     print(f"   Max Iterations: {max_iterations}")
     print(f"   Level Switch: {level_switch} iterations")
-    print(f"   Shift Range: {shift_range}")
+    print(f"   Shift Range: {shift_range} (legacy - using alternating pattern instead)")
+    print(f"   Alternating Pattern: 0 → +2.0 → 0 → -2.0 → 0 → +2.0 → 0 → -2.0...")
     print(f"   Reward Scale: {reward_scale} (division factor)")
     print(f"   Episode Cap: {episode_cap} steps")
     print(f"   PPO Steps: {config.get('n_steps', 800)}")
@@ -1569,7 +1588,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
                 'episode_cap': episode_cap,
                 **{k: v for k, v in config.items() if k not in ['max_iterations', 'level_switch', 'shift_range', 'reward_scale', 'episode_cap']}
             },
-            tags=["continual_learning", "paper_accurate", "iteration_based"]
+            tags=["continual_learning", "paper_accurate", "iteration_based", "ablation_study", "alternating_perturbation"]
         )
     
     # Initialize iteration rewards collection (like baseline MLP)

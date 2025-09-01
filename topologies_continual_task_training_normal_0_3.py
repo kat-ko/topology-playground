@@ -658,7 +658,7 @@ class ContinualLearningWrapper(gym.Wrapper):
     - Episode capping at 400 steps maximum
     """
     
-    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 2], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
+    def __init__(self, env, task_name, max_iterations=3000, level_switch=200, shift_range=[0, 3], seed=None, reward_scale=20.0, episode_cap=400, logging_callback=None, num_levels=15, no_noise=False):
         super().__init__(env)
         self.task_name = task_name
         self.max_iterations = max_iterations
@@ -699,10 +699,10 @@ class ContinualLearningWrapper(gym.Wrapper):
                 if self.no_noise:
                     perturbation = np.zeros(obs_dim)
                 else:
-                    perturbation = self.perturbation_rng.uniform(
-                        low=self.shift_range[0], 
-                        high=self.shift_range[1], 
-                        size=obs_dim
+                    perturbation = self.perturbation_rng.normal(
+                        self.shift_range[0], 
+                        self.shift_range[1], 
+                        obs_dim
                     )
             self.perturbations.append(perturbation)
         
@@ -1495,7 +1495,7 @@ def create_debug_config(num_levels=15, num_layers=1):
     return {
         'max_iterations': num_levels * 200,  # Total iterations = num_levels × 200
         'level_switch': 200,           # Switch perturbation every 200 iterations
-        'shift_range': [0, 2],        # Gaussian random[0, 2] per dimension (increased from [0, 2])
+        'shift_range': [0, 3],        # Gaussian random[0, 3] per dimension (increased from [0, 3])
         'episode_cap': 400,            # Max episode length
         'reward_scale': 20.0,          # Division factor (creates small gradients)
         'n_steps': 800,                # PPO rollout size
@@ -1537,7 +1537,7 @@ def continual_learning_training(config, task_name, topology_type, seed, use_wand
     # Extract configuration parameters for paper-accurate approach
     max_iterations = config.get('max_iterations', 3000)  # Total iterations
     level_switch = config.get('level_switch', 200)       # Iterations per level
-    shift_range = config.get('shift_range', [0, 2])     # Perturbation range
+    shift_range = config.get('shift_range', [0, 3])     # Perturbation range
     reward_scale = config.get('reward_scale', 20.0)      # Division factor
     episode_cap = config.get('episode_cap', 400)         # Max steps per episode
     
