@@ -1,0 +1,42 @@
+{
+  "run_id": "MOD_L1_S256_P18452_CP_seed6788_L15_I3000_LS200_N0002_LReLU_m4_i0.1_a0.8",
+  "timestamp": 1757022150.2218745,
+  "total_episodes": 6000,
+  "total_shifts": 14,
+  "episode_data_file": "test_experiments/MOD_L1_S256_P18452_CP_seed6788_L15_I3000_LS200_N0002_LReLU_m4_i0.1_a0.8/data/episode_data.csv",
+  "shift_data_file": "test_experiments/MOD_L1_S256_P18452_CP_seed6788_L15_I3000_LS200_N0002_LReLU_m4_i0.1_a0.8/data/shift_data.csv",
+  "training_config": {
+    "task_name": "CartPole-v1",
+    "topology_type": "modular",
+    "seed": 6788,
+    "max_iterations": 3000,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      2
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 400,
+    "no_noise": false
+  },
+  "network_architecture": {
+    "hidden_size": 256,
+    "num_layers": 1,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 18452,
+    "actor_parameters": 9156,
+    "critic_parameters": 9296
+  },
+  "topology_parameters": {
+    "num_modules": 4,
+    "inter_module_prob": 0.1,
+    "intra_module_prob": 0.8
+  },
+  "wandb": {
+    "run_name": "MOD_L1_S256_P18452_CP_seed6788_L15_I3000_LS200_N0002_LReLU_m4_i0.1_a0.8",
+    "run_id": "p8nxn3e9",
+    "project": "topologies--continual-learning-training",
+    "entity": "katko-it-universitetet-i-k-benhavn"
+  }
+}
