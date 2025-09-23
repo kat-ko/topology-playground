@@ -1,0 +1,43 @@
+{
+  "run_id": "HYB_L1_S128_P2058_AC_seed42_L15_I6000_LS400_N00_LReLU_m4_k4_p0.2_i0.1",
+  "timestamp": 1757835729.072262,
+  "total_episodes": 12000,
+  "total_shifts": 14,
+  "episode_data_file": "test_experiments/HYB_L1_S128_P2058_AC_seed42_L15_I6000_LS400_N00_LReLU_m4_k4_p0.2_i0.1/data/episode_data.csv",
+  "shift_data_file": "test_experiments/HYB_L1_S128_P2058_AC_seed42_L15_I6000_LS400_N00_LReLU_m4_k4_p0.2_i0.1/data/shift_data.csv",
+  "training_config": {
+    "task_name": "Acrobot-v1",
+    "topology_type": "hybrid",
+    "seed": 42,
+    "max_iterations": 6000,
+    "level_switch": 400,
+    "shift_range": [
+      0,
+      2
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 400,
+    "no_noise": true
+  },
+  "network_architecture": {
+    "hidden_size": 128,
+    "num_layers": 1,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 2058,
+    "actor_parameters": 1015,
+    "critic_parameters": 1043
+  },
+  "topology_parameters": {
+    "num_modules": 4,
+    "k": 4,
+    "p": 0.2,
+    "inter_module_prob": 0.1
+  },
+  "wandb": {
+    "run_name": "HYB_L1_S128_P2058_AC_seed42_L15_I6000_LS400_N00_LReLU_m4_k4_p0.2_i0.1",
+    "run_id": "wa8tzscb",
+    "project": "topologies--continual-learning-training",
+    "entity": "katko-it-universitetet-i-k-benhavn"
+  }
+}

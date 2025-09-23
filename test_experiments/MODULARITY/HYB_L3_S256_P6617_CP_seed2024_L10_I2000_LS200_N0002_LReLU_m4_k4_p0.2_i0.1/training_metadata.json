@@ -1,0 +1,30 @@
+{
+  "model_path": "test_experiments/MODULARITY/HYB_L3_S256_P6617_CP_seed2024_L10_I2000_LS200_N0002_LReLU_m4_k4_p0.2_i0.1/final_model.zip",
+  "topology_type": "hybrid",
+  "task_name": "CartPole-v1",
+  "seed": 2024,
+  "config": {
+    "max_iterations": 2000,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      2
+    ],
+    "episode_cap": 400,
+    "reward_scale": 20.0,
+    "n_steps": 800,
+    "n_epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.01,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.01,
+    "max_grad_norm": 0.5,
+    "num_layers": 3
+  },
+  "training_completed": "2025-09-18T09:27:57.470891",
+  "num_levels": 15,
+  "level_switch": 200,
+  "total_iterations": 2000
+}

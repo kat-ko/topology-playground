@@ -1,0 +1,15 @@
+shift_step,shift_id,offset_repr,seed,env,topology
+400000,1,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+800000,2,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+1200000,3,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+1600000,4,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+2000000,5,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+2400000,6,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+2800000,7,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+3200000,8,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+3600000,9,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+4000000,10,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+4400000,11,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+4800000,12,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+5200000,13,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world
+5600000,14,"[0.0, 0.0, 0.0, 0.0]",2024,CartPole-v1,small_world

@@ -1,0 +1,36 @@
+{
+  "run_id": "CartPole-v1_modular_seed2024_1758182716",
+  "timestamp": 1758183575.267335,
+  "total_episodes": 1200,
+  "total_shifts": 2,
+  "episode_data_file": "test_experiments/MODULARITY/CartPole-v1_modular_seed2024_1758182716/data/episode_data.csv",
+  "shift_data_file": "test_experiments/MODULARITY/CartPole-v1_modular_seed2024_1758182716/data/shift_data.csv",
+  "training_config": {
+    "task_name": "CartPole-v1",
+    "topology_type": "modular",
+    "seed": 2024,
+    "max_iterations": 600,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      2
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 400,
+    "no_noise": false
+  },
+  "network_architecture": {
+    "hidden_size": 256,
+    "num_layers": 1,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 18451,
+    "actor_parameters": 9187,
+    "critic_parameters": 9264
+  },
+  "topology_parameters": {
+    "num_modules": 4,
+    "inter_module_prob": 0.1,
+    "intra_module_prob": 0.8
+  }
+}

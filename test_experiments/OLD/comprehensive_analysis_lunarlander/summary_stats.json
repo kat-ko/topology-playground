@@ -1,0 +1,28 @@
+{
+  "task": "lunarlander",
+  "total_combinations": 22,
+  "noise_levels": 3,
+  "network_sizes": 3,
+  "topologies": 4,
+  "total_experiments": "147",
+  "best_combination": {
+    "Noise_Level": "N0003",
+    "Network_Size": "S128",
+    "Topology": "small_world",
+    "N_Seeds": 1,
+    "Cumulative_Reward_Mean": -659295.149957973,
+    "Cumulative_Reward_Std": NaN,
+    "Mean_Level_Performance": -219.765049985991,
+    "Mean_Level_Performance_Std": NaN,
+    "Level_Consistency": 1.956786612094077,
+    "Learning_Progress": 114.3021102221955,
+    "Final_Performance_Mean": -134.6528711906616,
+    "Final_Performance_Std": NaN,
+    "Final_Reward_Mean": -43.29942906856508,
+    "Final_Reward_Std": NaN,
+    "Final_Reward_Median": -43.29942906856508,
+    "Consistency": NaN,
+    "Mean_Reward_Mean": -219.76504998599103,
+    "Mean_Reward_Std": NaN
+  }
+}

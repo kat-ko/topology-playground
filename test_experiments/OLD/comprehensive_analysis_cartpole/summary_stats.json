@@ -1,0 +1,33 @@
+{
+  "task": "cartpole",
+  "total_combinations": 30,
+  "noise_levels": 3,
+  "network_sizes": 3,
+  "topologies": 4,
+  "total_experiments": "125",
+  "best_combination": {
+    "Noise_Level": "N0001",
+    "Network_Size": "S128",
+    "Topology": "hybrid",
+    "N_Seeds": 1,
+    "Cumulative_Reward_Mean": 527720.5,
+    "Cumulative_Reward_Std": NaN,
+    "Mean_Level_Performance": 175.90683333333334,
+    "Mean_Level_Performance_Std": NaN,
+    "Level_Consistency": 0.6450174902647647,
+    "Learning_Progress": 3.534333333333336,
+    "Final_Performance_Mean": 249.02,
+    "Final_Performance_Std": NaN,
+    "Final_Reward_Mean": 400.0,
+    "Final_Reward_Std": NaN,
+    "Final_Reward_Median": 400.0,
+    "Consistency": NaN,
+    "Mean_Reward_Mean": 175.90683333333334,
+    "Mean_Reward_Std": NaN
+  },
+  "statistical_tests": {
+    "total_comparisons": 6,
+    "significant_p_05": 4,
+    "significant_bonferroni": 3
+  }
+}

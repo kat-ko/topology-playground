@@ -1,0 +1,41 @@
+{
+  "run_id": "STANDARD_MLP_L3_S128_P3352_LL_seed789_L15_I3000_LS200_N0003_LReLU",
+  "timestamp": 1757282377.081949,
+  "total_episodes": 6000,
+  "total_shifts": 14,
+  "episode_data_file": "test_experiments/STANDARD_MLP_L3_S128_P3352_LL_seed789_L15_I3000_LS200_N0003_LReLU/data/episode_data.csv",
+  "shift_data_file": "test_experiments/STANDARD_MLP_L3_S128_P3352_LL_seed789_L15_I3000_LS200_N0003_LReLU/data/shift_data.csv",
+  "training_config": {
+    "task_name": "LunarLander-v2",
+    "topology_type": "standard_mlp",
+    "seed": 789,
+    "max_iterations": 3000,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      3
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 400,
+    "no_noise": false
+  },
+  "network_architecture": {
+    "hidden_size": 128,
+    "num_layers": 3,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 3352,
+    "actor_parameters": 1676,
+    "critic_parameters": 1676
+  },
+  "topology_parameters": {
+    "type": "standard_mlp",
+    "num_layers": 3
+  },
+  "wandb": {
+    "run_name": "STANDARD_MLP_L3_S128_P3352_LL_seed789_L15_I3000_LS200_N0003_LReLU",
+    "run_id": "cyot0ujz",
+    "project": "topologies--continual-learning-training",
+    "entity": "katko-it-universitetet-i-k-benhavn"
+  }
+}

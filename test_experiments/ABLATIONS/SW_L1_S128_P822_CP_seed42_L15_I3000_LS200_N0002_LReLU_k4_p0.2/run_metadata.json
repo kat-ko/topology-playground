@@ -1,0 +1,41 @@
+{
+  "run_id": "SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2",
+  "timestamp": 1757718160.5217552,
+  "total_episodes": 6000,
+  "total_shifts": 14,
+  "episode_data_file": "test_experiments/SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2/data/episode_data.csv",
+  "shift_data_file": "test_experiments/SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2/data/shift_data.csv",
+  "training_config": {
+    "task_name": "CartPole-v1",
+    "topology_type": "small_world",
+    "seed": 42,
+    "max_iterations": 3000,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      2
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 400,
+    "no_noise": false
+  },
+  "network_architecture": {
+    "hidden_size": 128,
+    "num_layers": 1,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 822,
+    "actor_parameters": 411,
+    "critic_parameters": 411
+  },
+  "topology_parameters": {
+    "k": 4,
+    "p": 0.2
+  },
+  "wandb": {
+    "run_name": "SW_L1_S128_P822_CP_seed42_L15_I3000_LS200_N0002_LReLU_k4_p0.2",
+    "run_id": "t0wddwwd",
+    "project": "topologies--continual-learning-training",
+    "entity": "katko-it-universitetet-i-k-benhavn"
+  }
+}

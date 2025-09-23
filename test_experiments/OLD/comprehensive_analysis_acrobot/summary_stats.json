@@ -1,0 +1,28 @@
+{
+  "task": "acrobot",
+  "total_combinations": 21,
+  "noise_levels": 3,
+  "network_sizes": 3,
+  "topologies": 4,
+  "total_experiments": "122",
+  "best_combination": {
+    "Noise_Level": "N0001",
+    "Network_Size": "S384",
+    "Topology": "modular",
+    "N_Seeds": 14,
+    "Cumulative_Reward_Mean": -1081318.75,
+    "Cumulative_Reward_Std": 57076.86768592455,
+    "Mean_Level_Performance": -360.4395833333333,
+    "Mean_Level_Performance_Std": 19.025622561974853,
+    "Level_Consistency": 1.2427455608149047,
+    "Learning_Progress": -45.289738095238086,
+    "Final_Performance_Mean": -377.1535714285714,
+    "Final_Performance_Std": 85.48350822568892,
+    "Final_Reward_Mean": -377.85714285714283,
+    "Final_Reward_Std": 82.85098499285155,
+    "Final_Reward_Median": -400.0,
+    "Consistency": 1.2192653667165632,
+    "Mean_Reward_Mean": -360.43958333333336,
+    "Mean_Reward_Std": 19.02562256197486
+  }
+}

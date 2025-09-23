@@ -1,0 +1,6 @@
+Noise_Level,N0001,N0001,N0001,N0002,N0002,N0002,N0003,N0003,N0003
+Network_Size,S128,S256,S384,S128,S256,S384,S128,S256,S384
+modular,,,,,,,,,
+small_world,,,,,,,,,
+hybrid,,,,,,,,,
+standard_mlp,,,,,,,,,

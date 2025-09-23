@@ -1,0 +1,7 @@
+Topology_1,Topology_2,N1,N2,Mean_1,Mean_2,Mean_Difference,Better_Topology,Mann_Whitney_U,P_Value,Effect_Size_Cohens_d,Significant_0.05,Interpretation,Significant_Bonferroni,Bonferroni_Alpha
+modular,standard_mlp,29,35,262441.72,197847.12,64594.6,modular,774.0,0.000334,0.506,Yes,modular outperforms standard_mlp by 64594.6 cumulative reward,True,0.008333333333333333
+modular,small_world,25,23,223419.5,166212.76,57206.74,modular,444.0,0.001284,1.016,Yes,modular outperforms small_world by 57206.7 cumulative reward,True,0.008333333333333333
+small_world,standard_mlp,23,31,188734.33,144963.99,43770.34,small_world,538.0,0.001544,0.955,Yes,small_world outperforms standard_mlp by 43770.3 cumulative reward,True,0.008333333333333333
+hybrid,standard_mlp,29,35,230356.97,198416.79,31940.19,hybrid,679.0,0.021089,0.253,Yes,hybrid outperforms standard_mlp by 31940.2 cumulative reward,False,0.008333333333333333
+hybrid,small_world,25,23,196973.56,169213.48,27760.08,hybrid,372.0,0.082997,0.461,No,hybrid outperforms small_world by 27760.1 cumulative reward,False,0.008333333333333333
+hybrid,modular,31,33,224088.18,244921.27,20833.1,modular,481.0,0.686936,-0.171,No,modular outperforms hybrid by 20833.1 cumulative reward,False,0.008333333333333333

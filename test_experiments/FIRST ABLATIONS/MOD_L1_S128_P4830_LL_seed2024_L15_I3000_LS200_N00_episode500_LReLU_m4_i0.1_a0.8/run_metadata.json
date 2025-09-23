@@ -1,0 +1,42 @@
+{
+  "run_id": "MOD_L1_S128_P4830_LL_seed2024_L15_I3000_LS200_N00_episode500_LReLU_m4_i0.1_a0.8",
+  "timestamp": 1757598465.6304324,
+  "total_episodes": 6000,
+  "total_shifts": 14,
+  "episode_data_file": "test_experiments/MOD_L1_S128_P4830_LL_seed2024_L15_I3000_LS200_N00_episode500_LReLU_m4_i0.1_a0.8/data/episode_data.csv",
+  "shift_data_file": "test_experiments/MOD_L1_S128_P4830_LL_seed2024_L15_I3000_LS200_N00_episode500_LReLU_m4_i0.1_a0.8/data/shift_data.csv",
+  "training_config": {
+    "task_name": "LunarLander-v2",
+    "topology_type": "modular",
+    "seed": 2024,
+    "max_iterations": 3000,
+    "level_switch": 200,
+    "shift_range": [
+      0,
+      1
+    ],
+    "reward_scale": 20.0,
+    "episode_cap": 500,
+    "no_noise": true
+  },
+  "network_architecture": {
+    "hidden_size": 128,
+    "num_layers": 1,
+    "activation": "leaky_relu",
+    "dropout": 0.0,
+    "total_parameters": 4830,
+    "actor_parameters": 2428,
+    "critic_parameters": 2402
+  },
+  "topology_parameters": {
+    "num_modules": 4,
+    "inter_module_prob": 0.1,
+    "intra_module_prob": 0.8
+  },
+  "wandb": {
+    "run_name": "MOD_L1_S128_P4830_LL_seed2024_L15_I3000_LS200_N00_episode500_LReLU_m4_i0.1_a0.8",
+    "run_id": "e2q4p15e",
+    "project": "topologies--continual-learning-training",
+    "entity": "katko-it-universitetet-i-k-benhavn"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "metadata": {
+    "task_name": "CartPole-v1",
+    "topology_type": "standard_mlp",
+    "seed": 42,
+    "num_episodes": 50,
+    "evaluation_seeds": null,
+    "analysis_timestamp": "2025-09-18T09:29:03.936119",
+    "protocol_version": "complete_fc_vs_structural"
+  },
+  "structural_analysis": {
+    "modularity_score": 0.0,
+    "num_communities": 1,
+    "communities": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    },
+    "community_sizes": {
+      "0": 4
+    },
+    "structural_matrix": 
